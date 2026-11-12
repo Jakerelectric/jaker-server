@@ -5,13 +5,14 @@ Set-Location $Root
 Write-Host '1 = 開啟 LINE 串接（改由這台電腦收發 LINE 訊息）'
 Write-Host '2 = 關閉 LINE 串接（回到 Apps Script 版時用）'
 $c = Read-Host '請選擇'
-function Plain($s) { [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($s)) }
+# 去掉貼上時夾帶的控制字元與空白（例如按 Ctrl+V 產生的 ^V）
+function Plain($s) { ([Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($s))) -replace '[\x00-\x20\x7F]', '' }
 if ($c -eq '1') {
   Write-Host ''
   Write-Host '到 LINE Developers → 專案系統的 Channel：'
   Write-Host '  「Basic settings」分頁最下方的 Channel secret'
   Write-Host '  「Messaging API」分頁最下方的 Channel access token（long-lived）'
-  Write-Host '（貼上時畫面不會顯示，按右鍵即可貼上）'
+  Write-Host '（貼上方式：在視窗裡按滑鼠右鍵，不要按 Ctrl+V；畫面不會顯示，貼上後直接按 Enter）'
   $env:JK_LINE_SECRET = Plain (Read-Host 'Channel secret' -AsSecureString)
   $env:JK_LINE_TOKEN = Plain (Read-Host 'Channel access token' -AsSecureString)
   $b = Read-Host '對外網址（直接按 Enter = https://work.jaker-ai.com）'

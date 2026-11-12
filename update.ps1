@@ -18,19 +18,33 @@ function Set-EnvValue($key, $value) {
 function Done($msg, $color) { Write-Host $msg -ForegroundColor $color; Read-Host '按 Enter 結束'; exit 0 }
 
 $Repo = Get-EnvValue 'GITHUB_REPO'; if (-not $Repo) { $Repo = 'Jakerelectric/jaker-server' }
-$Token = Get-EnvValue 'GITHUB_TOKEN'
-if (-not $Token) {
-  Write-Host '第一次更新要輸入 GitHub 的唯讀權杖（只能讀取 jaker-server 這個儲存庫），之後會記在 .env。'
-  $s = Read-Host 'GitHub 權杖（貼上時畫面不會顯示）' -AsSecureString
-  $Token = [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($s)).Trim()
+# 權杖只會有英文、數字、底線；貼上時夾帶的控制字元（例如按 Ctrl+V 產生的 ^V）、空白一律去掉
+function Clean-Token($t) { return ([string]$t -replace '[^A-Za-z0-9_]', '') }
+function Valid-Token($t) { return $t -match '^(github_pat_|ghp_)[A-Za-z0-9_]{20,}$' }
+$Token = Clean-Token (Get-EnvValue 'GITHUB_TOKEN')
+if (-not (Valid-Token $Token)) {
+  if ($Token) { Write-Host '.env 裡的 GitHub 權杖格式不對，請重新輸入。' -ForegroundColor Yellow }
+  Write-Host '請輸入 GitHub 的唯讀權杖（只能讀取 jaker-server 這個儲存庫），之後會記在 .env。'
+  Write-Host '貼上方式：在視窗裡按「滑鼠右鍵」（不要按 Ctrl+V）。畫面不會顯示，貼上後直接按 Enter。'
+  $s = Read-Host 'GitHub 權杖' -AsSecureString
+  $Token = Clean-Token ([Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($s)))
   if (-not $Token) { Done '已取消' Yellow }
+  if (-not (Valid-Token $Token)) { Done ('權杖格式不對（應該是 github_pat_ 開頭，目前讀到 ' + $Token.Length + ' 個字）。請重新複製後再執行一次。') Red }
   Set-EnvValue 'GITHUB_TOKEN' $Token
 }
 $H = @{ Authorization = "Bearer $Token"; 'User-Agent' = 'jaker-server-update'; Accept = 'application/vnd.github+json' }
 
 # 1. 看 GitHub 上的最新版本
 try { $c = Invoke-RestMethod "https://api.github.com/repos/$Repo/commits/main" -Headers $H }
-catch { Done ("連不到 GitHub，或權杖沒有權限：" + $_.Exception.Message + "`n（權杖過期的話，刪掉 .env 裡 GITHUB_TOKEN 那一行再執行一次）") Red }
+catch {
+  $code = 0
+  if ($_.Exception.Response) { $code = [int]$_.Exception.Response.StatusCode }
+  if ($code -eq 401 -or $code -eq 403 -or $code -eq 404) {
+    Set-EnvValue 'GITHUB_TOKEN' ''
+    Done ("GitHub 不接受這個權杖（HTTP $code）：可能過期、複製不完整，或沒有選到 jaker-server 儲存庫。已清除，下次執行會重新詢問。") Red
+  }
+  Done ("連不到 GitHub：" + $_.Exception.Message) Red
+}
 $New = $c.sha.Substring(0, 7)
 $VerFile = Join-Path $Root 'data\version.txt'
 $Old = if (Test-Path $VerFile) { (Get-Content $VerFile -Raw).Trim() } else { '' }
