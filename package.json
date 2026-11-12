@@ -1,0 +1,19 @@
+{
+  "name": "jaker-server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "傑克電機內部系統（專案系統等）自架伺服器",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "import": "node tools/import-xlsx.js",
+    "test": "node tools/selftest.js"
+  },
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "express": "4.21.2",
+    "mysql2": "3.11.5",
+    "node-cron": "3.0.3",
+    "xlsx": "0.18.5"
+  }
+}

@@ -1,0 +1,1887 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<base target="_blank">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Oswald:wght@500;700&display=swap">
+<style>
+:root{
+  --bg:#F4F6FA; --surface:#FFFFFF; --sunken:#EDF1F7; --ink:#0D1B30; --muted:#566379;
+  --line:#D9E0EB; --line-strong:#B4C0D2;
+  --accent:#0064F3; --accent-soft:#E3EDFE;
+  --ok:#157A47; --ok-soft:#E2F4EA; --warn:#9A5B00; --warn-soft:#FDF0D8; --bad:#BF2A2A; --bad-soft:#FCE6E6;
+  --font-body:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+  --font-display:"Oswald","Noto Sans TC","Microsoft JhengHei",sans-serif;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:15px;line-height:1.6}
+.wrap{max-width:1180px;margin:0 auto;padding:20px 16px 56px;display:flex;flex-direction:column;gap:22px}
+h1,h2,p,ul,ol,dl,dd{margin:0} ul,ol{padding:0;list-style:none}
+h1{font-size:24px;line-height:1.3} h2{font-size:16px}
+button{font:inherit;color:inherit}
+.num{font-variant-numeric:tabular-nums}
+.top{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;padding-bottom:14px;border-bottom:2px solid var(--accent)}
+.brand{display:flex;align-items:baseline;gap:10px}
+.brand-zh{font-weight:700;font-size:17px;letter-spacing:.08em;color:var(--accent)}
+.brand-en{font-family:var(--font-display);font-weight:700;font-size:13px;letter-spacing:.14em;color:var(--muted)}
+.today{font-size:13px;color:var(--muted)}
+.view{display:flex;flex-direction:column;gap:16px}
+.lede{color:var(--muted)}
+.lede a{color:var(--accent)}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{border:1px solid var(--line);background:transparent;border-radius:999px;padding:4px 12px;cursor:pointer;font-size:14px;display:inline-flex;gap:8px;align-items:center}
+.chip b{font-family:var(--font-display)}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.ledger{background:var(--surface);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.cols{display:grid;grid-template-columns:minmax(0,2.4fr) minmax(0,.8fr) 160px 80px 96px 118px 62px 92px;gap:14px;align-items:center;padding-right:30px}
+.lhead{padding:10px 18px;font-size:12px;color:var(--muted);letter-spacing:.06em;border-bottom:1px solid var(--line);background:var(--sunken)}
+.rows>li+li{border-top:1px solid var(--line)}
+.row{display:block;width:100%;text-align:left;background:transparent;border:0;padding:14px 18px;cursor:pointer}
+.row:hover{background:var(--sunken)}
+.cell{min-width:0;overflow-wrap:anywhere}
+.pname{font-weight:700;font-size:16px}
+.code{font-family:var(--font-display);color:var(--muted);font-weight:500;margin-right:6px}
+.pgoal{color:var(--muted);font-size:13px;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
+.sub{display:block;font-size:12px;color:var(--muted)} .bad{color:var(--bad)!important}
+.muted{color:var(--muted)}
+.empty{padding:36px 18px;text-align:center;color:var(--muted)}
+.stage{display:flex;flex-direction:column;gap:4px}
+.track{display:inline-flex;align-items:center}
+.node{width:10px;height:10px;border-radius:50%;border:2px solid var(--line-strong);background:var(--surface);position:relative;margin-left:16px;flex:none}
+.node:first-child{margin-left:0}
+.node::before{content:"";position:absolute;right:calc(100% + 2px);top:50%;width:16px;height:2px;margin-top:-1px;background:var(--line-strong)}
+.node:first-child::before{display:none}
+.node.done{background:var(--accent);border-color:var(--accent)}
+.node.done::before,.node.cur::before{background:var(--accent)}
+.node.cur{border-radius:2px;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.stage-label{font-size:13px}
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:2px 10px;font-size:13px;font-weight:500;white-space:nowrap}
+.pill::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.pill.ok{background:var(--ok-soft);color:var(--ok)}
+.pill.risk{background:var(--warn-soft);color:var(--warn)}
+.pill.blocked{background:var(--bad-soft);color:var(--bad)}
+.bar{display:block;height:4px;border-radius:2px;background:var(--line);margin-top:5px;overflow:hidden}
+.bar>i{display:block;height:100%;background:var(--accent)}
+@media (max-width:1000px){
+  .lhead{display:none}
+  .row .cols{display:flex;flex-wrap:wrap;gap:8px 20px;align-items:flex-start}
+  .row .c-name{flex:1 1 100%}
+  .row .cell[data-label]::before{content:attr(data-label);display:block;font-size:11px;color:var(--muted);letter-spacing:.06em}
+}
+.back{align-self:flex-start;border:0;background:transparent;color:var(--accent);cursor:pointer;padding:4px 0;font-weight:500}
+.d-title{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px 24px;padding:16px 18px;background:var(--surface);border:1px solid var(--line);border-radius:8px}
+.meta dt{font-size:12px;color:var(--muted);letter-spacing:.06em}
+.blocker{border-left:3px solid var(--bad);background:var(--bad-soft);padding:10px 14px;border-radius:0 6px 6px 0}
+.blocker b{display:block;font-size:12px;color:var(--bad)}
+.split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px;align-items:start}
+@media (max-width:860px){.split{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.panel-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.tasks li{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;padding:8px 0;border-top:1px solid var(--line)}
+.tasks li:first-child{border-top:0}
+.box{width:16px;height:16px;border:2px solid var(--line-strong);border-radius:3px;margin-top:4px}
+.tasks li.done .box{background:var(--accent);border-color:var(--accent)}
+.tasks li.done .t-title{text-decoration:line-through;color:var(--muted)}
+.t-meta{font-size:12px;color:var(--muted)}
+.log li{padding:12px 0;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:6px}
+.log li:first-child{border-top:0}
+.log-head{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:13px;color:var(--muted)}
+.log-head .date{font-family:var(--font-display);font-weight:700;color:var(--ink);font-size:15px}
+.log dl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:2px 12px}
+.log dt{font-size:12px;color:var(--muted);padding-top:2px;white-space:nowrap}
+.log dd{white-space:pre-wrap;overflow-wrap:anywhere}
+.photos{display:flex;gap:8px;flex-wrap:wrap}
+.photos a{font-size:13px;color:var(--accent);border:1px solid var(--line);border-radius:6px;padding:3px 10px;text-decoration:none}
+
+.btn{border:1px solid var(--line-strong);background:var(--surface);border-radius:6px;padding:7px 14px;cursor:pointer;font-weight:500;white-space:nowrap}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{filter:brightness(1.08);color:#fff}
+.btn.small{padding:4px 10px;font-size:13px}
+.btn:disabled{opacity:.5;cursor:wait}
+.head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.head>div{min-width:0}
+.me{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+.me label{white-space:nowrap}
+.me b{color:var(--ink);font-weight:500}
+.role{font-size:11px;border:1px solid var(--line-strong);border-radius:4px;padding:0 6px;line-height:1.7}
+.role.admin{border-color:var(--accent);color:var(--accent)}
+.notice{background:var(--warn-soft);color:var(--warn);border-radius:6px;padding:10px 14px;font-size:14px}
+.ro-hint{font-size:13px;color:var(--muted);background:var(--sunken);border-radius:6px;padding:10px 12px}
+.tasks li.t{grid-template-columns:auto minmax(0,1fr) auto}
+.tasks input[type=checkbox]{width:17px;height:17px;margin-top:4px;accent-color:var(--accent);cursor:pointer}
+.x{border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:18px;line-height:1;padding:2px 6px;border-radius:4px}
+.x:hover{color:var(--bad)}
+form{display:flex;flex-direction:column;gap:10px;margin:0}
+.fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted);min-width:0}
+input[type=text],input[type=date],select,textarea{width:100%;background:var(--bg);border:1px solid var(--line-strong);border-radius:6px;padding:7px 9px;font:inherit;font-size:14px;color:var(--ink)}
+textarea{resize:vertical;min-height:56px;line-height:1.5}
+.actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.boxed{background:var(--sunken);border-radius:6px;padding:12px}
+dialog{border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);padding:22px;width:min(640px,calc(100vw - 32px));max-height:calc(100% - 32px)}
+dialog::backdrop{background:rgba(13,27,48,.45)}
+dialog h2{font-size:18px}
+#toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:6px;font-size:14px;max-width:calc(100vw - 32px);z-index:10}
+#toast.err{background:var(--bad);color:#fff}
+
+/* gantt */
+.g-legend{display:flex;gap:4px;align-items:center;font-size:12px;color:var(--muted);flex-wrap:wrap}
+.g-legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-left:8px}
+.gantt-wrap{overflow-x:auto}
+.gantt{display:grid;grid-template-columns:minmax(96px,170px) minmax(420px,1fr);font-size:13px}
+.g-head{font-size:11px;color:var(--muted);border-bottom:1px solid var(--line);padding:3px 8px 3px 0}
+.g-axis{position:relative;height:22px;border-bottom:1px solid var(--line)}
+.g-tick{position:absolute;top:0;bottom:0;border-left:1px solid var(--line);padding-left:4px;color:var(--muted);font-size:11px;white-space:nowrap;line-height:22px}
+.g-label{padding:7px 8px 7px 0;border-bottom:1px solid var(--line);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.g-label small{color:var(--muted);margin-left:4px}
+.g-label.proj{font-weight:700}
+.g-track{position:relative;border-bottom:1px solid var(--line);min-height:34px}
+.g-bar{position:absolute;top:9px;height:16px;border-radius:4px;background:var(--accent);min-width:6px}
+.g-bar.done{background:var(--ok)}
+.g-bar.late{background:var(--bad)}
+.g-bar.proj{background:var(--accent-soft);border:1px solid var(--accent);top:10px;height:14px}
+.g-bar.nodue{width:10px!important;height:10px;top:12px;border-radius:50%;margin-left:-5px}
+.g-bar.click{cursor:pointer}
+.g-bar.click:hover{box-shadow:0 0 0 3px var(--accent-soft)}
+.g-overlay{grid-column:2;position:relative;pointer-events:none}
+.g-today{position:absolute;top:0;bottom:0;border-left:2px dashed var(--bad);opacity:.7}
+.g-dot{position:absolute;top:12px;width:10px;height:10px;border-radius:50%;margin-left:-5px;border:2px solid var(--surface);z-index:1}
+.g-dot.ok{background:var(--ok)} .g-dot.risk{background:var(--warn)} .g-dot.blocked{background:var(--bad)}
+.g-empty{grid-column:1/-1;color:var(--muted);padding:10px 0;font-size:13px}
+.g-grid{position:absolute;top:22px;bottom:0;border-left:1px solid var(--line);opacity:.6}
+.g-bar.pl.miss{box-shadow:inset 0 0 0 2px var(--bad)}
+.g-zoom{display:inline-flex;border:1px solid var(--line-strong);border-radius:6px;overflow:hidden;margin-left:10px;vertical-align:middle}
+.g-zoom button{border:0;background:var(--surface);color:var(--muted);font:inherit;font-size:12px;font-weight:400;padding:3px 9px;cursor:pointer;white-space:nowrap}
+.g-zoom button+button{border-left:1px solid var(--line)}
+.g-zoom button[aria-pressed=true]{background:var(--accent);color:#fff}
+.gantt.zoomed .g-label,.gantt.zoomed .g-head{position:sticky;left:0;background:var(--surface);z-index:2}
+.t-title.edit{cursor:pointer}
+.t-title.edit:hover{color:var(--accent)}
+
+/* search & person view */
+.tools{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.tools input[type=search]{flex:1 1 240px;min-width:0;background:var(--surface);border:1px solid var(--line-strong);border-radius:6px;padding:7px 10px;font:inherit;font-size:14px;color:var(--ink)}
+.tools select{width:auto;flex:0 1 auto;background:var(--surface)}
+.ttag{font-size:11px;font-weight:500;border-radius:4px;padding:0 6px;line-height:1.7;margin-left:6px;background:var(--warn-soft);color:var(--warn)}
+.tools .clear{border:0;background:transparent;color:var(--accent);cursor:pointer;font-size:13px;padding:4px}
+.result-count{font-size:13px;color:var(--muted)}
+.person{gap:10px}
+.person h2 b{color:var(--accent)}
+.pstats{display:flex;gap:18px;flex-wrap:wrap;font-size:13px;color:var(--muted)}
+.pstats b{font-family:var(--font-display);font-size:20px;color:var(--ink);margin-right:3px}
+.pstats .bad b{color:var(--bad)}
+.ptasks{display:flex;flex-direction:column}
+.ptasks li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;padding:7px 0;border-top:1px solid var(--line);align-items:baseline}
+.ptasks li:first-child{border-top:0}
+.ptasks .pt-proj{font-size:12px;color:var(--accent);cursor:pointer;background:none;border:0;padding:0;text-align:left}
+.ptasks .pt-due{font-size:13px;white-space:nowrap}
+.rtag{font-size:11px;font-weight:500;border-radius:4px;padding:0 6px;line-height:1.7;margin-left:6px;background:var(--accent-soft);color:var(--accent)}
+mark{background:var(--warn-soft);color:inherit;border-radius:2px}
+
+/* tabs */
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line)}
+.tab{border:0;background:transparent;padding:8px 14px;font-weight:500;color:var(--muted);cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-1px}
+.tab[aria-selected="true"]{color:var(--accent);border-bottom-color:var(--accent)}
+/* task board */
+.tv-top{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:stretch}
+@media (max-width:860px){.tv-top{grid-template-columns:minmax(0,1fr)}}
+.slicers{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px 18px}
+.slicer h3{margin:0 0 6px;font-size:12px;color:var(--muted);font-weight:500;letter-spacing:.06em;display:flex;justify-content:space-between}
+.slicer h3 button{border:0;background:none;color:var(--accent);font-size:12px;cursor:pointer;padding:0}
+.slicer .opts{display:flex;flex-wrap:wrap;gap:6px}
+.sl{border:1px solid var(--line-strong);background:var(--surface);border-radius:4px;padding:3px 10px;font-size:13px;cursor:pointer;display:inline-flex;gap:6px;align-items:center}
+.sl[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:500}
+.sl i{width:8px;height:8px;border-radius:2px;display:inline-block}
+.donut-box{display:flex;gap:16px;align-items:center}
+.donut-box svg{flex:none}
+.donut-legend{display:flex;flex-direction:column;gap:6px;font-size:13px}
+.donut-legend span{display:flex;gap:8px;align-items:center}
+.donut-legend i{width:10px;height:10px;border-radius:2px}
+.donut-legend b{font-family:var(--font-display);margin-left:auto;padding-left:10px}
+.seg{cursor:pointer;transition:opacity .15s}
+.seg.dim{opacity:.25}
+.tt-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.rangenav{display:flex;gap:6px;align-items:center;font-size:13px;color:var(--muted)}
+.tt-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:6px}
+table.tt{border-collapse:collapse;font-size:13px;white-space:nowrap;min-width:100%}
+.tt th,.tt td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left}
+.tt thead th{background:var(--sunken);font-size:12px;color:var(--muted);font-weight:500;position:sticky;top:0}
+.tt td.n,.tt th.n{text-align:right;font-variant-numeric:tabular-nums}
+.tt .tname{max-width:220px;overflow:hidden;text-overflow:ellipsis}
+.tt tr.grp td{background:var(--accent-soft);color:var(--accent);font-weight:700;cursor:pointer}
+.tt tr.grp td small{font-weight:400;color:var(--muted);margin-left:8px}
+.tt tbody tr.task{cursor:pointer}
+.tt tbody tr.task:hover td{background:var(--sunken)}
+.pbar{display:inline-block;width:64px;height:8px;background:var(--line);border-radius:4px;overflow:hidden;vertical-align:middle}
+.pbar i{display:block;height:100%}
+.pct{font-size:11px;color:var(--muted);margin-left:6px;display:inline-block;width:30px}
+.st{display:inline-block;border-radius:4px;padding:1px 8px;font-size:12px;font-weight:500}
+.st.todo{background:var(--sunken);color:var(--muted)} .st.doing{background:var(--accent-soft);color:var(--accent)}
+.st.late{background:var(--bad-soft);color:var(--bad)} .st.done{background:var(--ok-soft);color:var(--ok)}
+.tt th.d,.tt td.d{width:18px;min-width:18px;max-width:18px;padding:0;text-align:center;border-left:1px solid var(--line)}
+.tt th.d{font-size:10px;line-height:1.3;padding:3px 0}
+.tt .wk{background:repeating-linear-gradient(45deg,transparent 0 3px,var(--sunken) 3px 6px)}
+.tt thead th.wk{background:var(--line)}
+.tt .td{box-shadow:inset 2px 0 0 var(--bad),inset -2px 0 0 var(--bad)}
+.tt td.d.on{background:var(--c)}
+.tt td.d.on + td.d.on{border-left-color:var(--c)}
+.slicer .opts{max-height:150px;overflow-y:auto}
+.tt td.d.on.first{border-radius:4px 0 0 4px} .tt td.d.on.last{border-radius:0 4px 4px 0}
+.tt td.d.mark::after{content:"";display:block;width:8px;height:8px;border-radius:50%;background:var(--c);margin:auto}
+.tt-empty{padding:24px;text-align:center;color:var(--muted)}
+/* feedback */
+.badge{display:inline-block;min-width:18px;padding:0 5px;margin-left:6px;border-radius:9px;background:var(--bad);color:#fff;font-size:11px;line-height:18px;text-align:center;font-family:var(--font-display)}
+.fb-top{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.6fr);gap:20px;align-items:start}
+@media (max-width:860px){.fb-top{grid-template-columns:minmax(0,1fr)}}
+.fb-list{display:flex;flex-direction:column;gap:10px}
+.fb{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.fb-head{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px;color:var(--muted)}
+.fb-head .code{font-size:15px;color:var(--ink)}
+.fb-type{font-size:12px;font-weight:500;border-radius:4px;padding:0 7px;line-height:1.8}
+.fb-type.bug{background:var(--bad-soft);color:var(--bad)} .fb-type.idea{background:var(--accent-soft);color:var(--accent)}
+.fb-head .st{margin-left:auto}
+.st.wait{background:var(--warn-soft);color:var(--warn)} .st.no{background:var(--sunken);color:var(--muted)}
+.fb-body{white-space:pre-wrap;overflow-wrap:anywhere}
+.fb-reply{border-left:3px solid var(--accent);background:var(--accent-soft);padding:8px 12px;border-radius:0 6px 6px 0;font-size:14px;white-space:pre-wrap;overflow-wrap:anywhere}
+.fb-reply b{display:block;font-size:12px;color:var(--accent)}
+.fb-admin{display:grid;grid-template-columns:140px minmax(0,1fr) auto;gap:8px;align-items:end}
+@media (max-width:600px){.fb-admin{grid-template-columns:minmax(0,1fr)}}
+.fb-admin textarea{min-height:38px}
+.hint{font-size:12px;color:var(--muted)} .hint.bad{color:var(--bad)}
+.line-alert{display:flex;gap:14px;align-items:center;justify-content:space-between;background:var(--bad-soft);color:var(--bad);border:1px solid var(--bad);border-radius:8px;padding:12px 16px;font-size:14px}
+.line-alert b{display:block;font-size:15px}
+.line-alert span{display:block;font-size:12px;margin:2px 0 4px}
+.line-alert .btn{flex:none;border-color:var(--bad);color:var(--bad)}
+/* 8-step stages, review gates */
+.track.many .node{margin-left:9px} .track.many .node::before{width:9px} .track.many .node:first-child{margin-left:0}
+.node.gate::after{content:"";position:absolute;left:50%;top:-8px;width:4px;height:4px;margin-left:-2px;border-radius:50%;background:var(--warn)}
+/* test sheets */
+.tests li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;padding:9px 0;border-top:1px solid var(--line);align-items:center;cursor:pointer}
+.tests li:first-child{border-top:0}
+.tests li:hover .t-name{color:var(--accent)}
+.tests .t-name{font-weight:500}
+.jg{font-size:12px;font-weight:500;border-radius:4px;padding:1px 8px;white-space:nowrap}
+.jg.ok{background:var(--ok-soft);color:var(--ok)} .jg.bad{background:var(--bad-soft);color:var(--bad)} .jg.wait{background:var(--sunken);color:var(--muted)}
+.head-btns{display:flex;gap:8px;margin-left:auto;flex-wrap:wrap}
+/* 進度 */
+.prog{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted)}
+.prog .pb{display:grid;grid-template-columns:16px minmax(0,1fr) 42px;gap:5px;align-items:center}
+.prog .pb i{display:block;height:6px;border-radius:3px;background:var(--line);overflow:hidden}
+.prog .pb i b{display:block;height:100%;background:#9DC3F7}
+.prog .pb.ac i b{background:var(--accent)}
+.prog .pb.ac.lag i b{background:var(--warn)}
+.prog .pb.ac.red i b{background:var(--bad)}
+.prog .pb span:last-child{text-align:right;font-variant-numeric:tabular-nums;color:var(--ink)}
+.rows>li{position:relative}
+.row-del{position:absolute;right:8px;top:50%;transform:translateY(-50%)}
+.chip-grp{display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap;padding-left:10px;border-left:1px solid var(--line)}
+.chip-grp>span{font-size:12px;color:var(--muted)}
+/* 任務階層 */
+.tasks li.t{grid-template-columns:auto minmax(0,1fr) auto}
+.tasks li.sub{padding-left:28px}
+.tasks li.main .t-title{font-weight:700}
+.t-act{display:flex;gap:8px;align-items:center;margin-top:5px;flex-wrap:wrap;font-size:12px}
+.t-act .btn{padding:2px 10px;font-size:12px}
+.t-act select{width:auto;max-width:180px;font:inherit;font-size:12px;padding:2px 6px;border:1px solid var(--line-strong);border-radius:5px;background:var(--surface);color:var(--ink)}
+.t-state{display:inline-block;font-size:11px;padding:1px 7px;border-radius:10px;background:var(--sunken);color:var(--muted)}
+.t-state.doing{background:var(--accent-soft);color:var(--accent)}
+.t-state.miss{background:#FBE9E9;color:var(--bad)}
+.g-bar.bl{top:2px;height:3px;background:#5B6B82;opacity:.55;border-radius:2px;min-width:2px}
+.aptag{font-size:11px;font-weight:600;border-radius:4px;padding:0 6px;line-height:1.7;margin-left:6px;background:var(--warn-soft);color:var(--warn)}
+.aptag.rej{background:var(--bad-soft,#fdecec);color:var(--bad,#c0392b)}
+.ap-box{display:flex;gap:10px;align-items:center;flex-wrap:wrap;border:1px solid var(--warn);background:var(--warn-soft);border-radius:8px;padding:10px 12px;margin:0 0 14px;font-size:14px}
+.ap-box.rej{border-color:var(--bad,#c0392b);background:var(--bad-soft,#fdecec)}
+.ap-box .grow{flex:1;min-width:200px}
+.linkbtn{background:none;border:0;padding:0 2px;color:var(--accent);cursor:pointer;font:inherit;text-decoration:underline}
+.base-box{display:flex;gap:12px;align-items:center;flex-wrap:wrap;font-size:13px;color:var(--muted);margin:-4px 0 14px}
+.base-box b{color:var(--ink);font-weight:600}
+.base-box .slip{color:var(--bad);font-weight:600}
+.chg{width:100%;border-collapse:collapse;font-size:13px}
+.chg th,.chg td{text-align:left;padding:6px 8px;border-top:1px solid var(--line);vertical-align:top}
+.chg th{font-weight:500;color:var(--muted);font-size:12px;border-top:0}
+.chg td.num{white-space:nowrap}
+.files-tools{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.flist{list-style:none;margin:0;padding:0}
+.pct-in{position:relative;display:block}
+.pct-in input{width:100%;padding-right:26px}
+.pct-in i{position:absolute;right:10px;top:50%;transform:translateY(-50%);font-style:normal;color:var(--muted);pointer-events:none}
+.wsum{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--muted);margin:-4px 0 6px}
+.wsum .bad{color:var(--bad);font-weight:600}
+.wsum .btn{padding:2px 10px;font-size:12px}
+.mains{margin:12px 0 4px;padding:14px 18px;background:var(--surface);border:1px solid var(--line);border-radius:8px}
+.mains h3{font-size:13px;color:var(--muted);font-weight:500;margin:0 0 8px}
+.mrow{display:grid;grid-template-columns:22px minmax(0,1.4fr) minmax(120px,2fr) 150px 92px;gap:10px;align-items:center;padding:5px 0;font-size:13px}
+.mrow .mi{color:var(--muted);font-variant-numeric:tabular-nums}
+.mrow.cur .mn{font-weight:700;color:var(--accent)}
+.mrow.done .mn{color:var(--muted);text-decoration:line-through}
+.mbar{position:relative;height:10px;background:var(--line);border-radius:5px;overflow:hidden}
+.mbar b{position:absolute;left:0;top:0;bottom:0;background:var(--accent);border-radius:5px}
+.mbar.late b{background:var(--bad)} .mbar.done b{background:var(--ok)}
+.mbar i{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--ink);opacity:.55}
+.mrow .mp{font-variant-numeric:tabular-nums;color:var(--muted);font-size:12px;white-space:nowrap}
+@media (max-width:640px){.mrow{grid-template-columns:22px minmax(0,1fr) 90px}.mrow .mp,.mrow .md{display:none}}
+.flist li{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
+.flist li:first-child{border-top:0}
+.fcat{font-size:11px;padding:1px 8px;border-radius:10px;background:var(--accent-soft);color:var(--accent);white-space:nowrap}
+.fname a{font-weight:500;word-break:break-all}
+.fmeta{font-size:12px;color:var(--muted)}
+.fops{display:flex;gap:4px;align-items:center}
+.fops select{font:inherit;font-size:12px;padding:2px 4px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--muted);width:auto}
+#file-form{margin-bottom:12px}
+.t-ops{display:flex;gap:2px;align-items:center}
+.t-ops button{border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:13px;line-height:1;padding:3px 5px;border-radius:4px}
+.t-ops button:hover{color:var(--accent);background:var(--sunken)}
+.t-ops .x:hover{color:var(--bad)}
+/* 甘特圖：預定／實際兩條 */
+.g-bar.pl{top:7px;height:9px;background:#92CDDC}
+.g-bar.ac{top:18px;height:9px;background:var(--accent)}
+.g-bar.ac.done{background:var(--ok)} .g-bar.ac.late{background:var(--bad)}
+.g-bar.ppl{top:7px;height:9px;background:#DCE6F2;border:1px solid #8EB4E3}
+.g-bar.pac{top:18px;height:9px;background:#8EB4E3}
+.g-bar.pac.done{background:#77933C} .g-bar.pac.late{background:#E46C0A}
+.g-label.main{font-weight:700;cursor:pointer}
+.g-label.sub{padding-left:16px}
+.g-tog{display:inline-block;width:14px;color:var(--muted)}
+.g-legend b{font-weight:500;color:var(--ink);margin-left:10px}
+input:disabled{background:var(--sunken);color:var(--muted);cursor:not-allowed}
+.head-actions{display:flex;gap:8px;flex-wrap:wrap}
+dialog.wide{width:min(860px,calc(100vw - 32px))}
+.ut-wrap{overflow:auto;max-height:60vh;border:1px solid var(--line);border-radius:6px}
+table.ut{border-collapse:collapse;width:100%;font-size:14px}
+.ut th{position:sticky;top:0;background:var(--sunken);font-size:12px;color:var(--muted);font-weight:500;text-align:left;padding:6px 8px;z-index:1}
+.ut td{border-top:1px solid var(--line);padding:4px 6px;vertical-align:middle}
+.ut input[type=text],.ut input[type=number],.ut select{padding:5px 7px;font-size:14px}
+.ut input.code{width:72px;text-transform:uppercase;font-family:var(--font-display)}
+.ut input.ord{width:64px}
+.ut tr.child td.nm{padding-left:22px}
+.ut tr.off td{opacity:.55}
+.ut .cnt{font-size:12px;color:var(--muted);white-space:nowrap}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand"><span class="brand-zh">傑克電機</span><span class="brand-en">JAKER ELECTRIC</span></div>
+    <div class="me" id="me-box"><span id="who"></span><span class="today num" id="today"></span></div>
+  </header>
+  <datalist id="names"></datalist>
+
+  <section class="view" id="view-list">
+    <div class="head">
+      <div>
+        <h1>專案儀表板</h1>
+        <p class="lede">網頁和 LINE「專案回報」共用同一份資料，也可以直接編輯<a id="sheet-link" href="#">試算表</a>。別人在 LINE 上的更新，重新整理頁面就會看到。</p>
+      </div>
+      <div class="head-actions">
+        <button class="btn" id="btn-members" type="button" hidden>成員管理</button>
+        <button class="btn" id="btn-units" type="button" hidden>單位管理</button>
+        <button class="btn primary" id="btn-new" type="button">新增專案</button>
+      </div>
+    </div>
+    <div class="line-alert" id="line-alert" role="alert" hidden>
+      <div><b>LINE 官方帳號的金鑰失效了，同事在 LINE 上收不到回覆。</b><span id="line-alert-at"></span>
+        請到 Apps Script「專案設定 → 指令碼屬性」更新 LINE_TOKEN（從 LINE Developers 複製目前的 Channel access token），更新後按右邊的按鈕確認。</div>
+      <button class="btn small" type="button" id="btn-line-check">重新檢查</button>
+    </div>
+    <p class="notice" id="ro-note" hidden></p>
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" id="tab-btn-proj" aria-selected="true" type="button">專案總覽</button>
+      <button class="tab" role="tab" id="tab-btn-task" aria-selected="false" type="button">任務總表</button>
+      <button class="tab" role="tab" id="tab-btn-fb" aria-selected="false" type="button">意見回饋<span class="badge" id="fb-badge" hidden></span></button>
+    </div>
+    <div class="view" id="tab-fb" hidden>
+      <div class="fb-top">
+        <section class="panel">
+          <div class="panel-head"><h2>回報錯誤或提出建議</h2></div>
+          <form id="fb-form" autocomplete="off">
+            <label>類型<select id="fb-type"><option value="錯誤">🐞 錯誤回報：系統哪裡怪怪的</option><option value="建議">💡 功能建議：希望多什麼功能</option></select></label>
+            <label>內容<textarea id="fb-content" maxlength="1500" rows="5" placeholder="錯誤：在哪個畫面、做了什麼、出現什麼狀況&#10;建議：希望怎麼改、會解決什麼問題" required></textarea></label>
+            <div class="actions"><button class="btn primary small" type="submit">送出</button></div>
+          </form>
+          <p class="hint">在 LINE 按「💬 意見回饋」也可以回報，還能附截圖。主管處理後，會用 LINE 通知提出的人。</p>
+        </section>
+        <section class="view" style="gap:10px">
+          <div class="chips" id="fb-chips"></div>
+          <div class="fb-list" id="fb-list"></div>
+        </section>
+      </div>
+    </div>
+    <div class="view" id="tab-task" hidden>
+      <div class="tv-top">
+        <section class="panel"><div class="slicers" id="slicers"></div></section>
+        <section class="panel"><div class="panel-head"><h2>任務狀態</h2></div><div class="donut-box" id="donut"></div></section>
+      </div>
+      <section class="panel">
+        <div class="tt-head">
+          <span class="muted" style="font-size:13px" id="tt-count"></span>
+          <div class="rangenav">
+            <button class="btn small" type="button" id="rg-prev">◀ 前兩週</button>
+            <button class="btn small" type="button" id="rg-today">今天</button>
+            <button class="btn small" type="button" id="rg-next">後兩週 ▶</button>
+          </div>
+        </div>
+        <div class="tt-wrap"><table class="tt" id="tt"></table></div>
+        <p class="muted" style="font-size:12px;margin:0">時程＝依開始日到完成日已經過的天數估算；工作天不含週六日。點任務列可打開所屬專案。</p>
+      </section>
+    </div>
+    <div class="view" id="tab-proj">
+    <div class="tools">
+      <input type="search" id="q" placeholder="搜尋專案名稱、編號、人員或任務內容…" aria-label="搜尋專案">
+      <select id="dept-filter" aria-label="依單位篩選"><option value="">所有單位</option></select>
+      <select id="status-filter" aria-label="依專案狀態篩選"><option value="">所有狀態</option><option>未開始</option><option>執行中</option><option>延遲</option><option>完成</option></select>
+      <select id="type-filter" aria-label="依專案類型篩選"><option value="">所有類型</option><option value="開發">開發類</option><option value="管理">管理類</option><option value="製程">製程類</option></select>
+      <select id="who-filter" aria-label="依人員篩選"><option value="">所有人員</option></select>
+      <select id="sort" aria-label="排序">
+        <option value="due">結案日：近 → 遠</option>
+        <option value="due-desc">結案日：遠 → 近</option>
+        <option value="updated">最近更新</option>
+        <option value="status">燈號：卡關優先</option>
+        <option value="code">專案編號</option>
+      </select>
+      <button class="clear" id="clear-filter" type="button" hidden>清除篩選</button>
+      <button class="btn small" id="btn-print-sum" type="button" title="依目前的單位篩選列印開發案件彙總表">列印彙總表</button>
+    </div>
+    <section class="panel person" id="person-panel" hidden></section>
+    <div class="chips" id="chips"></div>
+    <div class="ledger">
+      <div class="cols lhead" aria-hidden="true">
+        <span>專案</span><span>負責人</span><span>階段</span><span>燈號</span><span>預定結案日</span><span>進度</span><span>任務</span><span>最近更新</span>
+      </div>
+      <ul class="rows" id="list"></ul>
+      <p class="empty" id="empty" hidden>目前沒有符合的專案。</p>
+    </div>
+    </div>
+  </section>
+
+  <section class="view" id="view-detail" hidden>
+    <button class="back" id="btn-back" type="button">← 回到總覽</button>
+    <div id="d-head" class="view"></div>
+    <section class="panel" id="files-panel">
+      <div class="panel-head"><h2>專案資料</h2><span class="head-btns"><button class="btn small" type="button" id="btn-folder">開啟雲端資料夾</button><button class="btn small primary" type="button" id="btn-upload">上傳檔案</button></span></div>
+      <form id="file-form" class="boxed" autocomplete="off" hidden>
+        <div class="fields">
+          <label style="grid-column:span 2"><span>選擇檔案（可多選，每個 <span id="file-max">20</span> MB 以內）</span><input type="file" id="file-input" multiple style="padding:6px 0"></label>
+          <label>分類<select id="file-cat"></select></label>
+        </div>
+        <label>說明（選填，例如：客戶 10/30 提供的規格需求）<input type="text" id="file-note" maxlength="200"></label>
+        <div class="actions"><button class="btn small" type="button" id="file-cancel">取消</button><button class="btn small primary" type="submit" id="file-submit">上傳</button></div>
+      </form>
+      <div class="files-tools" id="file-chips"></div>
+      <ul class="flist" id="file-list"></ul>
+      <p class="hint" id="file-hint">業務提供的客戶需求、圖面、規格書等都可以放這裡，存在這個專案的雲端資料夾，專案負責人、參與成員和主管都看得到。在 LINE 傳給官方帳號的照片和檔案也會出現在這裡。</p>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><h2>甘特圖<span class="g-zoom" id="g-zoom" role="group" aria-label="甘特圖顯示範圍"><button type="button" data-z="all">全期</button><button type="button" data-z="180">半年</button><button type="button" data-z="90">三個月</button><button type="button" data-z="30">一個月</button></span></h2><span class="g-legend"><b>專案</b><i style="background:#DCE6F2;border:1px solid #8EB4E3"></i>預定<i style="background:#8EB4E3"></i>進行中<i style="background:#E46C0A"></i>逾期<i style="background:#77933C"></i>完成<b>任務</b><i style="background:#92CDDC"></i>預定<i style="background:var(--accent)"></i>進行中<i style="background:var(--bad)"></i>逾期<i style="background:var(--ok)"></i>完成<i style="background:#92CDDC;box-shadow:inset 0 0 0 2px var(--bad)"></i>應開始未開始<i style="width:0;height:12px;border-left:2px dashed var(--bad);border-radius:0"></i>今天<i style="height:3px;background:#5B6B82;opacity:.55"></i>基準計畫</span></div>
+      <div class="gantt-wrap"><div class="gantt" id="gantt"></div></div>
+      <p class="muted" id="gantt-hint" style="font-size:12px" hidden>鎖定基準計畫後，每列最上方的灰色細線是基準計畫，可以和目前的預定時程比較。每列上面一條是預定時程、下面一條是實際時程（任務要記錄實際開始日才會出現）。點主任務名稱可以展開或收合；點任務條可以修改；時程長的專案可以切換「三個月」「一個月」再左右捲動。</p>
+    </section>
+    <section class="panel" id="chg-panel" hidden>
+      <div class="panel-head"><h2>計畫變更紀錄</h2><span class="muted num" id="chg-count"></span></div>
+      <div style="overflow-x:auto"><table class="chg"><thead><tr><th>時間</th><th>任務</th><th>項目</th><th>原值 → 新值</th><th>原因</th><th>修改人</th></tr></thead><tbody id="chg-body"></tbody></table></div>
+    </section>
+    <div class="split">
+      <section class="panel">
+        <div class="panel-head"><h2>任務</h2><span class="muted num" id="d-taskcount"></span></div>
+        <div class="wsum" id="d-wsum"></div>
+        <ul class="tasks" id="d-tasks"></ul>
+        <p class="ro-hint" id="task-ro" hidden>只有專案負責人、參與成員或主管可以新增任務。</p>
+        <form id="task-form" class="boxed" autocomplete="off">
+          <label>新增任務<input type="text" id="task-title" maxlength="120" placeholder="要完成什麼" required></label>
+          <div class="fields">
+            <label>放在<select id="task-parent"></select></label>
+            <label>負責人<input type="text" id="task-assignee" list="names" maxlength="20"></label>
+            <label>權重（%）<span class="pct-in"><input type="text" id="task-weight" inputmode="decimal" maxlength="5"><i>%</i></span></label>
+          </div>
+          <div class="fields">
+            <label>預定開始<input type="date" id="task-start"></label>
+            <label>預定完成<input type="date" id="task-due"></label>
+          </div>
+          <label id="task-reason-wrap" hidden>新增原因（已鎖定基準計畫，會記在變更紀錄）<input type="text" id="task-reason" maxlength="200"></label>
+          <div class="actions"><button class="btn small" type="submit">加入任務</button></div>
+        </form>
+      </section>
+      <section class="panel">
+        <div class="panel-head"><h2>每週更新</h2></div>
+        <p class="ro-hint" id="upd-ro" hidden>只有專案負責人、參與成員或主管可以填寫每週更新。</p>
+        <form id="upd-form" class="boxed" autocomplete="off">
+          <div class="fields">
+            <label>本週燈號（自動）<span id="upd-light" style="padding-top:6px"></span></label>
+            <label id="upd-stage-wrap">階段<select id="upd-stage"></select></label>
+            <label id="upd-stage-auto" hidden>階段（依主任務自動）<span id="upd-stage-text" style="padding-top:6px;color:var(--ink);font-size:14px"></span></label>
+          </div>
+          <label>本週完成<textarea id="upd-done" maxlength="800"></textarea></label>
+          <label>下週計畫<textarea id="upd-next" maxlength="800"></textarea></label>
+          <label>卡關或需要決策的事（沒有就留空）<textarea id="upd-blocker" maxlength="800"></textarea></label>
+          <div class="actions"><button class="btn primary small" type="submit">送出本週更新</button></div>
+        </form>
+        <ol class="log" id="d-updates"></ol>
+      </section>
+    </div>
+    <section class="panel">
+      <div class="panel-head"><h2>研究試驗單</h2><button class="btn small" id="btn-new-test" type="button">新增試驗單</button></div>
+      <p class="hint">開發過程的各項試驗，請留存試驗條件、參數及結果。編號自動產生（案件編號-001）；在 LINE 按「🧪 試驗單」也能開單並附上照片。</p>
+      <ul class="tests" id="d-tests"></ul>
+    </section>
+  </section>
+</div>
+
+<dialog id="dlg" aria-labelledby="dlg-title">
+  <form id="proj-form" autocomplete="off">
+    <h2 id="dlg-title">新增專案</h2>
+    <div class="fields">
+      <label style="grid-column:span 2">專案名稱<input type="text" id="f-name" maxlength="80" required></label>
+      <label>專案編號<input type="text" id="f-code" maxlength="20" autocapitalize="characters" spellcheck="false"></label>
+    </div>
+    <p class="hint" id="f-code-hint"></p>
+    <div class="fields">
+      <label>單位<select id="f-dept"></select></label>
+      <label style="grid-column:span 2">產品規格<input type="text" id="f-spec" maxlength="120" placeholder="例如 25kV 2.25 英吋套管"></label>
+    </div>
+    <label>目的與預期成果（目標）<textarea id="f-goal" maxlength="600"></textarea></label>
+    <div class="fields">
+      <label>負責人<input type="text" id="f-owner" list="names" maxlength="40"></label>
+      <label>參與成員<input type="text" id="f-members" maxlength="160" placeholder="用頓號分隔，例如 Kevin、Lily"></label>
+    </div>
+    <div class="fields">
+      <label>類型<select id="f-type"><option value="開發">開發類</option><option value="管理">管理類</option><option value="製程">製程類</option></select></label>
+      <label>預定開案日<input type="date" id="f-start"></label>
+      <label>預定結案日<input type="date" id="f-due"></label>
+    </div>
+    <div class="fields" id="f-actual-wrap">
+      <label>實際開案日<input type="date" id="f-astart"></label>
+      <label>實際結案日<input type="date" id="f-aend"></label>
+    </div>
+    <p class="hint" id="f-apply-hint" hidden>你開的專案會送給提案單位的主管核准，核准後才會成立、才能新增任務；核准前可以再修改或刪除。</p>
+    <label id="f-reason-wrap" hidden>變更原因（已鎖定基準計畫，修改預定日期必填）<input type="text" id="f-reason" maxlength="200"></label>
+    <p class="hint">階段、燈號、卡關事項改在「每週更新」填寫；燈號依進度與日期自動判斷。實際開案日、結案日會自動帶出，也可以手動修改（填了實際結案日就視為結案）。</p>
+    <div class="actions">
+      <button class="btn" type="button" id="f-cancel">取消</button>
+      <button class="btn primary" type="submit">儲存</button>
+    </div>
+  </form>
+</dialog>
+<dialog id="xdlg" aria-labelledby="xdlg-title">
+  <form id="xfer-form" autocomplete="off">
+    <h2 id="xdlg-title">轉派任務</h2>
+    <p class="hint" id="x-task"></p>
+    <label>轉給<select id="x-to" required></select></label>
+    <label>說明（選填，例如：請協助評估客戶需求）<input type="text" id="x-note" maxlength="200"></label>
+    <p class="hint">對方會收到 LINE 通知，原負責人也會收到；轉派會記在「計畫變更紀錄」。</p>
+    <div class="actions"><button class="btn" type="button" id="x-cancel">取消</button><button class="btn primary" type="submit">轉派</button></div>
+  </form>
+</dialog>
+<dialog id="tdlg" aria-labelledby="tdlg-title">
+  <form id="task-edit-form" autocomplete="off">
+    <h2 id="tdlg-title">修改任務</h2>
+    <label>任務<input type="text" id="te-title" maxlength="120" required></label>
+    <div class="fields">
+      <label>負責人<input type="text" id="te-assignee" list="names" maxlength="20"></label>
+      <label>預定開始日<input type="date" id="te-start"></label>
+      <label>預定完成日<input type="date" id="te-due"></label>
+    </div>
+    <div class="fields">
+      <label>實際開始日<input type="date" id="te-astart"></label>
+      <label>實際完成日<input type="date" id="te-aend"></label>
+      <label>權重（%）<span class="pct-in"><input type="text" id="te-weight" inputmode="decimal" maxlength="5"><i>%</i></span><span id="te-wpct" class="muted" style="font-size:12px"></span></label>
+    </div>
+    <label id="te-reason-wrap" hidden>變更原因（已鎖定基準計畫，修改預定日期必填）<input type="text" id="te-reason" maxlength="200"></label>
+    <p class="hint" id="te-base" hidden></p>
+    <p class="hint" id="te-hint">實際時程空白表示未開始或未完成。填上實際完成日＝標記完成；清空＝改回未完成。</p>
+    <div class="actions">
+      <button class="btn" type="button" id="te-cancel">取消</button>
+      <button class="btn primary" type="submit">儲存</button>
+    </div>
+  </form>
+</dialog>
+<dialog id="udlg" class="wide" aria-labelledby="udlg-title">
+  <form id="unit-form" autocomplete="off">
+    <h2 id="udlg-title">單位管理</h2>
+    <p class="hint">依組織架構維護提案單位。代碼會用在案件編號（JK-代碼-年度流水號）；已經有案件的單位不能刪除或改代碼，不再使用時取消「啟用」即可。上層部門留空＝部門本身。「主管」是核准成員開立專案的人：成員開的專案送給提案單位的主管，沒填就往上層部門找，都沒有就由管理員核准。</p>
+    <div class="ut-wrap"><table class="ut"><thead><tr><th>代碼</th><th>單位名稱</th><th>上層部門</th><th title="成員開的專案由這位主管核准；沒填就往上層部門找，都沒有就由管理員核准">主管（核准專案）</th><th title="三碼：部門、課、組">排序（三碼）</th><th>啟用</th><th>案件</th><th></th></tr></thead><tbody id="ut-body"></tbody></table></div>
+    <div class="actions">
+      <button class="btn small" type="button" id="u-add">＋ 新增單位</button>
+      <span style="flex:1"></span>
+      <button class="btn" type="button" id="u-cancel">取消</button>
+      <button class="btn primary" type="submit">儲存單位表</button>
+    </div>
+  </form>
+</dialog>
+<dialog id="mdlg" class="wide" aria-labelledby="mdlg-title">
+  <form id="member-form" autocomplete="off">
+    <h2 id="mdlg-title">成員管理</h2>
+    <p class="hint">改姓名時，專案負責人、參與成員、任務負責人、每週更新、檔案、試驗單等紀錄會一起改。角色：成員＝一般使用者；主管＝可管理所有專案；管理員＝主管權限再加上單位與成員管理。公司信箱用來登入網頁儀表板。先在這裡新增的人，之後在 LINE 綁定時輸入同樣的姓名就會自動對上。</p>
+    <div class="ut-wrap"><table class="ut"><thead><tr><th>姓名</th><th>角色</th><th>公司信箱</th><th>接收提醒</th><th>LINE</th><th>專案／任務</th><th></th></tr></thead><tbody id="mt-body"></tbody></table></div>
+    <div class="actions">
+      <button class="btn small" type="button" id="m-add">＋ 新增成員</button>
+      <span style="flex:1"></span>
+      <button class="btn" type="button" id="m-cancel">取消</button>
+      <button class="btn primary" type="submit">儲存成員表</button>
+    </div>
+  </form>
+</dialog>
+<dialog id="edlg" aria-labelledby="edlg-title">
+  <form id="test-form" autocomplete="off">
+    <h2 id="edlg-title">新增研究試驗單</h2>
+    <label>試驗名稱<input type="text" id="e-name" maxlength="80" required placeholder="例如 耐電壓試驗"></label>
+    <div class="fields">
+      <label>試驗日期<input type="date" id="e-date"></label>
+      <label>試驗人員<input type="text" id="e-tester" list="names" maxlength="40"></label>
+      <label>判定<select id="e-judge"><option>待判定</option><option>合格</option><option>不合格</option></select></label>
+    </div>
+    <label>試驗目的<textarea id="e-purpose" maxlength="800"></textarea></label>
+    <label>試驗條件與參數<textarea id="e-param" maxlength="1500" rows="4" placeholder="電壓、時間、溫度、樣品數量、設備…"></textarea></label>
+    <label>試驗結果<textarea id="e-result" maxlength="1500" rows="4" placeholder="量測數據、觀察到的現象…"></textarea></label>
+    <div class="photos" id="e-files"></div>
+    <div class="actions">
+      <button class="btn" type="button" id="e-print">列印</button>
+      <button class="btn" type="button" id="e-del">刪除</button>
+      <span style="flex:1"></span>
+      <button class="btn" type="button" id="e-cancel">取消</button>
+      <button class="btn primary" type="submit" id="e-save">儲存</button>
+    </div>
+  </form>
+</dialog>
+<div id="toast" role="status" aria-live="polite" hidden></div>
+
+<script>
+(function(){
+"use strict";
+var D = <?!= data ?>;
+var API = <?!= api ?>;   // 公司網址版（work.jaker.com.tw/pm）才有：資料改用這個網址讀寫，登入沿用行政服務
+function token(){ try { return localStorage.getItem("jaker.token") || ""; } catch(e){ return ""; } }
+/** 呼叫後端：Google 帳號版用 google.script.run；公司網址版用 fetch＋行政服務的登入代碼 */
+function rpc(fn, args){
+  args = args || [];
+  if (API) return fetch(API, {method:"POST", credentials:"omit", headers:{"Content-Type":"text/plain;charset=utf-8"}, body:JSON.stringify({api:fn, args:args, token:token()})})
+    .then(function(r){ if (!r.ok) throw new Error("連線失敗（HTTP " + r.status + "）"); return r.json(); })
+    .then(function(j){
+      if (j.auth){ toast("登入已過期，請重新登入。", true); setTimeout(function(){ location.reload(); }, 1500); throw new Error(j.error); }
+      if (!j.ok) throw new Error(j.error || "發生錯誤");
+      return j.data;
+    });
+  return new Promise(function(resolve, reject){ var r = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject); r[fn].apply(r, args); });
+}
+var STAGES = ["開發提案","可行性評估","設計","設計審查","樣品試作","設計驗證","文件整理及發行","產品確認"];
+var TYPES = (D.types && D.types["開發"]) ? D.types : {"開發":STAGES, "管理":["啟動","文件建立","導入運行","內部稽核","驗證"]};
+var GATES = D.gates || ["可行性評估","設計審查","設計驗證","產品確認"];
+var DEPTS = D.depts || {RD:"開發課", HV:"高壓實驗室", GM:"總經理室"};
+var DPAR = D.deptParents || {};
+// 單位階層：部門在上、課／組縮排在下
+function deptKids(code){ return Object.keys(DEPTS).filter(function(k){ return k !== code && DPAR[k] && DPAR[k] === DEPTS[code]; }); }
+function deptTree(){
+  var names = {}; Object.keys(DEPTS).forEach(function(k){ names[DEPTS[k]] = 1; });
+  var out = [];
+  Object.keys(DEPTS).filter(function(k){ return !DPAR[k] || !names[DPAR[k]]; }).forEach(function(k){
+    out.push([k, 0]); deptKids(k).forEach(function(c){ out.push([c, 1]); });
+  });
+  return out;
+}
+/** 篩選選部門時，連同底下的課／組一起列出 */
+function deptIn(d, f){ return d === f || (!!d && DPAR[d] === DEPTS[f]); }
+function fillDepts(sel, blank, filterMode){
+  sel.textContent = ""; if (blank) sel.append(h("option",{value:"",text:blank}));
+  deptTree().forEach(function(x){
+    var k = x[0], kids = filterMode && x[1] === 0 && deptKids(k).length;
+    sel.append(h("option",{value:k,text:(x[1] ? "　└ " : "")+DEPTS[k]+"（"+k+"）"+(kids ? "＋所屬單位" : "")}));
+  });
+}
+function stageLabel(s){ return GATES.indexOf(s) >= 0 ? s + "★" : s; }
+function deptOf(p){ if (DEPTS[p["部門"]]) return p["部門"]; var m = String(p["編號"]||"").toUpperCase().match(/^JK-([A-Z][A-Z0-9]{1,3})-/); return m && DEPTS[m[1]] ? m[1] : ""; }
+function testsOf(code){ return (D.tests||[]).filter(function(e){ return e["專案編號"]===code; }); }
+function typeOf(p){ return p && TYPES[p["類型"]] ? p["類型"] : "開發"; }
+function M(p){ return (p && p._m) || {stages:TYPES[typeOf(p)], stageIdx:0, stage:TYPES[typeOf(p)][0], closed:false, light:"正常", status:"未開始", planned:null, actual:null}; }
+function stagesOf(p){ return M(p).stages; }
+function isClosed(p){ return !!M(p).closed; }
+function fillStages(sel, sts, val){ sel.textContent = ""; sts.forEach(function(s,i){ sel.append(h("option",{value:s,text:(i+1)+". "+stageLabel(s)})); }); sel.value = sts.indexOf(val) >= 0 ? val : sts[0]; }
+var CLS = {"正常":"ok","有風險":"risk","卡關":"blocked","逾期":"blocked"};
+var $ = function(id){ return document.getElementById(id); };
+var filter = "o:all", sel = null, editing = null, busy = false, toastTimer = 0;
+
+function h(tag, props){
+  var e = document.createElement(tag), kids = Array.prototype.slice.call(arguments, 2);
+  if (props) Object.keys(props).forEach(function(k){
+    var v = props[k]; if (v == null || v === false) return;
+    if (k === "class") e.className = v; else if (k === "text") e.textContent = v;
+    else if (k.indexOf("on") === 0) e.addEventListener(k.slice(2), v);
+    else if (k === "checked" || k === "disabled") e[k] = !!v;
+    else e.setAttribute(k, v);
+  });
+  kids.forEach(function(c){ if (c == null || c === false) return; e.append(c.nodeType ? c : document.createTextNode(String(c))); });
+  return e;
+}
+function fmt(s){ var m = String(s||"").match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? Number(m[2])+"/"+Number(m[3]) : "—"; }
+function days(a,b){ return Math.round((Date.parse(b+"T00:00:00Z")-Date.parse(a+"T00:00:00Z"))/86400000); }
+function stageIdx(p){ return M(p).stageIdx || 0; }
+function wTotal(code){ return leavesOf(code).reduce(function(a, t){ return a + (Number(t._w) || 0); }, 0); }
+function fmtW(n){ return (Math.round(n * 10) / 10).toFixed(1); }
+/** 任務區上方：權重合計（應為 100%），不是 100% 時可一鍵平均分配 */
+function renderWsum(p){
+  var box = $("d-wsum"); box.textContent = "";
+  var lv = leavesOf(p["編號"]); if (!lv.length) return;
+  var tot = wTotal(p["編號"]), ok = Math.abs(tot - 100) <= 0.05;
+  box.append(h("span",{class:ok?"":"bad",text:"權重合計 " + fmtW(tot) + "%" + (ok ? "" : "（應為 100%，目前依比例換算）")}));
+  if (!ok && canManage(p)) box.append(h("button",{class:"btn small",type:"button",title:"把所有子任務的權重平均分配，合計 100%",onclick:function(){
+    if (confirm("把 " + lv.length + " 項任務的權重平均分配（每項約 " + fmtW(100 / lv.length) + "%，合計 100%）？")) call("api_equalWeights",[p["編號"]],"已平均分配權重");
+  }},"平均分配成 100%"));
+  $("task-weight").placeholder = tot < 100 ? "剩 " + fmtW(100 - tot) : "例如 25";
+}
+/** 權重換算成占專案的百分比（所有子任務權重合計＝100%），顯示到小數一位 */
+function wPct(code, w){
+  var tot = leavesOf(code).reduce(function(a, t){ return a + (Number(t._w) || 0); }, 0);
+  return tot > 0 ? (Math.round((Number(w) || 0) / tot * 1000) / 10).toFixed(1) + "%" : "—";
+}
+function leavesOf(code){ return tasksOf(code).filter(function(t){ return !t._kids; }); }
+function progCell(p){
+  var m = M(p);
+  if (m.planned === null) return h("span",{class:"muted",text:"—"});
+  var gap = m.planned - m.actual, lag = gap >= (D.riskGap || 10) ? (gap >= (D.redGap || 20) ? " red" : " lag") : "";
+  return h("span",{class:"prog",title:"依經過時間推算 × 權重：預定 "+pctTxt(m.planned)+"／實際 "+pctTxt(m.actual)},
+    h("span",{class:"pb"}, h("span",{text:"預"}), h("i",null,h("b",{style:"width:"+m.planned+"%"})), h("span",{text:pctTxt(m.planned)})),
+    h("span",{class:"pb ac"+lag}, h("span",{text:"實"}), h("i",null,h("b",{style:"width:"+m.actual+"%"})), h("span",{text:pctTxt(m.actual)})));
+}
+function pill(s){ s = CLS[s] ? s : "正常"; return h("span",{class:"pill "+CLS[s], text:s}); }
+function track(i, sts){ sts = sts || STAGES; var t = h("span",{class:"track"+(sts.length>5?" many":"")}); sts.forEach(function(s,k){ t.append(h("span",{class:"node"+(k<i?" done":k===i?" cur":"")+(GATES.indexOf(s)>=0?" gate":""), title:(k+1)+". "+stageLabel(s)})); }); return t; }
+function tasksOf(code){ return D.tasks.filter(function(t){ return t["專案編號"]===code; }); }
+function updatesOf(code){ return D.updates.filter(function(u){ return u["專案編號"]===code; }).reverse(); }
+function proj(code){ return D.projects.filter(function(x){ return x["編號"]===code; })[0]; }
+
+function toast(msg, err){
+  var t = $("toast"); t.textContent = msg; t.className = err ? "err" : ""; t.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(function(){ t.hidden = true; }, err ? 6000 : 2500);
+}
+// 權限（與後端規則相同；真正的檢查在後端）
+function ME(){ return D.me || {}; }
+function me(){ return ME().name || ""; }
+function isAdmin(){ return !!ME().admin; }
+function names(s){ return String(s||"").split(/[、,，\/\s]+/).filter(Boolean); }
+function canManage(p){ return isAdmin() || (!!me() && p["負責人"] === me()); }
+function canUpdate(p){ return canManage(p) || (!!me() && names(p["參與成員"]).indexOf(me()) >= 0); }
+function canToggle(p, t){ return canManage(p) || (!!me() && t["負責人"] === me()); }
+function renderWho(){
+  var w = $("who"); w.textContent = "";
+  if (me()) w.append("登入：", h("b",{text:me()}), " ", h("span",{class:"role"+(isAdmin()?" admin":""),text:ME().owner?"管理員":isAdmin()?"主管":"成員"}));
+  else w.append(ME().email || "");
+  if (API) w.append(" ", h("button",{class:"linkbtn",type:"button",title:"登出（行政服務也會一起登出）",onclick:function(){
+    if (!confirm("確定登出？行政服務入口也會一起登出。")) return;
+    try { localStorage.removeItem("jaker.token"); } catch(e){}
+    document.cookie = "jk_t=; path=/pm; max-age=0";
+    location.reload();
+  }},"登出"));
+  var n = $("ro-note");
+  n.hidden = !!me();
+  n.textContent = me() ? "" : "你的帳號（" + (ME().email||"") + "）還沒登記在成員表，目前只能查看。如需編輯，請聯絡主管。";
+  $("btn-new").hidden = !me();   // 成員也可以開專案（要由提案單位主管核准）
+  $("btn-units").hidden = !ME().owner;
+  $("btn-members").hidden = !ME().owner;
+  var la = D.lineAlert; $("line-alert").hidden = !la;
+  if (la) $("line-alert-at").textContent = "從 " + (la.at || "") + " 起，LINE 回覆失敗（錯誤代碼 " + (la.code || "") + "）。";
+}
+
+// 呼叫後端；成功後用回傳的最新資料重畫
+function call(fn, args, okMsg){
+  if (busy) return Promise.resolve(false);
+  busy = true;
+  document.querySelectorAll("button[type=submit]").forEach(function(b){ b.disabled = true; });
+  return rpc(fn, args)
+    .then(function(data){ D = data; busy = false; render(); if (okMsg) toast(okMsg); return true; })
+    .catch(function(err){ busy = false; render(); toast("沒有存成功：" + (err && err.message || err), true); return false; });
+}
+
+function fillNames(){
+  var set = {};
+  function add(n){ n = String(n||"").trim(); if (n) set[n] = 1; }
+  (D.members||[]).forEach(add);
+  D.projects.forEach(function(p){ add(p["負責人"]); String(p["參與成員"]||"").split(/[、,，\/\s]+/).forEach(add); });
+  D.tasks.forEach(function(t){ add(t["負責人"]); });
+  var dl = $("names"); dl.textContent = "";
+  Object.keys(set).sort().forEach(function(n){ dl.append(h("option",{value:n})); });
+}
+
+function render(){
+  document.querySelectorAll("button[type=submit]").forEach(function(b){ b.disabled = false; });
+  $("today").textContent = D.today;
+  $("sheet-link").href = D.sheetUrl;
+  renderWho();
+  fillNames();
+  renderList();
+  renderTasks();
+  renderFb();
+  if (sel && proj(sel)) renderDetail(sel);
+}
+
+// ===== 搜尋、人員篩選、排序 =====
+var Q = "", WHO = "", SORT = "due", TYP = "", DEPTF = "", STF = "";
+try { var saved = JSON.parse(localStorage.getItem("jk-list") || "{}"); WHO = saved.who || ""; SORT = saved.sort || "due"; DEPTF = saved.dept || ""; } catch(e){}
+function saveList(){ try { localStorage.setItem("jk-list", JSON.stringify({who:WHO, sort:SORT, dept:DEPTF})); } catch(e){} }
+(function(){ fillDepts($("dept-filter"), "所有單位", true); if (!DEPTS[DEPTF]) DEPTF = ""; })();
+$("dept-filter").addEventListener("change", function(){ DEPTF = this.value; saveList(); renderList(); });
+function roleOf(p, n){
+  if (!n) return "";
+  if (p["負責人"] === n) return "負責人";
+  if (names(p["參與成員"]).indexOf(n) >= 0) return "成員";
+  if (tasksOf(p["編號"]).some(function(t){ return t["負責人"] === n; })) return "有任務";
+  return "";
+}
+function matchQ(p){
+  if (!Q) return true;
+  var q = Q.toLowerCase();
+  var hay = [p["編號"], p["專案名稱"], p["目的與預期成果"], p["負責人"], p["參與成員"], p["卡關事項"], p["產品規格"]]
+    .concat(tasksOf(p["編號"]).map(function(t){ return t["任務"] + " " + (t["負責人"]||""); })).join(" ").toLowerCase();
+  return q.split(/\s+/).filter(Boolean).every(function(w){ return hay.indexOf(w) >= 0; });
+}
+var SEV = {"卡關":0, "逾期":0, "有風險":1, "正常":2};
+function sortProjects(ps){
+  var key = {
+    "due": function(a,b){ return dueKey(a,1) < dueKey(b,1) ? -1 : dueKey(a,1) > dueKey(b,1) ? 1 : 0; },
+    "due-desc": function(a,b){ return dueKey(a,-1) < dueKey(b,-1) ? 1 : dueKey(a,-1) > dueKey(b,-1) ? -1 : 0; },
+    "updated": function(a,b){ return (b["最近更新"]||"") < (a["最近更新"]||"") ? -1 : (b["最近更新"]||"") > (a["最近更新"]||"") ? 1 : 0; },
+    "status": function(a,b){ return (SEV[a["燈號"]]==null?2:SEV[a["燈號"]]) - (SEV[b["燈號"]]==null?2:SEV[b["燈號"]]) || (dueKey(a,1) < dueKey(b,1) ? -1 : 1); },
+    "code": function(a,b){ return String(a["編號"]).localeCompare(String(b["編號"]), "en", {numeric:true}); }
+  }[SORT] || function(){ return 0; };
+  return ps.slice().sort(function(a,b){
+    if (SORT !== "code"){ var fa = isClosed(a), fb = isClosed(b); if (fa !== fb) return fa ? 1 : -1; }
+    return key(a,b);
+  });
+}
+// 上線（結案）的專案永遠排最後；沒填截止日的排在有截止日的後面
+function dueKey(p, dir){
+  var done = isClosed(p) ? "1" : "0";
+  var d = p["截止日"] || (dir > 0 ? "9999-99-99" : "0000-00-00");
+  return dir > 0 ? done + d : (done === "1" ? "0" : "1") + d;
+}
+function fillWho(){
+  var sel = $("who-filter"), set = {};
+  (D.members||[]).forEach(function(n){ if (n) set[n] = 1; });
+  D.projects.forEach(function(p){ if (p["負責人"]) set[p["負責人"]] = 1; names(p["參與成員"]).forEach(function(n){ set[n] = 1; }); });
+  D.tasks.forEach(function(t){ if (t["負責人"]) set[t["負責人"]] = 1; });
+  var list = Object.keys(set).sort();
+  if (WHO && list.indexOf(WHO) < 0) WHO = "";
+  sel.textContent = ""; sel.append(h("option",{value:"",text:"所有人員"}));
+  list.forEach(function(n){ sel.append(h("option",{value:n,text:n})); });
+  sel.value = WHO; $("sort").value = SORT;
+}
+function renderPerson(){
+  var box = $("person-panel"); box.textContent = "";
+  box.hidden = !WHO; if (!WHO) return;
+  var own = D.projects.filter(function(p){ return p["負責人"] === WHO; });
+  var join = D.projects.filter(function(p){ return p["負責人"] !== WHO && names(p["參與成員"]).indexOf(WHO) >= 0; });
+  var open = D.tasks.filter(function(t){ return t["負責人"] === WHO && t["狀態"] !== "已完成" && !t._kids; })
+    .sort(function(a,b){ return (a["完成日"]||"9") < (b["完成日"]||"9") ? -1 : 1; });
+  var late = open.filter(function(t){ return t["完成日"] && t["完成日"] < D.today; });
+  var soon = open.filter(function(t){ return t["完成日"] && t["完成日"] >= D.today && days(D.today, t["完成日"]) <= 7; });
+  box.append(
+    h("div",{class:"panel-head"}, h("h2",null, h("b",{text:WHO}), " 的工作")),
+    h("div",{class:"pstats"},
+      h("span",null, h("b",{text:own.length}), "個負責專案"),
+      h("span",null, h("b",{text:join.length}), "個參與專案"),
+      h("span",null, h("b",{text:open.length}), "項未完成任務"),
+      h("span",{class:late.length?"bad":""}, h("b",{text:late.length}), "項逾期"),
+      h("span",null, h("b",{text:soon.length}), "項 7 天內到期")));
+  if (!open.length){ box.append(h("p",{class:"muted",style:"font-size:13px",text:"目前沒有未完成的任務。"})); return; }
+  var ul = h("ul",{class:"ptasks"});
+  open.forEach(function(t){
+    var p = proj(t["專案編號"]) || {};
+    var isLate = t["完成日"] && t["完成日"] < D.today;
+    ul.append(h("li",null,
+      h("div",null, h("div",{text:t["任務"]}), h("button",{class:"pt-proj",type:"button",text:t["專案編號"]+" "+(p["專案名稱"]||""),onclick:function(){ openDetail(t["專案編號"]); }})),
+      h("span",{class:"pt-due num"+(isLate?" bad":""),text: t["完成日"] ? (fmt(t["完成日"]) + (isLate ? "（逾期 "+days(t["完成日"],D.today)+" 天）" : t["完成日"]===D.today ? "（今天）" : "")) : "未設完成日"})));
+  });
+  box.append(ul);
+}
+function hl(text){
+  text = String(text||""); if (!Q) return text;
+  var w = Q.trim().split(/\s+/)[0]; if (!w) return text;
+  var i = text.toLowerCase().indexOf(w.toLowerCase()); if (i < 0) return text;
+  var f = document.createDocumentFragment();
+  f.append(text.slice(0,i), h("mark",{text:text.slice(i,i+w.length)}), text.slice(i+w.length));
+  return f;
+}
+$("q").addEventListener("input", function(){ Q = this.value.trim(); renderList(); });
+$("who-filter").addEventListener("change", function(){ WHO = this.value; saveList(); renderList(); });
+$("type-filter").addEventListener("change", function(){ TYP = this.value; renderList(); });
+$("status-filter").addEventListener("change", function(){ STF = this.value; syncChip(); renderList(); });
+// 狀態篩選與快速鍵連動：選「完成」切到已結案，選其他狀態切到執行中
+function syncChip(){
+  if (STF === "完成" && filter.indexOf("o:") === 0) filter = "c:all";
+  else if (STF && STF !== "完成" && filter.indexOf("c:") === 0) filter = "o:all";
+}
+$("sort").addEventListener("change", function(){ SORT = this.value; saveList(); renderList(); });
+$("clear-filter").addEventListener("click", function(){ Q = ""; WHO = ""; TYP = ""; DEPTF = ""; STF = ""; filter = "o:all"; $("q").value = ""; $("who-filter").value = ""; saveList(); renderList(); });
+
+function renderList(){
+  fillWho(); renderPerson();
+  $("clear-filter").hidden = !(Q || WHO || TYP || DEPTF || STF || filter !== "o:all");
+  $("type-filter").value = TYP; $("dept-filter").value = DEPTF; $("status-filter").value = STF;
+  var base = D.projects.filter(function(p){ return matchQ(p) && (!WHO || roleOf(p, WHO)) && (!TYP || typeOf(p) === TYP) && (!DEPTF || deptIn(deptOf(p), DEPTF)) && (!STF || M(p).status === STF); });
+  // 快速鍵：執行中（全部／正常／有風險／卡關）、已結案（全部／正常／逾期）
+  function chipKey(p){ return p._ap ? "p:all" : (isClosed(p) ? "c:" : "o:") + (p["燈號"] || "正常"); }
+  var counts = {all:base.length, "o:all":0, "c:all":0, "p:all":0};
+  base.forEach(function(p){ var k = chipKey(p); counts[k] = (counts[k]||0) + 1; if (!p._ap) counts[isClosed(p) ? "c:all" : "o:all"]++; });
+  if (filter === "p:all" && !counts["p:all"]) filter = "o:all";
+  var chips = $("chips"); chips.textContent = "";
+  function chip(k, label){ return h("button",{class:"chip",type:"button","aria-pressed":String(filter===k),onclick:function(){ filter=k; if (STF && ((k.indexOf("c:")===0) !== (STF==="完成"))) STF = ""; renderList(); }}, label, h("b",{class:"num",text:counts[k]||0})); }
+  chips.append(
+    h("span",{class:"chip-grp",style:"border-left:0;padding-left:0"}, h("span",{text:"執行中"}), chip("o:all","全部"), chip("o:正常","正常"), chip("o:有風險","有風險"), chip("o:卡關","卡關")),
+    h("span",{class:"chip-grp"}, h("span",{text:"已結案"}), chip("c:all","全部"), chip("c:正常","正常"), chip("c:逾期","逾期")),
+    counts["p:all"] ? h("span",{class:"chip-grp"}, h("span",{text:"專案申請"}), chip("p:all","待核准／退回")) : "");
+  var list = $("list"); list.textContent = "";
+  var shown = sortProjects(base.filter(function(p){
+    if (filter === "o:all") return !p._ap && !isClosed(p);
+    if (filter === "c:all") return !p._ap && isClosed(p);
+    return chipKey(p) === filter;
+  }));
+  $("empty").hidden = shown.length > 0;
+  $("empty").textContent = D.projects.length ? "沒有符合條件的專案。" : "目前還沒有專案。";
+  shown.forEach(function(p){
+    var role = roleOf(p, WHO);
+    var si = stageIdx(p), finished = isClosed(p), sts = stagesOf(p);
+    var ts = leavesOf(p["編號"]), dn = ts.filter(function(t){ return t["狀態"]==="已完成"; }).length;
+    var due = h("span",{class:"cell num","data-label":"預定結案日"}, p["截止日"] ? fmt(p["截止日"]) : "未定");
+    if (p["截止日"] && !finished && p["截止日"] < D.today) due.append(h("span",{class:"sub bad",text:"逾期 "+days(p["截止日"],D.today)+" 天"}));
+    var lu = p["最近更新"];
+    var last = h("span",{class:"cell num","data-label":"最近更新"}, lu ? fmt(lu) : h("span",{class:"muted",text:"尚無"}));
+    if (lu && !finished && days(lu.slice(0,10), D.today) > 7) last.append(h("span",{class:"sub bad",text:days(lu.slice(0,10),D.today)+" 天沒更新"}));
+    list.append(h("li",null, h("button",{class:"row",type:"button",onclick:function(){ openDetail(p["編號"]); }},
+      h("span",{class:"cols"},
+        h("span",{class:"cell c-name"}, h("span",{class:"pname"}, h("span",{class:"code"},hl(p["編號"])), hl(p["專案名稱"]), typeOf(p)!=="開發" && h("span",{class:"ttag",text:typeOf(p)}), role && h("span",{class:"rtag",text:role}), apTag(p)), p["目的與預期成果"] && h("span",{class:"pgoal"},hl(p["目的與預期成果"]))),
+        h("span",{class:"cell","data-label":"負責人"}, p["負責人"] ? hl(p["負責人"]) : h("span",{class:"muted",text:"未指定"})),
+        h("span",{class:"cell stage","data-label":"階段"}, track(si, sts), h("span",{class:"stage-label",text:stageLabel(sts[si])})),
+        h("span",{class:"cell","data-label":"燈號"}, pill(p["燈號"])),
+        due,
+        h("span",{class:"cell","data-label":"進度"}, progCell(p)),
+        h("span",{class:"cell num","data-label":"任務"}, ts.length ? dn+" / "+ts.length : h("span",{class:"muted",text:"—"})),
+        last)),
+      (isAdmin() || (p._ap && p._ap.mine)) ? h("button",{class:"x row-del",type:"button",title:"刪除專案","aria-label":"刪除專案 "+p["編號"],onclick:function(){ deleteProject(p); }},"×") : null));
+  });
+}
+
+function openDetail(code){
+  sel = code;
+  var p = proj(code);
+  fillStages($("upd-stage"), stagesOf(p), M(p).stage);
+  $("task-start").value = D.today; $("task-weight").value = "";
+  renderDetail(code);
+  $("view-list").hidden = true; $("view-detail").hidden = false; window.scrollTo(0,0);
+}
+
+// ===== 專案資料 =====
+var FCAT = "";
+function fileCats(){ return D.fileCats || ["客戶需求","圖面","規格書","報價／合約","試驗報告","會議記錄","照片","其他"]; }
+function renderFiles(p){
+  var all = D.photos.filter(function(f){ return f["專案編號"] === p["編號"]; }).reverse();
+  var cu = canUpdate(p);
+  $("btn-upload").hidden = !cu;
+  if (!cu) $("file-form").hidden = true;
+  var cs = $("file-cat");
+  if (!cs.options.length) fileCats().forEach(function(c){ cs.append(h("option",{value:c,text:c})); });
+  $("file-max").textContent = D.fileMaxMb || 20;
+  var counts = {}; all.forEach(function(f){ var c = f["分類"] || "其他"; counts[c] = (counts[c]||0) + 1; });
+  if (FCAT && !counts[FCAT]) FCAT = "";
+  var chips = $("file-chips"); chips.textContent = "";
+  if (all.length){
+    chips.append(h("button",{class:"chip",type:"button","aria-pressed":String(!FCAT),onclick:function(){ FCAT = ""; renderFiles(p); }},"全部",h("b",{class:"num",text:all.length})));
+    fileCats().forEach(function(c){ if (counts[c]) chips.append(h("button",{class:"chip",type:"button","aria-pressed":String(FCAT===c),onclick:function(){ FCAT = c; renderFiles(p); }}, c, h("b",{class:"num",text:counts[c]}))); });
+  }
+  var ul = $("file-list"); ul.textContent = "";
+  var shown = all.filter(function(f){ return !FCAT || (f["分類"] || "其他") === FCAT; });
+  if (!all.length) ul.append(h("li",{class:"muted",style:"display:block",text:"還沒有專案資料。"}));
+  shown.forEach(function(f){
+    var mine = f["上傳人"] === me() || canManage(p);
+    var ops = h("span",{class:"fops"});
+    if (mine){
+      var sel = h("select",{"aria-label":"變更分類："+f["檔名"],title:"變更分類",onchange:function(){ call("api_updateFile",[f["檔案連結"], {cat:this.value, note:f["說明"]||""}],"已變更分類"); }});
+      fileCats().forEach(function(c){ var o = h("option",{value:c,text:c}); if ((f["分類"]||"其他") === c) o.selected = true; sel.append(o); });
+      ops.append(sel, h("button",{class:"x",type:"button",title:"刪除檔案","aria-label":"刪除檔案："+f["檔名"],onclick:function(){
+        if (confirm("確定刪除「" + (f["檔名"]||"這個檔案") + "」？\n檔案會移到雲端硬碟的垃圾桶，30 天內可以復原。")) call("api_deleteFile",[f["檔案連結"]],"已刪除檔案");
+      }},"×"));
+    }
+    ul.append(h("li",null, h("span",{class:"fcat",text:f["分類"]||"其他"}),
+      h("div",null, h("div",{class:"fname"}, h("a",{href:f["檔案連結"],target:"_blank",rel:"noopener",text:f["檔名"] || ("檔案 " + fmt(f["時間"]) + "（" + (f["上傳人"]||"") + "）")})),
+        h("div",{class:"fmeta",text:[f["說明"], f["上傳人"], fmt(f["時間"])].filter(Boolean).join(" · ")})), ops));
+  });
+}
+$("btn-upload").addEventListener("click", function(){ var f = $("file-form"); f.hidden = !f.hidden; if (!f.hidden){ var p = proj(sel); if (p && FCAT) $("file-cat").value = FCAT; $("file-input").focus(); } });
+$("file-cancel").addEventListener("click", function(){ $("file-form").hidden = true; $("file-input").value = ""; $("file-note").value = ""; });
+$("btn-folder").addEventListener("click", function(){
+  var w = window.open("", "_blank");
+  rpc("api_projectFolderUrl", [sel]).then(function(url){ if (w) w.location = url; else location.href = url; })
+    .catch(function(err){ if (w) w.close(); toast("開不了雲端資料夾：" + (err && err.message || err), true); });
+});
+function readB64(file){ return new Promise(function(res, rej){ var r = new FileReader(); r.onload = function(){ res(String(r.result).split(",")[1] || ""); }; r.onerror = function(){ rej(r.error); }; r.readAsDataURL(file); }); }
+$("file-form").addEventListener("submit", function(ev){
+  ev.preventDefault();
+  var files = Array.prototype.slice.call($("file-input").files || []), max = (D.fileMaxMb || 20) * 1024 * 1024;
+  if (!files.length){ toast("請先選擇檔案。", true); return; }
+  var big = files.filter(function(f){ return f.size > max; });
+  if (big.length){ toast("檔案超過 " + (D.fileMaxMb || 20) + " MB：" + big.map(function(f){ return f.name; }).join("、") + "。太大的檔案請直接放到雲端資料夾。", true); return; }
+  var cat = $("file-cat").value, note = $("file-note").value, pid = sel, i = 0, ok = 0;
+  $("file-submit").disabled = true;
+  (function next(){
+    if (i >= files.length){
+      $("file-submit").disabled = false;
+      if (ok === files.length){ $("file-form").hidden = true; $("file-input").value = ""; $("file-note").value = ""; FCAT = cat; if (proj(pid)) renderFiles(proj(pid)); toast("已上傳 " + ok + " 個檔案"); }
+      return;
+    }
+    var f = files[i++];
+    toast("上傳中 " + i + "/" + files.length + "：" + f.name);
+    readB64(f).then(function(b64){ return call("api_uploadFile",[pid, {name:f.name, mime:f.type, b64:b64, cat:cat, note:note}]); })
+      .then(function(res){ if (res){ ok++; next(); } else $("file-submit").disabled = false; })
+      .catch(function(){ toast("讀取檔案失敗：" + f.name, true); $("file-submit").disabled = false; });
+  })();
+});
+
+// ===== 任務開始、完成度、基準計畫 =====
+/** 任務依經過時間推算的實際完成率（%）：從實際開始日起經過的天數 ÷ 預定天數，未完成最多 99%；比計畫早開始的從計畫開始日才起算 */
+function estPct(t){
+  if (!t["實際開始日"] || !t["完成日"]) return null;
+  var ps = taskStart(t) || t["完成日"], dur = days(ps, t["完成日"]) + 1;
+  if (dur <= 0) return null;
+  var s0 = t["實際開始日"] > ps ? t["實際開始日"] : ps;   // 提早開始不提前計分
+  return Math.max(0, Math.min(99, (days(s0, D.today) + 1) / dur * 100));
+}
+function pctTxt(v){ return v === null || v === undefined ? "—" : Number(v).toFixed(1) + "%"; }
+function locked(p){ return !!(p && p["基準鎖定日"]); }
+function taskAct(p, t){
+  var started = !!t["實際開始日"], ps = taskStart(t), can = canToggle(p, t);
+  var est = estPct(t);
+  var st = !started ? (ps && ps < D.today ? h("span",{class:"t-state miss",text:"應開始未開始"}) : h("span",{class:"t-state",text:"未開始"}))
+    : h("span",{class:"t-state doing",title:"從實際開始日起經過的天數 ÷ 預定天數（比計畫早開始的，從計畫開始日才起算）",text:"進行中 · 依經過時間推算 " + (est === null ? "—" : est.toFixed(1) + "%")});
+  var box = h("div",{class:"t-act"}, st);
+  if (!can) return box;
+  if (!started) box.append(h("button",{class:"btn small",type:"button",title:"記錄今天為實際開始日",onclick:function(){ call("api_startTask",[t["編號"]],"已記錄開始"); }},"▶ 開始"));
+  box.append(h("button",{class:"btn small",type:"button",title:"把這個任務轉給別人",onclick:function(){ openTransfer(p, t); }},"↪ 轉派"));
+  return box;
+}
+/** 主任務進度：階段＝主任務，逐一列出預定／實際進度 */
+function mainsBox(p){
+  var ms = M(p).mains || [];
+  if (!ms.length) return null;
+  var cur = M(p).stageIdx, box = h("div",{class:"mains"}, h("h3",{text:"主任務進度（階段）— 藍條＝實際完成度，黑線＝今天應完成到哪裡"}));
+  ms.forEach(function(m, i){
+    var late = !m.done && m.planned !== null && m.actual !== null && m.planned - m.actual >= (D.riskGap || 10);
+    var a = m.actual === null ? 0 : m.actual;
+    box.append(h("div",{class:"mrow"+(m.done?" done":"")+(!m.done && i===cur?" cur":"")},
+      h("span",{class:"mi",text:(i+1)+"."}),
+      h("span",{class:"mn",title:m.code,text:m.name + (m.kids ? "（" + m.kids + " 項）" : "")}),
+      h("span",{class:"mbar"+(m.done?" done":late?" late":""),title:"預定 "+pctTxt(m.planned)+"／實際 "+pctTxt(m.actual)},
+        h("b",{style:"width:"+a+"%"}), m.planned !== null && !m.done ? h("i",{style:"left:calc("+m.planned+"% - 1px)"}) : null),
+      h("span",{class:"mp",text:m.done ? "已完成" : "預定 "+pctTxt(m.planned)+"／實際 "+pctTxt(m.actual)}),
+      h("span",{class:"mp md",text:m.ps||m.pe ? fmt(m.ps)+"→"+fmt(m.pe) : ""})));
+  });
+  return box;
+}
+var xferTask = null;
+function openTransfer(p, t){
+  xferTask = t["編號"];
+  $("x-task").textContent = t["編號"] + " " + t["任務"] + "｜目前負責人：" + (t["負責人"] || "未指定");
+  var s = $("x-to"); s.textContent = "";
+  var first = [p["負責人"]].concat(String(p["參與成員"]||"").split(/[、,，\/\s]+/));
+  var names = first.concat(D.members || []).filter(function(n, i, a){ return n && a.indexOf(n) === i && n !== t["負責人"] && (D.members || []).indexOf(n) >= 0; });
+  s.append(h("option",{value:"",text:"請選擇…"}));
+  names.forEach(function(n){ s.append(h("option",{value:n,text:n + (first.indexOf(n) >= 0 ? "（本專案）" : "")})); });
+  $("x-note").value = "";
+  $("xdlg").showModal(); s.focus();
+}
+$("x-cancel").addEventListener("click", function(){ $("xdlg").close(); });
+$("xfer-form").addEventListener("submit", function(ev){
+  ev.preventDefault();
+  var to = $("x-to").value; if (!to){ toast("請選擇要轉給誰。", true); return; }
+  call("api_transferTask",[xferTask, to, $("x-note").value],"已轉派給 " + to).then(function(ok){ if (ok) $("xdlg").close(); });
+});
+function baseBox(p){
+  if (!locked(p)) return isAdmin() ? h("div",{class:"base-box"}, "尚未鎖定基準計畫：鎖定後，預定日期的修改都會留下紀錄，甘特圖也會顯示原本的計畫。") : null;
+  var slip = p["基準結案日"] && p["截止日"] ? days(p["基準結案日"], p["截止日"]) : 0;
+  return h("div",{class:"base-box"},
+    h("span",null,"基準計畫 ", h("b",{class:"num",text:(p["基準開始日"]||"?")+" → "+(p["基準結案日"]||"?")})),
+    h("span",{text:"（"+fmt(p["基準鎖定日"])+" 由 "+(p["基準鎖定人"]||"主管")+" 鎖定）"}),
+    slip ? h("span",{class:"slip",text:"目前預定結案" + (slip > 0 ? "延後 " + slip : "提前 " + (-slip)) + " 天"}) : h("span",{text:"預定結案日與基準相同"}));
+}
+function lockBaseline(p){
+  var reason = "";
+  if (locked(p)){
+    reason = prompt("重新鎖定會用目前的預定日期取代原本的基準計畫（舊的會留在變更紀錄）。\n請輸入原因：", "");
+    if (reason === null) return;
+    if (!reason.trim()){ toast("重新鎖定基準請填寫原因。", true); return; }
+  } else if (!confirm("把 " + p["編號"] + " 目前的預定日期（專案與所有任務）鎖定為基準計畫？\n鎖定後，只有主管能修改預定日期，而且要填變更原因。")) return;
+  call("api_lockBaseline",[p["編號"], reason], locked(p) ? "已重新鎖定基準" : "已鎖定基準計畫");
+}
+function renderChanges(p){
+  var list = (D.changes || []).filter(function(c){ return c["專案編號"] === p["編號"]; }).reverse();
+  $("chg-panel").hidden = !list.length;
+  $("chg-count").textContent = list.length ? list.length + " 筆" : "";
+  var tb = $("chg-body"); tb.textContent = "";
+  list.slice(0, 100).forEach(function(c){
+    var t = c["任務編號"] ? (D.tasks.filter(function(x){ return x["編號"] === c["任務編號"]; })[0] || null) : null;
+    tb.append(h("tr",null, h("td",{class:"num",text:String(c["時間"]).slice(0,16)}), h("td",{text:c["任務編號"] ? c["任務編號"] + (t ? " " + t["任務"] : "") : "專案"}),
+      h("td",{text:c["項目"]}), h("td",{class:"num",text:(c["原值"]||"—")+" → "+(c["新值"]||"—")}), h("td",{text:c["原因"]||""}), h("td",{text:c["修改人"]||""})));
+  });
+}
+// ===== 專案申請（成員開的專案要由提案單位主管核准） =====
+function apTag(p){
+  if (!p._ap) return null;
+  return h("span",{class:"aptag"+(p._ap.state==="退回"?" rej":""),text:p._ap.state});
+}
+function apBox(p){
+  var a = p._ap; if (!a) return null;
+  var who = (a.approvers||[]).join("、") || "管理員", rej = a.state === "退回";
+  var txt = rej
+    ? "已退回（" + (p["核准人"]||"") + "）：" + (p["退回原因"]||"未填原因") + (a.mine ? "。可以按「修改申請」改好後重新送出，或刪除這個申請。" : "")
+    : "專案申請：" + (a.applicant||"") + " 申請開立，等待 " + who + " 核准。核准前不能新增任務、更新或上傳檔案。";
+  return h("div",{class:"ap-box"+(rej?" rej":"")}, h("span",{class:"grow",text:txt}),
+    a.can && !rej ? h("button",{class:"btn small primary",type:"button",onclick:function(){
+      if (!confirm("核准專案 " + p["編號"] + "「" + p["專案名稱"] + "」？\n核准後會通知申請人與專案成員。")) return;
+      call("api_approveProject",[p["編號"]],"已核准 " + p["編號"]);
+    }},"✅ 核准") : null,
+    a.can && !rej ? h("button",{class:"btn small",type:"button",onclick:function(){
+      var r = prompt("退回 " + p["編號"] + " 的原因（申請人會看到）："); if (r === null) return;
+      if (!r.trim()){ toast("請填寫退回原因。", true); return; }
+      call("api_rejectProject",[p["編號"], r.trim()],"已退回，已通知申請人");
+    }},"↩ 退回") : null,
+    a.mine && !isAdmin() ? h("button",{class:"btn small",type:"button",onclick:function(){ deleteProject(p); }},"刪除申請") : null);
+}
+function renderDetail(code){
+  var p = proj(code); if (!p) return;
+  var si = stageIdx(p);
+  var head = $("d-head"); head.textContent = "";
+  [
+    h("div",{class:"d-title"}, h("h1",null, h("span",{class:"code",text:p["編號"]}), p["專案名稱"]), pill(p["燈號"]),
+      h("span",{class:"head-btns"},
+        h("button",{class:"btn small",type:"button",onclick:function(){ printProgress(p); }},"列印進度表"),
+        isAdmin() && !p._ap ? h("button",{class:"btn small",type:"button",title:"把目前的預定日期存成基準計畫，之後改預定日期要填原因並留紀錄",onclick:function(){ lockBaseline(p); }}, locked(p) ? "重新鎖定基準" : "鎖定基準計畫") : null,
+        isAdmin() || (p._ap && p._ap.mine) ? h("button",{class:"btn small",type:"button",onclick:function(){ openDialog(p); }}, p._ap && !isAdmin() ? "修改申請" : "編輯專案") : null)),
+    apBox(p),
+    p["目的與預期成果"] ? h("p",{text:p["目的與預期成果"]}) : null,
+    h("dl",{class:"meta"},
+      h("div",null,h("dt",{text:"負責人"}),h("dd",{text:p["負責人"]||"未指定"})),
+      h("div",null,h("dt",{text:"參與成員"}),h("dd",{text:p["參與成員"]||"未指定"})),
+      h("div",null,h("dt",{text:"預定時程"}),h("dd",{class:"num",text:(p["開始日"]||"?")+" → "+(p["截止日"]||"未定")})),
+      h("div",null,h("dt",{text:"實際時程"}),h("dd",{class:"num",text:(M(p).actualStart||"尚未開始")+" → "+(M(p).actualEnd||"進行中")})),
+      h("div",null,h("dt",{text:"階段"+(M(p).hier?"（依主任務）":"")}),h("dd",{class:"stage"},track(si, stagesOf(p)),h("span",{class:"stage-label",text:stageLabel(stagesOf(p)[si])+"（"+(si+1)+"/"+stagesOf(p).length+"）"}))),
+      h("div",null,h("dt",{text:"進度（預定／實際）"}),h("dd",null,progCell(p))),
+      h("div",null,h("dt",{text:"單位／類型"}),h("dd",{text:(DEPTS[deptOf(p)]||"未指定單位")+"／"+typeOf(p)+"類"})),
+      p["產品規格"] ? h("div",null,h("dt",{text:"產品規格"}),h("dd",{text:p["產品規格"]})) : null),
+    p["卡關事項"] ? h("div",{class:"blocker"}, h("b",{text:"卡關或需要決策的事"}), p["卡關事項"]) : null,
+    baseBox(p),
+    mainsBox(p)
+  ].forEach(function(x){ if (x) head.append(x); });
+
+  renderFiles(p);
+
+  renderGantt(p);
+  renderTests(p);
+  renderChanges(p);
+  $("task-reason-wrap").hidden = !locked(p);
+
+  var ts = tasksOf(code), lv = leavesOf(code);
+  renderWsum(p);
+  $("d-taskcount").textContent = lv.length ? lv.filter(function(t){return t["狀態"]==="已完成";}).length+" / "+lv.length+" 完成" : "";
+  var cm = canManage(p), cu = canUpdate(p);
+  $("task-form").hidden = !cu; $("task-ro").hidden = cu;
+  $("upd-form").hidden = !cu; $("upd-ro").hidden = cu;
+  // 每週更新：燈號自動、階段（有主任務時自動）
+  $("upd-light").textContent = ""; $("upd-light").append(pill(p["燈號"]));
+  $("upd-stage-wrap").hidden = !!M(p).hier; $("upd-stage-auto").hidden = !M(p).hier;
+  $("upd-stage-text").textContent = stageLabel(M(p).stage);
+  // 新增任務：放在哪個主任務
+  var par = $("task-parent"), keep = par.value; par.textContent = "";
+  par.append(h("option",{value:"",text:"（新的主任務）"}));
+  ts.filter(function(t){ return t._lv === 1; }).forEach(function(t){ par.append(h("option",{value:t["編號"],text:"└ "+t["任務"]})); });
+  par.value = keep && ts.some(function(t){ return t["編號"] === keep; }) ? keep : "";
+  var tl = $("d-tasks"); tl.textContent = "";
+  if (!ts.length) tl.append(h("li",{class:"muted",style:"display:block",text:"尚無任務，用下方表單或 LINE「新增任務」加入。"}));
+  ts.forEach(function(t){
+    var cont = t._kids > 0, done = cont ? t._done : t["狀態"]==="已完成";
+    var pe = cont ? t._pe : t["完成日"], late = pe && !done && pe < D.today;
+    var ae = cont ? t._ae : (done ? String(t["完成時間"]||"").slice(0,10) : "");
+    var meta = [t["編號"], t["負責人"], pe && "預定 "+fmt(cont ? t._ps : taskStart(t))+"→"+fmt(pe), ae && "實際完成 "+fmt(ae), "權重 "+wPct(code, t._w) + (cont ? "（子任務合計）" : "")].filter(Boolean).join(" · ");
+    function op(label, o, tip){ return h("button",{type:"button",title:tip,"aria-label":tip+"："+t["任務"],onclick:function(){ call("api_moveTask",[t["編號"], o]); }},label); }
+    tl.append(h("li",{class:"t"+(done?" done":"")+(t._lv===2?" sub":"")+(cont?" main":"")},
+      h("input",{type:"checkbox",checked:done,disabled:cont || !canToggle(p,t),title:cont?"子任務全部完成後自動完成":null,"aria-label":"完成："+t["任務"],onchange:function(ev){
+        call("api_setTaskDone",[t["編號"], ev.target.checked], ev.target.checked ? "已標記完成" : "已改回未完成");
+      }}),
+      h("div",null, h("div",{class:"t-title"+(cm?" edit":""),text:t["任務"],title:cm?"點一下修改":null,onclick:cm?function(){ openTaskDialog(t); }:null}), h("div",{class:"t-meta"+(late?" bad":""), text: meta + (late ? " · 逾期 "+days(pe,D.today)+" 天" : "")}),
+        cont || done ? null : taskAct(p, t)),
+      cm ? h("span",{class:"t-ops"}, op("↑","up","上移"), op("↓","down","下移"),
+        t._lv === 1 ? op("→","indent","變成上一個主任務的子任務") : op("←","outdent","變回主任務"),
+        h("button",{class:"x",type:"button",title:"刪除任務","aria-label":"刪除任務："+t["任務"],onclick:function(){
+          if (confirm("確定刪除任務「"+t["任務"]+"」？" + (cont ? "\n底下的 "+t._kids+" 個子任務也會一起刪除。" : ""))) call("api_deleteTask",[t["編號"]],"已刪除任務");
+        }},"×")) : h("span")));
+  });
+
+  var ul = $("d-updates"); ul.textContent = "";
+  var ups = updatesOf(code);
+  if (!ups.length) ul.append(h("li",{class:"muted",text:"還沒有每週更新。"}));
+  ups.forEach(function(u){
+    var dl = h("dl");
+    [["本週完成",u["本週完成"]],["下週計畫",u["下週計畫"]],["卡關",u["卡關事項"]]].forEach(function(r){ if (r[1]) dl.append(h("dt",{text:r[0]}),h("dd",{text:r[1]})); });
+    ul.append(h("li",null, h("div",{class:"log-head"}, h("span",{class:"date num",text:fmt(u["時間"])}), u["填寫人"], u["燈號"] ? pill(u["燈號"]) : null, u["階段"] ? h("span",{text:"階段："+u["階段"]}) : null), dl));
+  });
+}
+
+
+// ===== 甘特圖 =====
+function dnum(s){ return Math.floor(Date.parse(String(s).slice(0,10)+"T00:00:00Z")/86400000); }
+function dlabel(n){ var d = new Date(n*86400000); return (d.getUTCMonth()+1)+"/"+d.getUTCDate(); }
+function taskStart(t){ return t["開始日"] || String(t["建立時間"]||"").slice(0,10) || ""; }
+var COLL = {}, ZOOM = "all";
+try { ZOOM = localStorage.getItem("jk-gzoom") || "all"; } catch(e){}
+function renderGantt(p){
+  var g = $("gantt"); g.textContent = "";
+  var cm = canManage(p), today = dnum(D.today), m = M(p);
+  var all = tasksOf(p["編號"]);
+  function dd(s){ return s ? dnum(s) : null; }
+  var items = all.map(function(t){
+    var cont = t._kids > 0;
+    var ps = dd(cont ? t._ps : (taskStart(t) || t["完成日"])), pe = dd(cont ? t._pe : t["完成日"]);
+    if (ps !== null && pe !== null && ps > pe) ps = pe;
+    var done = cont ? t._done : t["狀態"]==="已完成";
+    var as = dd(cont ? t._as : (t["實際開始日"] || "")), ae = dd(cont ? t._ae : (done ? String(t["完成時間"]||"").slice(0,10) : ""));
+    if (done && as === null) as = ps !== null ? Math.min(ps, ae) : ae;
+    return {t:t, cont:cont, ps:ps, pe:pe, as:as, ae:ae, done:done};
+  });
+  var PS = dd(p["開始日"]), PE = dd(p["截止日"]), AS = dd(m.actualStart), AE = dd(m.actualEnd), BS = dd(p["基準開始日"]), BE = dd(p["基準結案日"]);
+  items.forEach(function(x){ x.bs = dd(x.t._bs || ""); x.be = dd(x.t._be || ""); });
+  var ups = updatesOf(p["編號"]);
+  var pts = [today];
+  [PS, PE, AS, AE, BS, BE].forEach(function(x){ if (x !== null) pts.push(x); });
+  items.forEach(function(x){ [x.ps, x.pe, x.as, x.ae, x.bs, x.be].forEach(function(v){ if (v !== null) pts.push(v); }); });
+  var lo = Math.min.apply(null, pts), hi = Math.max.apply(null, pts), pad = Math.max(2, Math.round((hi - lo) * 0.02));
+  var min = lo - pad, max = hi + pad + 1, span = max - min + 1;
+  // 顯示範圍：全期＝整個塞進畫面；其他＝固定每天寬度，可以左右捲動
+  var wrap = g.parentNode, labelW = 170, avail = Math.max(420, (wrap.clientWidth || 800) - labelW);
+  var vis = ZOOM === "all" ? span : Math.min(span, Number(ZOOM)), ppd = avail / vis;
+  g.classList.toggle("zoomed", vis < span);
+  g.style.gridTemplateColumns = vis < span ? labelW + "px " + Math.round(span * ppd) + "px" : "";
+  document.querySelectorAll("#g-zoom button").forEach(function(b){ b.setAttribute("aria-pressed", String(b.dataset.z === ZOOM)); });
+  function pos(n){ return ((n - min) / span * 100).toFixed(3) + "%"; }
+  function wid(a, b){ return ((b - a + 1) / span * 100).toFixed(3) + "%"; }
+  function bar(cls, a, b, tip, click){ return h("div",{class:"g-bar "+cls+(click?" click":""),style:"left:"+pos(a)+";width:"+wid(a,b),title:tip,onclick:click||null}); }
+
+  var axis = h("div",{class:"g-axis"});
+  var step = vis <= 45 ? "week" : "month", every = vis > 400 ? 3 : vis > 200 ? 2 : 1, mcount = 0, ticks = [], firstM = true;
+  for (var n = min; n <= max; n++){
+    var d = new Date(n*86400000);
+    if (step === "week" && d.getUTCDay() === 1){ ticks.push(n); axis.append(h("span",{class:"g-tick",style:"left:"+pos(n),text:dlabel(n)})); }
+    if (step === "month" && d.getUTCDate() === 1 && mcount++ % every === 0){
+      var lab = (firstM || d.getUTCMonth() === 0 ? d.getUTCFullYear() + "/" : "") + (d.getUTCMonth()+1) + "月"; firstM = false;
+      ticks.push(n); axis.append(h("span",{class:"g-tick",style:"left:"+pos(n),text:lab}));
+    }
+  }
+  var rows = 0;
+  function addRow(label, track){ rows++; label.style.gridColumn = "1"; label.style.gridRow = String(rows); track.style.gridColumn = "2"; track.style.gridRow = String(rows); g.append(label, track); }
+  addRow(h("div",{class:"g-head"},"項目"), axis);
+
+  // 專案：預定時程＋實際時程
+  var ptrack = h("div",{class:"g-track"});
+  if (BS !== null && BE !== null) ptrack.append(bar("bl", BS, BE, "專案基準 "+dlabel(BS)+" → "+dlabel(BE)));
+  if (PS !== null || PE !== null){ var a = PS !== null ? PS : PE, b = PE !== null ? PE : Math.max(today, a); ptrack.append(bar("ppl", a, b, "專案預定 "+dlabel(a)+" → "+(PE!==null?dlabel(PE):"未定"))); }
+  if (AS !== null){
+    var pend = AE !== null ? AE : today, plate = m.closed ? m.light === "逾期" : (PE !== null && today > PE);
+    ptrack.append(bar("pac"+(m.closed && !plate ? " done" : plate ? " late" : ""), AS, Math.max(AS, pend), "專案實際 "+dlabel(AS)+" → "+(AE!==null?dlabel(AE):"進行中")+(plate?"（逾期）":"")));
+  }
+  ups.forEach(function(u){ var c = CLS[u["燈號"]] || "ok"; ptrack.append(h("span",{class:"g-dot "+c,style:"left:"+pos(dnum(u["時間"])),title:fmt(u["時間"])+" "+(u["填寫人"]||"")+" 每週更新："+(u["燈號"]||"")})); });
+  addRow(h("div",{class:"g-label proj",title:p["專案名稱"]},"專案"), ptrack);
+
+  if (!items.length){ rows++; g.append(h("div",{class:"g-empty",style:"grid-row:"+rows,text:"還沒有任務。新增任務時填上預定開始和完成日，就會出現在這裡。"})); }
+  var hideUnder = "";
+  items.forEach(function(x){
+    var t = x.t;
+    if (t._lv === 2 && hideUnder && t._parent === hideUnder) return;
+    if (t._lv === 1) hideUnder = x.cont && COLL[t["編號"]] ? t["編號"] : "";
+    var click = cm ? function(){ openTaskDialog(t); } : null;
+    var tr = h("div",{class:"g-track"});
+    var late = !x.done && x.pe !== null && x.pe < today;
+    var miss = !x.done && x.as === null && x.ps !== null && x.ps < today;
+    if (x.bs !== null && x.be !== null) tr.append(bar("bl", Math.min(x.bs, x.be), x.be, t["編號"]+" "+t["任務"]+"｜基準 "+dlabel(x.bs)+" → "+dlabel(x.be)));
+    if (x.ps !== null && x.pe !== null) tr.append(bar("pl"+(miss?" miss":""), x.ps, x.pe, t["編號"]+" "+t["任務"]+"｜預定 "+dlabel(x.ps)+" → "+dlabel(x.pe)+(miss?"（已過預定開始日，還沒記錄實際開始）":""), click));
+    if (x.as !== null){ var e = x.ae !== null ? x.ae : today; tr.append(bar("ac"+(x.done ? (x.pe !== null && x.ae > x.pe ? " late" : " done") : late ? " late" : ""), x.as, Math.max(x.as, e), t["編號"]+" "+t["任務"]+"｜實際 "+dlabel(x.as)+" → "+(x.ae!==null?dlabel(x.ae):"進行中")+(late?"（逾期）":""), click)); }
+    var label;
+    if (x.cont) label = h("div",{class:"g-label main",title:"點一下展開／收合",onclick:function(){ COLL[t["編號"]] = !COLL[t["編號"]]; renderGantt(p); }}, h("span",{class:"g-tog",text:COLL[t["編號"]]?"▸":"▾"}), t["任務"]);
+    else label = h("div",{class:"g-label"+(t._lv===2?" sub":""),title:t["任務"]}, t["任務"], h("small",{text:t["負責人"]||""}));
+    addRow(label, tr);
+  });
+  var ov = h("div",{class:"g-overlay",style:"grid-row:1 / span "+rows});
+  ticks.forEach(function(n){ ov.append(h("div",{class:"g-grid",style:"left:"+pos(n)})); });
+  ov.append(h("div",{class:"g-today",style:"left:"+pos(today),title:"今天 "+dlabel(today)}));
+  g.append(ov);
+  $("gantt-hint").hidden = !items.length;
+  if (vis < span) wrap.scrollLeft = Math.max(0, (today - min - vis * 0.15) * ppd);
+}
+
+var editingTask = null, editingTaskCont = false, editingTaskOrig = ["",""];
+function openTaskDialog(t){
+  editingTask = t["編號"];
+  $("tdlg-title").textContent = "修改任務 " + t["編號"];
+  $("te-title").value = t["任務"];
+  $("te-assignee").value = t["負責人"] || "";
+  $("te-start").value = taskStart(t);
+  $("te-due").value = t["完成日"] || "";
+  $("te-astart").value = t["實際開始日"] || "";
+  $("te-aend").value = t["狀態"]==="已完成" ? String(t["完成時間"]||"").slice(0,10) : "";
+  $("te-weight").value = t._w != null ? t._w : (t["權重"] || 1);
+  var wt = wTotal(t["專案編號"]);
+  $("te-wpct").textContent = Math.abs(wt - 100) > 0.05 ? "目前全部任務權重合計 " + fmtW(wt) + "%，這項實際占 " + wPct(t["專案編號"], t._w) : "";
+  var cont = t._kids > 0;
+  ["te-start","te-due","te-astart","te-aend","te-weight"].forEach(function(id){ $(id).disabled = cont; });
+  if (cont){ $("te-start").value = t._ps || ""; $("te-due").value = t._pe || ""; $("te-astart").value = t._as || ""; $("te-aend").value = t._ae || ""; }
+  $("te-hint").textContent = cont ? "這是主任務：時程與權重由底下 " + t._kids + " 個子任務彙總，這裡只能改名稱和負責人。"
+    : "實際時程空白表示未開始或未完成。填上實際完成日＝標記完成；清空＝改回未完成。";
+  editingTaskCont = cont;
+  var pp = proj(t["專案編號"]), lk = locked(pp) && !cont;
+  $("te-reason").value = "";
+  $("te-reason-wrap").hidden = !(lk && isAdmin());
+  if (lk && !isAdmin()){ $("te-start").disabled = true; $("te-due").disabled = true; }
+  $("te-base").hidden = !lk;
+  $("te-base").textContent = lk ? "基準計畫：" + (t["基準開始日"] ? t["基準開始日"] + " → " + (t["基準完成日"] || "未定") : "（鎖定後新增的任務，沒有基準）") + (isAdmin() ? "" : "。已鎖定基準，預定日期要由主管修改。") : "";
+  editingTaskOrig = [$("te-start").value, $("te-due").value];
+  $("tdlg").showModal(); $("te-title").focus();
+}
+$("te-cancel").addEventListener("click", function(){ $("tdlg").close(); });
+$("task-edit-form").addEventListener("submit", function(ev){
+  ev.preventDefault();
+  var f = {title:$("te-title").value, assignee:$("te-assignee").value, start:$("te-start").value, due:$("te-due").value, actualStart:$("te-astart").value, actualEnd:$("te-aend").value, weight:$("te-weight").value};
+  if (editingTaskCont){ f.actualStart = undefined; delete f.weight; }
+  else if (!/^\d+(\.\d+)?$/.test(String(f.weight).trim()) || Number(f.weight) > 100){ toast("權重請填 0～100 的百分比數字，例如 25 代表 25%。", true); return; }
+  if (f.start && f.due && f.due < f.start){ toast("預定完成日不能早於預定開始日。", true); return; }
+  if (f.actualStart && f.actualEnd && f.actualEnd < f.actualStart){ toast("實際完成日不能早於實際開始日。", true); return; }
+  if (f.actualEnd && f.actualEnd > D.today){ toast("實際完成日不能晚於今天。", true); return; }
+  f.reason = $("te-reason").value;
+  if (!$("te-reason-wrap").hidden && (f.start !== editingTaskOrig[0] || f.due !== editingTaskOrig[1]) && !f.reason.trim()){ toast("已鎖定基準計畫，修改預定日期請填寫變更原因。", true); $("te-reason").focus(); return; }
+  call("api_updateTask",[editingTask, f],"已修改任務").then(function(ok){ if (ok) $("tdlg").close(); });
+});
+
+
+// ===== 任務總表 =====
+var TAB = "proj", TS = {}, TO = {}, TP = {}, TT = {}, RG = null;
+try { TAB = localStorage.getItem("jk-tab") || "proj"; if (["proj","task","fb"].indexOf(TAB) < 0) TAB = "proj"; } catch(e){}
+var TST = {todo:{label:"未開始",c:"#9AA6B8"}, doing:{label:"進行中",c:"var(--accent)"}, late:{label:"延遲",c:"var(--bad)"}, done:{label:"完成",c:"var(--ok)"}};
+var TST_HEX = {todo:"#9AA6B8", doing:"#0064F3", late:"#BF2A2A", done:"#157A47"};
+function setTab(t){
+  TAB = t; try { localStorage.setItem("jk-tab", t); } catch(e){}
+  ["proj","task","fb"].forEach(function(k){ $("tab-"+k).hidden = t !== k; $("tab-btn-"+k).setAttribute("aria-selected", String(t === k)); });
+}
+$("tab-btn-fb").addEventListener("click", function(){ setTab("fb"); renderFb(); });
+$("tab-btn-proj").addEventListener("click", function(){ setTab("proj"); });
+$("tab-btn-task").addEventListener("click", function(){ setTab("task"); renderTasks(); });
+function taskState(t, s, e, today){
+  if (t["狀態"] === "已完成") return "done";
+  if (e !== null && e < today) return "late";
+  if (s > today) return "todo";
+  return "doing";
+}
+function workdays(a, b){ var n = 0; for (var d = a; d <= b; d++){ var w = new Date(d*86400000).getUTCDay(); if (w !== 0 && w !== 6) n++; } return n; }
+function taskRows(){
+  var today = dnum(D.today);
+  return D.tasks.filter(function(t){ return !t._kids; }).map(function(t){
+    var s = taskStart(t) ? dnum(taskStart(t)) : today, e = t["完成日"] ? dnum(t["完成日"]) : null;
+    if (e !== null && e < s) s = e;
+    var st = taskState(t, s, e, today);
+    var pct = st === "done" ? 100 : (e === null ? null : s > today ? 0 : Math.min(100, Math.round((today - s + 1) / (e - s + 1) * 100)));
+    return {t:t, s:s, e:e, st:st, pct:pct, p:proj(t["專案編號"]) || {}};
+  });
+}
+function toggle(set, k){ if (set[k]) delete set[k]; else set[k] = 1; renderTasks(); }
+function anyOn(set){ return Object.keys(set).length > 0; }
+function renderTasks(){
+  setTab(TAB);
+  if (TAB !== "task") return;
+  var today = dnum(D.today);
+  if (RG === null){ var w = new Date(today*86400000).getUTCDay(); RG = today - ((w + 6) % 7) - 7; }
+  var all = taskRows();
+  // 篩選器
+  var owners = {}, projs = {};
+  all.forEach(function(x){ owners[x.t["負責人"] || "未指定"] = 1; projs[x.t["專案編號"]] = 1; });
+  function base(skip){ return all.filter(function(x){
+    return (skip === "s" || !anyOn(TS) || TS[x.st]) && (skip === "o" || !anyOn(TO) || TO[x.t["負責人"] || "未指定"]) && (skip === "p" || !anyOn(TP) || TP[x.t["專案編號"]]) && (!anyOn(TT) || TT[typeOf(x.p)]);
+  }); }
+  var sl = $("slicers"); sl.textContent = "";
+  function group(title, set, keys, label, swatch){
+    var opts = h("div",{class:"opts"});
+    keys.forEach(function(k){ opts.append(h("button",{class:"sl",type:"button","aria-pressed":String(!!set[k]),onclick:function(){ toggle(set,k); }}, swatch ? h("i",{style:"background:"+swatch(k)}) : null, label(k))); });
+    sl.append(h("div",{class:"slicer"}, h("h3",null, title, anyOn(set) ? h("button",{type:"button",onclick:function(){ for (var k in set) delete set[k]; renderTasks(); }},"全部") : null), opts));
+  }
+  group("任務狀態", TS, ["todo","doing","late","done"], function(k){ return TST[k].label; }, function(k){ return TST_HEX[k]; });
+  group("專案類型", TT, ["開發","管理"], function(k){ return k + "類"; });
+  group("負責人", TO, Object.keys(owners).sort(), function(k){ return k; });
+  group("專案", TP, Object.keys(projs).sort(function(a,b){ return parseInt(a.slice(1),10) - parseInt(b.slice(1),10); }), function(k){ var p = proj(k); return k + (p ? " " + p["專案名稱"] : ""); });
+  // 圓環圖（不套用狀態篩選，方便看整體）
+  var forDonut = base("s"), cnt = {todo:0,doing:0,late:0,done:0};
+  forDonut.forEach(function(x){ cnt[x.st]++; });
+  var tot = forDonut.length, dn = $("donut"); dn.textContent = "";
+  var NS = "http://www.w3.org/2000/svg", svg = document.createElementNS(NS,"svg");
+  svg.setAttribute("width","120"); svg.setAttribute("height","120"); svg.setAttribute("viewBox","0 0 42 42"); svg.setAttribute("role","img");
+  svg.setAttribute("aria-label","任務狀態："+["todo","doing","late","done"].map(function(k){ return TST[k].label+cnt[k]; }).join("、"));
+  var bg = document.createElementNS(NS,"circle"); bg.setAttribute("cx","21"); bg.setAttribute("cy","21"); bg.setAttribute("r","15.9155"); bg.setAttribute("fill","none"); bg.setAttribute("stroke","#E3E8F0"); bg.setAttribute("stroke-width","6"); svg.append(bg);
+  var off = 25;
+  ["late","doing","todo","done"].forEach(function(k){
+    if (!tot || !cnt[k]) return;
+    var pc = cnt[k] / tot * 100, c = document.createElementNS(NS,"circle");
+    c.setAttribute("cx","21"); c.setAttribute("cy","21"); c.setAttribute("r","15.9155"); c.setAttribute("fill","none");
+    c.setAttribute("stroke",TST_HEX[k]); c.setAttribute("stroke-width","6");
+    c.setAttribute("stroke-dasharray", (pc - (pc < 100 ? 0.8 : 0)).toFixed(2) + " " + (100 - pc + (pc < 100 ? 0.8 : 0)).toFixed(2));
+    c.setAttribute("stroke-dashoffset", String(off));
+    c.setAttribute("class","seg"+(anyOn(TS) && !TS[k] ? " dim" : ""));
+    var tl = document.createElementNS(NS,"title"); tl.textContent = TST[k].label + " " + cnt[k] + " 項"; c.append(tl);
+    c.addEventListener("click", function(){ toggle(TS, k); });
+    svg.append(c); off -= pc;
+  });
+  var ct = document.createElementNS(NS,"text"); ct.setAttribute("x","21"); ct.setAttribute("y","23.5"); ct.setAttribute("text-anchor","middle"); ct.setAttribute("font-size","8"); ct.setAttribute("font-weight","700"); ct.setAttribute("fill","#0D1B30"); ct.textContent = tot; svg.append(ct);
+  var lg = h("div",{class:"donut-legend"});
+  ["todo","doing","late","done"].forEach(function(k){ lg.append(h("span",null, h("i",{style:"background:"+TST_HEX[k]}), TST[k].label, h("b",{text:cnt[k]}), h("span",{class:"muted",style:"font-size:11px;width:34px;justify-content:flex-end",text: tot ? Math.round(cnt[k]/tot*100)+"%" : "—"}))); });
+  dn.append(svg, lg);
+  // 表格
+  var rows = base().sort(function(a,b){
+    var pa = parseInt(String(a.t["專案編號"]).slice(1),10), pb = parseInt(String(b.t["專案編號"]).slice(1),10);
+    return pa - pb || a.s - b.s || (a.e===null?1e9:a.e) - (b.e===null?1e9:b.e);
+  });
+  $("tt-count").textContent = "共 " + rows.length + " 項任務" + (rows.length !== all.length ? "（篩選自 " + all.length + " 項）" : "");
+  var DAYS = 28, from = RG, to = RG + DAYS - 1;
+  $("rg-prev").onclick = function(){ RG -= 14; renderTasks(); };
+  $("rg-next").onclick = function(){ RG += 14; renderTasks(); };
+  $("rg-today").onclick = function(){ RG = null; renderTasks(); };
+  var tb = $("tt"); tb.textContent = "";
+  var WD = "日一二三四五六";
+  var hr = h("tr",null, h("th",{text:"任務"}), h("th",{text:"開始"}), h("th",{text:"完成"}), h("th",{class:"n",text:"工作天"}), h("th",{text:"時程"}), h("th",{text:"負責人"}), h("th",{text:"狀態"}));
+  for (var d = from; d <= to; d++){
+    var dt = new Date(d*86400000), wk = dt.getUTCDay() === 0 || dt.getUTCDay() === 6;
+    var top = (dt.getUTCDate() === 1 || d === from) ? (dt.getUTCMonth()+1) + "/" + dt.getUTCDate() : String(dt.getUTCDate());
+    hr.append(h("th",{class:"d"+(wk?" wk":"")+(d===today?" td":""),title:dlabel(d)}, top, h("br"), WD[dt.getUTCDay()]));
+  }
+  tb.append(h("thead",null,hr));
+  var body = h("tbody"), lastP = null, cols = 7 + DAYS;
+  if (!rows.length) body.append(h("tr",null, h("td",{class:"tt-empty",colspan:String(cols),text: all.length ? "沒有符合篩選條件的任務。" : "目前還沒有任務。"})));
+  rows.forEach(function(x){
+    var t = x.t, pcode = t["專案編號"];
+    if (pcode !== lastP){
+      lastP = pcode;
+      body.append(h("tr",{class:"grp",onclick:function(){ openDetail(pcode); }}, h("td",{colspan:String(cols)}, pcode + " " + (x.p["專案名稱"]||""), h("small",{text:"負責人 " + (x.p["負責人"]||"未指定") + (x.p["截止日"] ? "｜截止 " + fmt(x.p["截止日"]) : "")}))));
+    }
+    var color = TST_HEX[x.st];
+    var tr = h("tr",{class:"task",title:"打開 "+pcode,onclick:function(){ openDetail(pcode); }},
+      h("td",{class:"tname",title:t["任務"],text:t["任務"]}),
+      h("td",{class:"num",text:fmt(dateStr(x.s))}),
+      h("td",{class:"num",text:x.e!==null?fmt(t["完成日"]):"未設"}),
+      h("td",{class:"n",text:x.e!==null?workdays(x.s,x.e):"—"}),
+      h("td",null, x.pct===null ? h("span",{class:"muted",text:"—"}) : h("span",null, h("span",{class:"pbar"}, h("i",{style:"width:"+x.pct+"%;background:"+color})), h("span",{class:"pct num",text:x.pct+"%"}))),
+      h("td",{text:t["負責人"]||"—"}),
+      h("td",null, h("span",{class:"st "+x.st,text:TST[x.st].label})));
+    for (var d = from; d <= to; d++){
+      var dt = new Date(d*86400000), wk = dt.getUTCDay() === 0 || dt.getUTCDay() === 6;
+      var on = x.e !== null && d >= x.s && d <= x.e, mark = x.e === null && d === x.s;
+      tr.append(h("td",{class:"d"+(wk&&!on?" wk":"")+(d===today?" td":"")+(on?" on":"")+(on&&d===x.s?" first":"")+(on&&d===x.e?" last":"")+(mark?" mark":""),style:(on||mark)?"--c:"+color:null}));
+    }
+    body.append(tr);
+  });
+  tb.append(body);
+}
+function dateStr(n){ var d = new Date(n*86400000); return d.getUTCFullYear()+"-"+String(d.getUTCMonth()+1).padStart(2,"0")+"-"+String(d.getUTCDate()).padStart(2,"0"); }
+
+// 表單
+fillStages($("upd-stage"), STAGES, "");
+
+$("task-form").addEventListener("submit", function(ev){
+  ev.preventDefault();
+  var w = String($("task-weight").value).trim();
+  if (!w){ var left = Math.round((100 - wTotal(sel)) * 10) / 10; if (left > 0) w = String(left); else { toast("請填權重（%），例如 25 代表 25%。", true); $("task-weight").focus(); return; } }
+  if (!/^\d+(\.\d+)?$/.test(w) || Number(w) > 100){ toast("權重請填 0～100 的百分比數字，例如 25 代表 25%。", true); return; }
+  call("api_addTask",[{pid:sel, parent:$("task-parent").value, title:$("task-title").value, assignee:$("task-assignee").value, start:$("task-start").value, due:$("task-due").value, weight:w, reason:$("task-reason").value}],"已新增任務")
+    .then(function(ok){ if (ok){ $("task-title").value=""; $("task-due").value=""; $("task-weight").value=""; $("task-reason").value=""; } });
+});
+
+$("upd-form").addEventListener("submit", function(ev){
+  ev.preventDefault();
+  var f = {pid:sel, stage:$("upd-stage").value,
+    done:$("upd-done").value, next:$("upd-next").value, blocker:$("upd-blocker").value};
+  if (!f.done.trim() && !f.next.trim() && !f.blocker.trim()){ toast("請至少填寫一項：本週完成、下週計畫或卡關。", true); return; }
+  call("api_addUpdate",[f],"已送出本週更新").then(function(ok){
+    if (ok){ $("upd-done").value=""; $("upd-next").value=""; $("upd-blocker").value=""; }
+  });
+});
+
+function openDialog(p){
+  editing = p ? p["編號"] : null;
+  $("dlg-title").textContent = p ? (isAdmin() ? "編輯專案 " : "修改專案申請 ")+p["編號"] : (isAdmin() ? "新增專案" : "申請新專案");
+  $("f-actual-wrap").hidden = !isAdmin(); $("f-apply-hint").hidden = isAdmin();
+  $("f-name").value = p ? p["專案名稱"] : "";
+  $("f-code").value = p ? p["編號"] : "";
+  var ds = $("f-dept"); fillDepts(ds, "（不指定）");
+  ds.value = p ? deptOf(p) : (DEPTF || "RD");
+  $("f-spec").value = p ? (p["產品規格"]||"") : "";
+  $("f-astart").value = p ? (p["實際開案日"]||"") : "";
+  $("f-aend").value = p ? (p["實際結案日"]||"") : "";
+  $("f-goal").value = p ? p["目的與預期成果"] : "";
+  $("f-owner").value = p ? p["負責人"] : "";
+  $("f-members").value = p ? p["參與成員"] : "";
+  $("f-type").value = typeOf(p);
+  $("f-start").value = p ? p["開始日"] : D.today;
+  $("f-code").placeholder = p ? "" : "留空＝" + autoCode();
+  checkCode();
+  $("f-due").value = p ? p["截止日"] : "";
+  $("f-reason").value = ""; $("f-reason-wrap").hidden = !locked(p);
+  $("dlg").showModal(); $("f-name").focus();
+}
+$("btn-new").addEventListener("click", function(){ openDialog(null); });
+function normCode(s){ return String(s||"").trim().toUpperCase().replace(/\s+/g, ""); }
+function autoCode(){
+  var dept = $("f-dept").value, max = 0;
+  if (dept){
+    var pre = "JK-" + dept + "-" + String($("f-start").value || D.today).slice(2,4);
+    D.projects.forEach(function(p){ var c = normCode(p["編號"]); if (c.indexOf(pre) === 0 && /^\d+$/.test(c.slice(pre.length))) max = Math.max(max, +c.slice(pre.length)); });
+    return pre + String(max+1).padStart(2,"0");
+  }
+  D.projects.forEach(function(p){ var m = String(p["編號"]).match(/^P(\d+)$/i); if (m && +m[1] > max) max = +m[1]; }); return "P" + String(max+1).padStart(2,"0");
+}
+function refreshCode(){ if (!editing) $("f-code").placeholder = "留空＝" + autoCode(); checkCode(); }
+$("f-dept").addEventListener("change", refreshCode);
+$("f-start").addEventListener("change", refreshCode);
+// 回傳錯誤訊息（沒問題回傳空字串），並更新提示文字
+function checkCode(){
+  var c = normCode($("f-code").value), hint = $("f-code-hint"), err = "";
+  if (c && !/^[A-Z0-9][A-Z0-9_\-]{1,19}$/.test(c)) err = "專案編號只能用英文、數字、- 或 _，長度 2～20 個字";
+  else if (c && D.projects.some(function(p){ return normCode(p["編號"]) === c && p["編號"] !== editing; })) err = "專案編號「"+c+"」已經被使用了，請換一個";
+  hint.className = "hint" + (err ? " bad" : "");
+  hint.textContent = err || (editing
+    ? (c && c !== editing ? "修改後，任務編號會一起改成 "+c+"-01、"+c+"-02…" : "任務編號格式："+editing+"-01、"+editing+"-02…")
+    : "留空會依單位自動編號：" + autoCode() + "（JK-單位-年度流水號）。任務會編成「案件編號-01」，試驗單編成「案件編號-001」。");
+  return err;
+}
+$("f-code").addEventListener("input", checkCode);
+
+// ===== 意見回饋 =====
+var FBF = "all";
+var FB_CLS = {"待處理":"wait","處理中":"doing","已完成":"done","不採用":"no"};
+function renderFb(){
+  var all = (D.feedback || []).slice().reverse();
+  var open = all.filter(function(f){ return (f["狀態"]||"待處理") === "待處理"; }).length;
+  var b = $("fb-badge"); b.hidden = !(isAdmin() && open); b.textContent = open;
+  if (TAB !== "fb") return;
+  var counts = {all: all.length}; ["待處理","處理中","已完成","不採用"].forEach(function(s){ counts[s] = 0; });
+  all.forEach(function(f){ counts[f["狀態"]||"待處理"] = (counts[f["狀態"]||"待處理"]||0) + 1; });
+  var chips = $("fb-chips"); chips.textContent = "";
+  [["all","全部"],["待處理","待處理"],["處理中","處理中"],["已完成","已完成"],["不採用","不採用"]].forEach(function(c){
+    chips.append(h("button",{class:"chip",type:"button","aria-pressed":String(FBF===c[0]),onclick:function(){ FBF=c[0]; renderFb(); }}, c[1], h("b",{class:"num",text:counts[c[0]]||0})));
+  });
+  var list = $("fb-list"); list.textContent = "";
+  var shown = all.filter(function(f){ return FBF === "all" || (f["狀態"]||"待處理") === FBF; });
+  if (!shown.length){ list.append(h("p",{class:"empty",style:"background:var(--surface);border:1px solid var(--line);border-radius:8px",text: all.length ? "沒有符合的項目。" : "還沒有人回報，歡迎第一個留言。"})); return; }
+  shown.forEach(function(f){
+    var st = f["狀態"] || "待處理", bug = f["類型"] === "錯誤";
+    var card = h("article",{class:"fb"},
+      h("div",{class:"fb-head"}, h("span",{class:"code",text:f["編號"]}), h("span",{class:"fb-type "+(bug?"bug":"idea"),text:bug?"錯誤":"建議"}),
+        h("span",{text:(f["提出人"]||"")+" · "+fmt(f["時間"])+" "+String(f["時間"]||"").slice(11,16)+" · "+(f["來源"]||"")}),
+        h("span",{class:"st "+(FB_CLS[st]||"wait"),text:st})),
+      h("div",{class:"fb-body",text:f["內容"]}));
+    var files = String(f["附件"]||"").split(/\n/).filter(Boolean);
+    if (files.length){ var ph = h("div",{class:"photos"}); files.forEach(function(u,i){ ph.append(h("a",{href:u,text:"📎 附件 "+(i+1)})); }); card.append(ph); }
+    if (f["處理回覆"]) card.append(h("div",{class:"fb-reply"}, h("b",{text:(f["處理人"]||"主管")+" 回覆 · "+fmt(f["處理時間"])}), f["處理回覆"]));
+    if (isAdmin()){
+      var s = h("select",{"aria-label":"處理狀態"}); ["待處理","處理中","已完成","不採用"].forEach(function(x){ s.append(h("option",{value:x,text:x})); }); s.value = st;
+      var r = h("textarea",{maxlength:"800",rows:"1",placeholder:"回覆提出人（會用 LINE 通知）","aria-label":"回覆"}); r.value = f["處理回覆"] || "";
+      card.append(h("form",{class:"fb-admin",onsubmit:function(ev){ ev.preventDefault(); call("api_updateFeedback",[f["編號"], {status:s.value, reply:r.value}],"已更新 "+f["編號"]); }},
+        h("label",null,"狀態",s), h("label",null,"回覆",r), h("button",{class:"btn small",type:"submit"},"儲存")));
+    }
+    list.append(card);
+  });
+}
+$("fb-form").addEventListener("submit", function(ev){
+  ev.preventDefault();
+  var c = $("fb-content").value.trim();
+  if (!c){ toast("請填寫內容。", true); return; }
+  call("api_addFeedback",[{type:$("fb-type").value, content:c}],"已送出，謝謝你的回饋！").then(function(ok){ if (ok){ $("fb-content").value = ""; FBF = "all"; renderFb(); } });
+});
+$("f-cancel").addEventListener("click", function(){ $("dlg").close(); });
+$("proj-form").addEventListener("submit", function(ev){
+  ev.preventDefault();
+  var f = {code:editing, name:$("f-name").value, goal:$("f-goal").value, owner:$("f-owner").value, members:$("f-members").value,
+    newCode:normCode($("f-code").value), dept:$("f-dept").value, spec:$("f-spec").value, actualStart:$("f-astart").value, actualEnd:$("f-aend").value, type:$("f-type").value, start:$("f-start").value, due:$("f-due").value, reason:$("f-reason").value};
+  var ep = editing ? proj(editing) : null;
+  if (locked(ep) && (f.start !== (ep["開始日"]||"") || f.due !== (ep["截止日"]||"")) && !f.reason.trim()){ toast("已鎖定基準計畫，修改預定日期請填寫變更原因。", true); $("f-reason").focus(); return; }
+  if (checkCode()){ toast(checkCode(), true); $("f-code").focus(); return; }
+  if (editing && f.newCode && f.newCode !== editing && !confirm("確定把專案編號從 "+editing+" 改成 "+f.newCode+"？\n這個專案的任務編號也會一起改（例如 "+editing+"-01 → "+f.newCode+"-01）。")) return;
+  var wasNew = !editing, before = D.projects.map(function(x){ return x["編號"]; }), renamed = editing && f.newCode && f.newCode !== editing ? f.newCode : "";
+  call("api_saveProject",[f], isAdmin() ? (wasNew ? "已建立專案" : "已儲存") : "已送出申請，等待主管核准").then(function(ok){
+    if (!ok) return;
+    $("dlg").close();
+    if (renamed && proj(renamed)) openDetail(renamed);
+    if (wasNew){
+      var added = D.projects.filter(function(x){ return before.indexOf(x["編號"]) < 0; })[0];
+      if (added) openDetail(added["編號"]);
+    }
+  });
+});
+
+$("g-zoom").addEventListener("click", function(ev){
+  var b = ev.target.closest("button"); if (!b) return;
+  ZOOM = b.dataset.z; try { localStorage.setItem("jk-gzoom", ZOOM); } catch(e){}
+  if (sel && proj(sel)) renderGantt(proj(sel));
+});
+function deleteProject(p){
+  var n = leavesOf(p["編號"]).length;
+  if (!confirm("確定刪除專案 " + p["編號"] + "「" + p["專案名稱"] + "」？\n" + (n ? "底下 " + n + " 個任務、" : "") + "每週更新、試驗單紀錄會一起刪除，無法復原。\n（雲端資料夾裡的照片與檔案會保留）")) return;
+  call("api_deleteProject", [p["編號"]], "已刪除專案 " + p["編號"]).then(function(ok){ if (ok && sel === p["編號"]){ sel = null; $("view-detail").hidden = true; $("view-list").hidden = false; } });
+}
+$("btn-line-check").addEventListener("click", function(){
+  call("api_checkLine", [], "LINE 金鑰正常，警告已清除");
+});
+$("btn-back").addEventListener("click", function(){ sel = null; $("view-detail").hidden = true; $("view-list").hidden = false; });
+
+// ===== 單位管理（管理員） =====
+var UNITS = [];
+function renderUnits(){
+  var tb = $("ut-body"); tb.textContent = "";
+  var tops = UNITS.filter(function(u){ return !u.parent && u.name; }).map(function(u){ return u.name; });
+  UNITS.forEach(function(u, i){
+    var par = h("select",{"aria-label":"上層部門",onchange:function(){ u.parent = this.value; renderUnits(); }});
+    par.append(h("option",{value:"",text:"（部門本身）"}));
+    tops.forEach(function(n){ if (n !== u.name) par.append(h("option",{value:n,text:n})); });
+    if (u.parent && tops.indexOf(u.parent) < 0) par.append(h("option",{value:u.parent,text:u.parent+"（找不到）"}));
+    par.value = u.parent || "";
+    var code = h("input",{type:"text",class:"code",maxlength:"4",value:u.code||"","aria-label":"代碼",disabled:u.used>0 && !u.isNew,title:u.used>0?"已有案件，不能改代碼":null,oninput:function(){ u.code = this.value.toUpperCase(); }});
+    var name = h("input",{type:"text",maxlength:"30",value:u.name||"","aria-label":"單位名稱",onchange:function(){
+      var old = u.name; u.name = this.value.trim();
+      UNITS.forEach(function(x){ if (x.parent === old && old) x.parent = u.name; }); renderUnits(); }});
+    var ord = h("input",{type:"text",class:"ord",inputmode:"numeric",maxlength:"3",value:u.order||"","aria-label":"排序（三碼）",title:"三碼：第 1 碼部門、第 2 碼課、第 3 碼組",oninput:function(){ this.value = this.value.replace(/\D/g,""); u.order = this.value; }});
+    var act = h("input",{type:"checkbox",checked:u.active!==false,"aria-label":"啟用",onchange:function(){ u.active = this.checked; renderUnits(); }});
+    var mgr = h("select",{"aria-label":"主管",onchange:function(){ u.manager = this.value; }});
+    mgr.append(h("option",{value:"",text:u.parent ? "（同上層部門）" : "（管理員）"}));
+    (D.members||[]).forEach(function(n){ mgr.append(h("option",{value:n,text:n})); });
+    if (u.manager && (D.members||[]).indexOf(u.manager) < 0) mgr.append(h("option",{value:u.manager,text:u.manager+"（找不到）"}));
+    mgr.value = u.manager || "";
+    var del = u.used > 0 ? h("span",{class:"cnt",text:""}) : h("button",{class:"x",type:"button",title:"刪除","aria-label":"刪除單位",onclick:function(){ UNITS.splice(i,1); renderUnits(); }},"×");
+    tb.append(h("tr",{class:(u.parent?"child":"")+(u.active===false?" off":"")},
+      h("td",null,code), h("td",{class:"nm"},name), h("td",null,par), h("td",null,mgr), h("td",null,ord), h("td",null,act),
+      h("td",{class:"cnt",text:u.used ? u.used+" 案" : "—"}), h("td",null,del)));
+  });
+}
+$("btn-units").addEventListener("click", function(){
+  UNITS = (D.units||[]).map(function(u){ return Object.assign({}, u); });
+  renderUnits(); $("udlg").showModal();
+});
+$("u-add").addEventListener("click", function(){
+  var max = 0; UNITS.forEach(function(u){ max = Math.max(max, Number(u.order)||0); });
+  UNITS.push({code:"", name:"", parent:"", order:String(Math.min(999, max+10)).padStart(3,"0"), active:true, used:0, isNew:true});
+  renderUnits();
+  var rows = $("ut-body").querySelectorAll("tr"); var last = rows[rows.length-1]; last.scrollIntoView({block:"nearest"}); last.querySelector("input").focus();
+});
+$("u-cancel").addEventListener("click", function(){ $("udlg").close(); });
+$("unit-form").addEventListener("submit", function(ev){
+  ev.preventDefault();
+  var seen = {};
+  for (var i = 0; i < UNITS.length; i++){
+    var u = UNITS[i], c = String(u.code||"").trim().toUpperCase();
+    if (!/^[A-Z][A-Z0-9]{1,3}$/.test(c)){ toast("第 "+(i+1)+" 列的代碼格式不對：2～4 個英文或數字，第一個字是英文。", true); return; }
+    if (seen[c]){ toast("代碼 "+c+" 重複了。", true); return; }
+    if (!String(u.name||"").trim()){ toast("代碼 "+c+" 沒有填單位名稱。", true); return; }
+    seen[c] = 1;
+  }
+  var list = UNITS.map(function(u){ return {code:u.code, name:u.name, parent:u.parent, order:u.order, active:u.active!==false, manager:u.manager||""}; });
+  call("api_saveUnits",[list],"已儲存單位表").then(function(ok){
+    if (!ok) return;
+    $("udlg").close();
+    DEPTS = D.depts || DEPTS; DPAR = D.deptParents || DPAR;
+    fillDepts($("dept-filter"), "所有單位", true); if (!DEPTS[DEPTF]) DEPTF = ""; renderList();
+  });
+});
+
+// ===== 成員管理 =====
+var MEMS = [];
+function renderMembers(){
+  var tb = $("mt-body"); tb.textContent = "";
+  MEMS.forEach(function(m, i){
+    var role = h("select",{"aria-label":"角色",onchange:function(){ m.role = this.value; }});
+    ["成員","主管","管理員"].forEach(function(r){ var o = h("option",{value:r,text:r}); if (m.role === r) o.selected = true; role.append(o); });
+    var canDel = !m.bound && !m.used;
+    tb.append(h("tr",null,
+      h("td",null, h("input",{type:"text",value:m.name,maxlength:"20","aria-label":"姓名",oninput:function(){ m.name = this.value; }}),
+        m.key && m.key !== m.name ? h("div",{class:"muted",style:"font-size:11px",text:"原名：" + m.key}) : null),
+      h("td",null, role),
+      h("td",null, h("input",{type:"text",value:m.email,maxlength:"80",placeholder:"name@jaker.com.tw","aria-label":"公司信箱",oninput:function(){ m.email = this.value.trim(); }})),
+      h("td",{style:"text-align:center"}, h("input",{type:"checkbox",checked:m.remind,"aria-label":"接收提醒",onchange:function(){ m.remind = this.checked; }})),
+      h("td",{class:"muted",style:"font-size:12px;white-space:nowrap",text:m.bound ? "已綁定" : "未綁定"}),
+      h("td",{class:"num muted",style:"text-align:center",text:m.used || "—"}),
+      h("td",null, canDel ? h("button",{class:"x",type:"button",title:"刪除",onclick:function(){ MEMS.splice(i,1); renderMembers(); }},"×") : null)));
+  });
+}
+$("btn-members").addEventListener("click", function(){
+  MEMS = (D.membersAdmin||[]).map(function(m){ return Object.assign({}, m); });
+  renderMembers(); $("mdlg").showModal();
+});
+$("m-add").addEventListener("click", function(){
+  MEMS.push({key:"", name:"", role:"成員", email:"", remind:true, bound:false, used:0});
+  renderMembers();
+  var rows = $("mt-body").querySelectorAll("tr"); var last = rows[rows.length-1]; last.scrollIntoView({block:"nearest"}); last.querySelector("input").focus();
+});
+$("m-cancel").addEventListener("click", function(){ $("mdlg").close(); });
+$("member-form").addEventListener("submit", function(ev){
+  ev.preventDefault();
+  var seen = {}, renames = [];
+  for (var i = 0; i < MEMS.length; i++){
+    var n = String(MEMS[i].name||"").trim();
+    if (!n){ toast("第 "+(i+1)+" 列沒有填姓名。", true); return; }
+    if (seen[n]){ toast("姓名「"+n+"」重複了。", true); return; }
+    seen[n] = 1;
+    if (MEMS[i].key && MEMS[i].key !== n) renames.push(MEMS[i].key + " → " + n);
+  }
+  if (!MEMS.some(function(m){ return m.role === "管理員"; })){ toast("至少要保留一位管理員。", true); return; }
+  if (renames.length && !confirm("確定改名？\n" + renames.join("\n") + "\n\n所有專案、任務、紀錄裡的名字會一起改。")) return;
+  var list = MEMS.map(function(m){ return {key:m.key, name:String(m.name).trim(), role:m.role, email:m.email, remind:m.remind}; });
+  call("api_saveMembers",[list],"已儲存成員表").then(function(ok){ if (ok) $("mdlg").close(); });
+});
+
+// ===== 研究試驗單 =====
+var JG = {"合格":"ok","不合格":"bad","待判定":"wait"};
+var editingTest = null;
+function renderTests(p){
+  var cu = canUpdate(p), ul = $("d-tests"); ul.textContent = "";
+  $("btn-new-test").hidden = !cu;
+  var es = testsOf(p["編號"]).slice().sort(function(a,b){ return String(a["試驗單編號"]).localeCompare(String(b["試驗單編號"]), "en", {numeric:true}); });
+  if (!es.length){ ul.append(h("li",{class:"muted",style:"display:block;cursor:default",text:"還沒有研究試驗單。"})); return; }
+  es.forEach(function(e){
+    var files = String(e["附件"]||"").split(/\n/).filter(Boolean).length;
+    ul.append(h("li",{onclick:function(){ openTestDialog(p, e); }},
+      h("div",null, h("div",{class:"t-name"}, h("span",{class:"code",text:e["試驗單編號"]}), e["試驗名稱"]),
+        h("div",{class:"t-meta",text:[fmt(e["試驗日期"]), e["試驗人員"], files ? "📎 "+files : ""].filter(Boolean).join(" · ")})),
+      h("span",{class:"jg "+(JG[e["判定"]]||"wait"),text:e["判定"]||"待判定"})));
+  });
+}
+function openTestDialog(p, e){
+  editingTest = e ? e["試驗單編號"] : null;
+  var cu = canUpdate(p);
+  $("edlg-title").textContent = e ? "研究試驗單 " + e["試驗單編號"] : "新增研究試驗單（" + p["編號"] + "）";
+  $("e-name").value = e ? e["試驗名稱"] : "";
+  $("e-date").value = e ? (e["試驗日期"]||"") : D.today;
+  $("e-tester").value = e ? (e["試驗人員"]||"") : me();
+  $("e-judge").value = e && JG[e["判定"]] ? e["判定"] : "待判定";
+  $("e-purpose").value = e ? (e["試驗目的"]||"") : "";
+  $("e-param").value = e ? (e["試驗條件與參數"]||"") : "";
+  $("e-result").value = e ? (e["試驗結果"]||"") : "";
+  var fb = $("e-files"); fb.textContent = "";
+  String(e && e["附件"] || "").split(/\n/).filter(Boolean).forEach(function(u,i){ fb.append(h("a",{href:u,text:"📎 附件 "+(i+1)})); });
+  ["e-name","e-date","e-tester","e-judge","e-purpose","e-param","e-result"].forEach(function(id){ $(id).disabled = !cu; });
+  $("e-save").hidden = !cu; $("e-print").hidden = !e; $("e-del").hidden = !(e && canManage(p));
+  $("edlg").showModal();
+}
+$("btn-new-test").addEventListener("click", function(){ var p = proj(sel); if (p) openTestDialog(p, null); });
+$("e-cancel").addEventListener("click", function(){ $("edlg").close(); });
+$("e-del").addEventListener("click", function(){ if (editingTest && confirm("確定刪除研究試驗單 "+editingTest+"？")) call("api_deleteTest",[editingTest],"已刪除").then(function(ok){ if (ok) $("edlg").close(); }); });
+$("e-print").addEventListener("click", function(){ var e = (D.tests||[]).filter(function(x){ return x["試驗單編號"]===editingTest; })[0]; if (e) printTest(e); });
+$("test-form").addEventListener("submit", function(ev){
+  ev.preventDefault();
+  var f = {pid:sel, code:editingTest, name:$("e-name").value, date:$("e-date").value, tester:$("e-tester").value, judge:$("e-judge").value,
+    purpose:$("e-purpose").value, param:$("e-param").value, result:$("e-result").value};
+  call("api_saveTest",[f], editingTest ? "已儲存試驗單" : "已建立試驗單").then(function(ok){ if (ok) $("edlg").close(); });
+});
+
+// ===== 列印（彙總表、進度表、試驗單；版面依開發部樣張） =====
+function esc(s){ return String(s == null ? "" : s).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
+function slash(s){ var m = String(s||"").match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? m[1]+"/"+Number(m[2])+"/"+Number(m[3]) : ""; }
+var PRINT_CSS = "*{box-sizing:border-box}body{margin:0;font-family:'Microsoft JhengHei','PingFang TC','Noto Sans TC',sans-serif;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact}"
+  + ".bar{position:sticky;top:0;background:#F4F6FA;border-bottom:1px solid #ccc;padding:8px 16px;font-size:14px}.bar button{font:inherit;padding:6px 14px;background:#0064F3;color:#fff;border:0;border-radius:6px;cursor:pointer;margin-right:10px}"
+  + ".page{padding:8mm 10mm;page-break-after:always}.page:last-child{page-break-after:auto}"
+  + ".hd{display:grid;grid-template-columns:1fr auto 1fr;align-items:end;margin-bottom:6px}.logo{font-weight:900;color:#0064F3;font-size:15px;letter-spacing:.02em}.logo b{display:inline-block;width:18px;height:18px;border:2px solid #0064F3;border-radius:50%;font-size:10px;text-align:center;line-height:14px;margin-right:4px;vertical-align:1px}"
+  + ".ttl{text-align:center;font-size:14px;line-height:1.5}.ttl strong{display:block;font-size:15px}.dt{text-align:right;font-size:11px}.unit{font-size:11px}"
+  + "table{border-collapse:collapse;width:100%;table-layout:fixed}th,td{border:1px solid #000;font-size:10.5px;padding:3px 4px;vertical-align:middle;overflow-wrap:anywhere}th{font-weight:normal;background:#F2F2F2}"
+  + "td.c{text-align:center}.mo{padding:0;height:20px}.mo i{display:block;height:6px;margin:2px 0}.mo i.p{background:#9DC3F7}.mo i.a{background:#157A47}.mo.yr{border-left:2px solid #000}"
+  + ".legend{font-size:10px;margin-top:4px}.legend i{display:inline-block;width:14px;height:7px;margin:0 3px 0 10px;vertical-align:middle}"
+  + ".tall{height:110px;vertical-align:top;white-space:pre-wrap}.sign td{height:48px;vertical-align:top}.foot{text-align:center;font-size:10px;margin-top:8px}"
+  + "@media print{.bar{display:none}}";
+function printDoc(title, body, orient){
+  var w = window.open("", "_blank");
+  if (!w){ toast("瀏覽器擋住了列印視窗，請允許這個網站開啟彈出式視窗後再試。", true); return; }
+  w.document.open();
+  w.document.write("<!doctype html><html lang='zh-Hant'><head><meta charset='utf-8'><title>"+esc(title)+"</title><style>@page{size:A4 "+(orient||"landscape")+";margin:6mm}"+PRINT_CSS+"</style></head><body>"
+    + "<div class='bar'><button onclick='window.print()'>列印／存成 PDF</button>" + (orient === "portrait" ? "列印時請選「直向」。" : "列印時請選「橫向」，並勾選「背景圖形」，月份色塊才會印出來。") + "</div>" + body + "</body></html>");
+  w.document.close();
+  setTimeout(function(){ try { w.focus(); w.print(); } catch(e){} }, 500);
+}
+function header(title, unit){
+  return "<div class='hd'><div><div class='logo'><b>JK</b>JAKER ELECTRIC</div><div class='unit'>"+esc(unit||"")+"</div></div>"
+    + "<div class='ttl'><strong>傑克電機股份有限公司</strong>"+esc(title)+"</div><div class='dt'>日期："+slash(D.today)+"</div></div>";
+}
+function pad(rows, n, cols){ var s = ""; for (var i = rows; i < n; i++){ s += "<tr>"; for (var j = 0; j < cols; j++) s += "<td>&nbsp;</td>"; s += "</tr>"; } return s; }
+$("btn-print-sum").addEventListener("click", function(){
+  var groups = {};
+  D.projects.forEach(function(p){ var d = deptOf(p) || "_"; if (DEPTF && !deptIn(d, DEPTF)) return; (groups[d] = groups[d] || []).push(p); });
+  var keys = deptTree().map(function(x){ return x[0]; }).filter(function(k){ return groups[k]; }); if (groups._) keys.push("_");
+  if (!keys.length){ toast("沒有可列印的專案。", true); return; }
+  var body = keys.map(function(k){
+    var ps = groups[k].slice().sort(function(a,b){ return String(a["編號"]).localeCompare(String(b["編號"]), "en", {numeric:true}); });
+    var rows = ps.map(function(p){
+      var end = p["實際結案日"] ? slash(p["實際結案日"]) : (p["截止日"] ? slash(p["截止日"]) + "（預定）" : "");
+      var note = [stageLabel(stagesOf(p)[stageIdx(p)]), p["燈號"] && p["燈號"] !== "正常" ? p["燈號"] : "", p["卡關事項"]].filter(Boolean).join("；");
+      return "<tr><td class='c'>"+esc(p["編號"])+"</td><td>"+esc(p["專案名稱"])+"</td><td>"+esc(p["產品規格"])+"</td><td class='c'>"+esc(p["負責人"])+"</td><td class='c'>"+(p["實際開案日"] ? slash(p["實際開案日"]) : p["開始日"] ? slash(p["開始日"]) + "（預定）" : "")+"</td><td class='c'>"+end+"</td><td>"+esc(note)+"</td></tr>";
+    }).join("");
+    return "<div class='page'>" + header("開發案件彙總表", k === "_" ? "未指定單位" : DEPTS[k])
+      + "<table><colgroup><col style='width:12%'><col style='width:22%'><col style='width:17%'><col style='width:8%'><col style='width:9%'><col style='width:11%'><col></colgroup>"
+      + "<thead><tr><th>案件編號</th><th>產品名稱</th><th>產品規格</th><th>專案負責人</th><th>開案日期</th><th>結案日期</th><th>備註</th></tr></thead><tbody>" + rows + pad(ps.length, 20, 7) + "</tbody></table></div>";
+  }).join("");
+  printDoc("開發案件彙總表", body, "landscape");
+});
+function printProgress(p){
+  var today = D.today, ts = tasksOf(p["編號"]).slice().sort(function(a,b){ return String(a["編號"]).localeCompare(String(b["編號"]), "en", {numeric:true}); });
+  function ym(s){ return s ? Number(s.slice(0,4))*12 + Number(s.slice(5,7)) - 1 : null; }
+  var pts = [p["開始日"], p["截止日"], p["實際開案日"], p["實際結案日"]];
+  ts.forEach(function(t){ if (t._kids) return; pts.push(taskStart(t), t["完成日"], t["實際開始日"], t["狀態"]==="已完成" ? String(t["完成時間"]).slice(0,10) : ""); });
+  var ms = pts.filter(Boolean).map(ym); if (!ms.length) ms = [ym(today)];
+  var m0 = Math.min.apply(null, ms), m1 = Math.max.apply(null, ms);
+  if (m1 - m0 > 35) m1 = m0 + 35;
+  if (m1 - m0 < 5) m1 = m0 + 5;
+  var months = []; for (var m = m0; m <= m1; m++) months.push(m);
+  var yrs = {}; months.forEach(function(m){ var y = Math.floor(m/12); yrs[y] = (yrs[y]||0) + 1; });
+  var yHead = Object.keys(yrs).map(function(y){ return "<th colspan='"+yrs[y]+"'>"+y+"年</th>"; }).join("");
+  var mHead = months.map(function(m){ return "<th class='c' style='padding:2px 0'>"+(m%12+1)+"月</th>"; }).join("");
+  function cells(ps, pe, as, ae){
+    return months.map(function(m){
+      var on = function(a, b){ return a !== null && b !== null && m >= a && m <= b; };
+      return "<td class='mo"+(m%12===0 && m!==m0 ? " yr" : "")+"'>"+(on(ps,pe) ? "<i class='p'></i>" : "<i></i>")+(on(as,ae) ? "<i class='a'></i>" : "<i></i>")+"</td>";
+    }).join("");
+  }
+  var pre = p["編號"] + "-";
+  var rows = ts.map(function(t, i){
+    var cont = t._kids > 0;
+    var done = cont ? t._done : t["狀態"]==="已完成", aEnd = cont ? (t._ae || "") : done ? String(t["完成時間"]).slice(0,10) : "";
+    var pS = cont ? t._ps : taskStart(t), pE = cont ? t._pe : t["完成日"], aS = cont ? t._as : t["實際開始日"];
+    var ps = ym(pS), pe = ym(pE) !== null ? ym(pE) : ps;
+    var as = ym(aS), ae = aEnd ? ym(aEnd) : (as !== null ? ym(today) : null);
+    var no = String(t["編號"]).indexOf(pre) === 0 ? String(t["編號"]).slice(pre.length) : String(i+1);
+    var late = !done && pE && pE < today;
+    var note = done ? "完成" : late ? "逾期 " + days(pE, today) + " 天" : "";
+    var name = cont ? "<b>"+esc(t["任務"])+"</b>" : (t._lv === 2 ? "&nbsp;&nbsp;&nbsp;" : "") + esc(t["任務"]);
+    return "<tr><td class='c'>"+esc(no)+"</td><td>"+name+"</td><td class='c'>"+esc(t["負責人"])+"</td><td class='c'>"+slash(pS)+"</td><td class='c'>"+slash(pE)+"</td><td class='c'>"+slash(aS)+"</td><td class='c'>"+slash(aEnd)+"</td>"+cells(ps,pe,as,ae)+"<td>"+esc(note)+"</td></tr>";
+  }).join("");
+  var blankRow = "<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td><td></td>"+months.map(function(){ return "<td class='mo'></td>"; }).join("")+"<td></td></tr>";
+  for (var k = ts.length; k < 15; k++) rows += blankRow;
+  var unit = DEPTS[deptOf(p)] || "";
+  var body = "<div class='page'>" + header("開發案件進度表" + (unit ? "（" + unit + "）" : ""), "")
+    + "<table style='margin-bottom:6px'><colgroup><col style='width:13%'><col style='width:31%'><col style='width:10%'><col style='width:11.5%'><col style='width:11.5%'><col style='width:11.5%'><col style='width:11.5%'></colgroup>"
+    + "<tr><th rowspan='2'>案件編號</th><th rowspan='2'>產品名稱</th><th rowspan='2'>專案負責人</th><th colspan='2'>預定時程</th><th colspan='2'>實際時程</th></tr>"
+    + "<tr><th>開案日期</th><th>結案日期</th><th>開案日期</th><th>結案日期</th></tr>"
+    + "<tr><td class='c'>"+esc(p["編號"])+"</td><td>"+esc(p["專案名稱"])+(p["產品規格"] ? "<br><small>"+esc(p["產品規格"])+"</small>" : "")+"</td><td class='c'>"+esc(p["負責人"])+"</td><td class='c'>"+slash(p["開始日"])+"</td><td class='c'>"+slash(p["截止日"])+"</td><td class='c'>"+slash(p["實際開案日"])+"</td><td class='c'>"+slash(p["實際結案日"])+"</td></tr></table>"
+    + "<table><colgroup><col style='width:30px'><col style='width:150px'><col style='width:50px'><col style='width:62px'><col style='width:62px'><col style='width:62px'><col style='width:62px'>"+months.map(function(){ return "<col>"; }).join("")+"<col style='width:60px'></colgroup>"
+    + "<thead><tr><th rowspan='3'>項次</th><th rowspan='3'>工作項目</th><th rowspan='3'>負責</th><th colspan='2' rowspan='2'>預定時程</th><th colspan='2' rowspan='2'>實際時程</th>"+yHead+"<th rowspan='3'>備註</th></tr>"
+    + "<tr>"+mHead+"</tr><tr><th>開始日期</th><th>完成日期</th><th>開始日期</th><th>完成日期</th>"+months.map(function(){ return "<th style='padding:0'></th>"; }).join("")+"</tr></thead>"
+    + "<tbody>"+rows+"</tbody></table>"
+    + "<div class='legend'>月份欄：<i style='background:#9DC3F7'></i>預定　<i style='background:#157A47'></i>實際（進行中的任務算到本月）　目前階段："+esc(stageLabel(stagesOf(p)[stageIdx(p)]))+"（"+(stageIdx(p)+1)+"/"+stagesOf(p).length+"）</div></div>";
+  printDoc(p["編號"] + " 開發案件進度表", body, "landscape");
+}
+function printTest(e){
+  var p = proj(e["專案編號"]) || {};
+  var files = String(e["附件"]||"").split(/\n/).filter(Boolean);
+  function row(k, v, cls){ return "<tr><th style='width:18%'>"+k+"</th><td colspan='3' class='"+(cls||"")+"'>"+esc(v)+"</td></tr>"; }
+  var body = "<div class='page'>" + header("研究試驗單", DEPTS[deptOf(p)] || "")
+    + "<table><tr><th style='width:18%'>試驗單編號</th><td style='width:32%'>"+esc(e["試驗單編號"])+"</td><th style='width:18%'>試驗日期</th><td>"+slash(e["試驗日期"])+"</td></tr>"
+    + "<tr><th>案件編號</th><td>"+esc(e["專案編號"])+"</td><th>試驗人員</th><td>"+esc(e["試驗人員"])+"</td></tr>"
+    + row("產品名稱", (p["專案名稱"]||"") + (p["產品規格"] ? "／" + p["產品規格"] : "")) + row("試驗名稱", e["試驗名稱"])
+    + row("試驗目的", e["試驗目的"], "tall") + row("試驗條件與參數", e["試驗條件與參數"], "tall") + row("試驗結果", e["試驗結果"], "tall")
+    + row("判定", e["判定"]) + row("附件", files.length ? files.length + " 個（照片、檔案存於專案雲端資料夾）" : "無")
+    + "</table><table class='sign' style='margin-top:10px'><tr><th>試驗人員</th><th>審核</th><th>核准</th></tr><tr><td></td><td></td><td></td></tr></table></div>";
+  printDoc(e["試驗單編號"] + " 研究試驗單", body, "portrait");
+}
+render();
+})();
+</script>
+</body>
+</html>

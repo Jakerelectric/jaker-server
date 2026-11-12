@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>專案儀表板｜傑克電機</title>
+<style>
+  :root{--bg:#F4F6FA;--surface:#FFFFFF;--ink:#0D1B30;--muted:#5B6B82;--line:#DCE3EE;--accent:#0064F3;--bad:#C0392B}
+  @media (prefers-color-scheme: dark){:root{--bg:#0E1624;--surface:#162133;--ink:#E8EEF7;--muted:#9AA9BF;--line:#26344A;--accent:#4D94FF;--bad:#FF7B6B}}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);font-family:"Microsoft JhengHei","PingFang TC","Noto Sans TC",system-ui,sans-serif;display:flex;align-items:center;justify-content:center;padding:16px}
+  .card{width:100%;max-width:380px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:28px 24px}
+  .brand{color:var(--accent);font-weight:900;letter-spacing:.04em;font-size:18px}
+  h1{font-size:20px;margin:6px 0 4px}
+  p{color:var(--muted);font-size:13px;margin:0 0 18px;line-height:1.6}
+  label{display:block;font-size:13px;font-weight:700;margin:12px 0 6px}
+  input{width:100%;font:inherit;font-size:16px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
+  input:focus{outline:2px solid var(--accent);outline-offset:1px}
+  button{margin-top:18px;width:100%;font:inherit;font-weight:700;font-size:15px;padding:11px;border:0;border-radius:8px;background:var(--accent);color:#fff;cursor:pointer}
+  button:disabled{opacity:.6;cursor:default}
+  .msg{color:var(--bad);font-size:13px;margin-top:12px;line-height:1.6}
+  .loading{color:var(--muted);font-size:14px}
+</style>
+</head>
+<body>
+<div class="card" id="box"><div class="loading" id="loading">載入中…</div></div>
+<script>
+(function(){
+  var KEY = "jaker.token";
+  function token(){ try { return localStorage.getItem(KEY) || ""; } catch(e){ return ""; } }
+  function setToken(t){ try { if (t) localStorage.setItem(KEY, t); else localStorage.removeItem(KEY); } catch(e){} }
+  // 檔案連結用：同一組登入代碼也存成 cookie（只送給 /pm）
+  function setCookie(t){ document.cookie = "jk_t=" + (t ? encodeURIComponent(t) : "") + "; path=/pm; SameSite=Lax" + (location.protocol === "https:" ? "; Secure" : "") + (t ? "; max-age=2592000" : "; max-age=0"); }
+  var box = document.getElementById("box");
+
+  function showLogin(msg){
+    box.innerHTML = '<div class="brand">傑克電機</div><h1>專案儀表板</h1>' +
+      '<p>用行政服務入口的員工編號和密碼登入。</p>' +
+      '<form id="f" autocomplete="on"><label for="id">員工編號</label><input id="id" autocomplete="username" required>' +
+      '<label for="pw">密碼</label><input id="pw" type="password" autocomplete="current-password" required>' +
+      '<button id="go" type="submit">登入</button><div class="msg" id="msg" role="status"></div></form>';
+    var m = document.getElementById("msg"); if (msg) m.textContent = msg;
+    document.getElementById("id").focus();
+    document.getElementById("f").addEventListener("submit", function(ev){
+      ev.preventDefault();
+      var go = document.getElementById("go"); go.disabled = true; m.textContent = "";
+      fetch("login", {method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({empId: document.getElementById("id").value.trim(), pin: document.getElementById("pw").value})})
+        .then(function(r){ return r.json(); })
+        .then(function(j){
+          go.disabled = false;
+          if (!j.ok){ m.textContent = j.error || "登入失敗"; return; }
+          setToken(j.token); openDashboard();
+        }, function(){ go.disabled = false; m.textContent = "連線失敗，請稍後再試。"; });
+    });
+  }
+
+  function openDashboard(){
+    var t = token();
+    setCookie(t);
+    if (!t) return showLogin();
+    box.innerHTML = '<div class="loading">載入儀表板…</div>';
+    fetch("api", {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({page:1, token:t})})
+      .then(function(r){ return r.json(); })
+      .then(function(j){
+        if (j.auth){ setToken(""); setCookie(""); return showLogin("登入已過期，請重新登入。"); }
+        if (!j.ok || !j.html) return showLogin(j.error || "載入失敗，請稍後再試。");
+        document.open(); document.write(j.html); document.close();
+      }, function(){ showLogin("連線失敗，請確認網路後再試。"); });
+  }
+  openDashboard();
+})();
+</script>
+</body>
+</html>
