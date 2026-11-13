@@ -17,6 +17,7 @@ const { loadConfig, readEnvFile } = require('./config');
 const { execFile } = require('child_process');
 const { Store } = require('./store');
 const { createRuntime } = require('./runtime');
+const { ensureRichMenu } = require('./richmenu');
 
 const ROOT = path.resolve(__dirname, '..');
 const cfg = loadConfig(ROOT);
@@ -172,6 +173,9 @@ async function main() {
       '</title><body style="font-family:system-ui,\'Microsoft JhengHei\',sans-serif;max-width:760px;margin:24px auto;padding:0 16px;line-height:1.8">' +
       up + '<h1 style="font-size:20px">' + esc(m.name) + '</h1><ul style="padding-left:1.2em">' + (rows || '<li>（沒有檔案）</li>') + '</ul></body>');
   });
+
+  // LINE 圖文選單：版本變了就重新建立
+  serial(() => ensureRichMenu(store, cfg, log)).catch(e => log('LINE 圖文選單更新失敗', e));
 
   // 研究試驗單改用上傳檔案：舊的試驗單轉成檔案（只做一次）
   run('migrateTests', () => pm.call('migrateTestsToFiles_')).then(n => { if (n) log('已把 ' + n + ' 份研究試驗單轉成檔案（分類：試驗報告）'); })

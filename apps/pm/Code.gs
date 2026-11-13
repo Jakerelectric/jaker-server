@@ -281,7 +281,7 @@ function parseInput_(ev) {
   return inp;
 }
 
-const COMMANDS = ['每週更新', '新增任務', '我的任務', '任務進度', '轉派任務', '專案總覽', '新增專案', '使用說明', '意見回饋', '我的回饋', '試驗單'];
+const COMMANDS = ['每週更新', '新增任務', '我的任務', '任務進度', '轉派任務', '專案總覽', '新增專案', '使用說明', '意見回饋', '我的回饋', '試驗單', '上傳檔案'];
 function commandOf_(inp) {
   if (inp.data.indexOf('cmd:') === 0) return inp.data.slice(4);
   const t = inp.text.replace(/\s/g, '');
@@ -291,6 +291,7 @@ function commandOf_(inp) {
   if (['回報任務進度', '任務進度回報', '完成度', '回報完成度'].indexOf(t) >= 0) return '任務進度';
   if (['轉派', '轉交', '轉派給別人', '換負責人'].indexOf(t) >= 0) return '轉派任務';
   if (t === '說明') return '使用說明';
+  if (['上傳', '傳檔案', '上傳照片', '存檔案'].indexOf(t) >= 0) return '上傳檔案';
   if (['新增試驗單', '研究試驗單', '試驗', '開試驗單'].indexOf(t) >= 0) return '試驗單';
   if (['回報問題', '回報錯誤', '錯誤回報', '問題回報', '意見', '建議回饋', '我要建議', '系統問題'].indexOf(t) >= 0) return '意見回饋';
   return '';
@@ -312,7 +313,8 @@ function startCommand_(cmd, me, uid, rt) {
       setState_(uid, { flow: 'fb', step: 'type', d: { files: [] } });
       return reply_(rt, txt_('💬 意見回饋\n系統哪裡怪怪的，或希望多什麼功能，都歡迎告訴我們。\n\n要回報哪一種？', fbTypeItems_()));
     case '我的回饋': return reply_(rt, myFeedback_(me));
-    case '試驗單': return reply_(rt, txt_('🧪 研究試驗單已改成「上傳檔案」：\n直接在這裡傳試驗報告（PDF、照片、Word…），選專案後存檔；\n或在網頁儀表板的「專案資料」上傳，分類選「試驗報告」。', menuItems_()));
+    case '上傳檔案': return askProject_(uid, rt, { flow: 'up', d: { n: 0 } }, '📎 要上傳到哪個專案？', me);
+    case '試驗單': return reply_(rt, txt_('🧪 研究試驗單已改成「上傳檔案」：按下方選單的「上傳檔案」，選專案、分類選「試驗報告」，再傳 PDF 或照片。\n網頁儀表板上傳時也一樣選「試驗報告」。', menuItems_()));
   }
   return reply_(rt, menu_());
 }
@@ -413,6 +415,10 @@ function continueFlow_(st, inp, me, uid, rt) {
     if (!p) return askProject_(uid, rt, st, '找不到這個專案，請從下面選一個：', me);
     if (!canFlow_(st.flow, me, p)) return askProject_(uid, rt, st, '你沒有【' + p['編號'] + '】的權限，請從下面選一個：', me);
     d.pid = p['編號']; d.pname = p['專案名稱'];
+    if (st.flow === 'up') {
+      setState_(uid, { flow: 'up', step: 'cat', d: d });
+      return reply_(rt, txt_('【' + p['編號'] + ' ' + p['專案名稱'] + '】\n檔案是哪一類？', upCatItems_()));
+    }
     if (st.flow === 'photo') {
       const r = savePhotos_(p, d.ids || [], me);
       clearState_(uid);
@@ -602,6 +608,23 @@ function continueFlow_(st, inp, me, uid, rt) {
         ((d.files || []).length ? '\n附件 ' + d.files.length + ' 個已一起存檔。' : ''), [qPost_('我的回饋', 'cmd:我的回饋', '我的回饋')].concat(menuItems_())));
     }
 
+    // ===== 上傳檔案：選分類 → 傳檔案 =====
+    case 'up/cat': {
+      const c = inp.data.indexOf('upc:') === 0 ? inp.data.slice(4) : inp.text.trim();
+      if (FILE_CATS.indexOf(c) < 0) return reply_(rt, txt_('請從按鈕選一個分類：', upCatItems_()));
+      d.cat = c;
+      setState_(uid, { flow: 'up', step: 'files', d: d });
+      return reply_(rt, txt_('📎 分類：' + c + '\n請傳檔案或照片（PDF、Word、Excel、照片、影片都可以，一次可以傳好幾個）。\n傳完按「✅ 傳完了」。', upDoneItems_()));
+    }
+    case 'up/files': {
+      if (inp.data === 'updone' || /^(完成|傳完了|好了|結束)$/.test(inp.text)) {
+        clearState_(uid);
+        const p = projectByCode_(d.pid);
+        return reply_(rt, txt_(d.n ? '✅ 已存 ' + d.n + ' 個檔案到【' + d.pid + ' ' + d.pname + '】（分類：' + d.cat + '）' + (p ? '\n' + projectFolder_(p).getUrl() : '') : '沒有收到檔案，已結束。', menuItems_()));
+      }
+      return reply_(rt, txt_('請直接傳檔案或照片；傳完按「✅ 傳完了」。', upDoneItems_()));
+    }
+
     // ===== 任務完成申請退回原因（專案負責人） =====
     case 'tjr/reason': {
       if (!inp.text) return reply_(rt, txt_('請輸入退回原因。', [qMsg_('取消', '取消')]));
@@ -720,6 +743,14 @@ function handleMedia_(me, uid, rt, item, st) {
     const r = savePhotos_(p, [item], me);
     return reply_(rt, txt_((r.saved ? '📎 已存到【' + p['編號'] + '】' : '⚠ 檔案下載失敗，請稍後重傳') + '，請繼續剛才的步驟。'));
   }
+  if (st && st.flow === 'up' && st.step === 'files') {
+    const p = projectByCode_(st.d.pid);
+    const r = savePhotos_(p, [item], me, st.d.cat);
+    st.d.n = (st.d.n || 0) + r.saved;
+    setState_(uid, st);
+    return reply_(rt, txt_(r.saved ? '📎 已存（共 ' + st.d.n + ' 個，分類：' + st.d.cat + '）。還有就繼續傳，傳完按「✅ 傳完了」。' : '⚠ 檔案下載失敗，請重傳一次。', upDoneItems_()));
+  }
+  if (st && st.flow === 'up') return st.step === 'cat' ? reply_(rt, txt_('請先選分類，再傳檔案：', upCatItems_())) : askProject_(uid, rt, st, '請先選專案，再傳檔案：', me);
   if (st && st.flow === 'photo' && st.step === 'project') {   // 一次傳多個：累積起來，不重複詢問
     st.d.ids.push(item);
     setState_(uid, st);
@@ -728,7 +759,9 @@ function handleMedia_(me, uid, rt, item, st) {
   return askProject_(uid, rt, { flow: 'photo', d: { ids: [item] } }, '📎 要存到哪個專案？\n（一次傳多張照片或多個檔案會一起存）', me);
 }
 
-function savePhotos_(p, items, me) {
+function upCatItems_() { return FILE_CATS.map(function (c) { return qPost_(c, 'upc:' + c, c); }).concat([qMsg_('取消', '取消')]); }
+function upDoneItems_() { return [qPost_('✅ 傳完了', 'updone', '傳完了'), qMsg_('取消', '取消')]; }
+function savePhotos_(p, items, me, cat) {
   ensureHead_('F');
   const folder = projectFolder_(p);
   const stamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMdd_HHmmss');
@@ -743,7 +776,7 @@ function savePhotos_(p, items, me) {
     const ext = it.type === 'video' ? '.mp4' : '.jpg';
     const name = it.name ? p['編號'] + '_' + stamp.slice(0, 8) + '_' + it.name : p['編號'] + '_' + stamp + '_' + (i + 1) + ext;
     const file = folder.createFile(res.getBlob().setName(name));
-    append_('F', { '時間': nowStr_(), '專案編號': p['編號'], '上傳人': me['姓名'], '檔案連結': file.getUrl(), '檔名': name, '分類': it.type === 'file' ? '其他' : '照片' });
+    append_('F', { '時間': nowStr_(), '專案編號': p['編號'], '上傳人': me['姓名'], '檔案連結': file.getUrl(), '檔名': name, '分類': cat || (it.type === 'file' ? '其他' : '照片') });
     urls.push(file.getUrl());
     saved++;
   });
@@ -1109,7 +1142,7 @@ function help_() {
     '【轉派任務】專案負責人或主管把任務轉給別人，對方會收到 LINE 通知',
     '【專案總覽】所有專案的燈號、階段、任務與逾期狀況',
     '【新增專案】名稱 → 單位（自動編號 JK-HV-2601）→ 類型 → 目的 → 負責人 → 成員 → 截止日（成員開的專案要由提案單位主管核准）',
-    '【試驗報告】直接傳檔案或照片，選專案後存檔（網頁上傳時分類選「試驗報告」）',
+    '【上傳檔案】選專案 → 分類（試驗報告、審查紀錄、圖面…）→ 傳檔案或照片，傳完按「傳完了」',
     '【意見回饋】回報系統錯誤或提出建議，可附截圖；輸入「我的回饋」看處理進度',
     '',
     '其他：',
@@ -1288,7 +1321,7 @@ function qDate_(label, data) { return { type: 'action', action: { type: 'datetim
 function menuItems_() {
   return [qPost_('📝 每週更新', 'cmd:每週更新', '每週更新'), qPost_('➕ 新增任務', 'cmd:新增任務', '新增任務'),
     qPost_('📋 我的任務', 'cmd:我的任務', '我的任務'), qPost_('📊 專案總覽', 'cmd:專案總覽', '專案總覽'),
-    qPost_('📁 新增專案', 'cmd:新增專案', '新增專案'), qPost_('📖 使用說明', 'cmd:使用說明', '使用說明'),
+    qPost_('📁 新增專案', 'cmd:新增專案', '新增專案'), qPost_('📎 上傳檔案', 'cmd:上傳檔案', '上傳檔案'), qPost_('📖 使用說明', 'cmd:使用說明', '使用說明'),
     qPost_('💬 意見回饋', 'cmd:意見回饋', '意見回饋')];
 }
 function fbTypeItems_() { return [qPost_('🐞 錯誤回報', 'fbt:錯誤', '錯誤回報'), qPost_('💡 功能建議', 'fbt:建議', '功能建議'), qMsg_('取消', '取消')]; }
