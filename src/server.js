@@ -72,7 +72,11 @@ async function main() {
   app.use((req, res, next) => { res.set('X-Content-Type-Options', 'nosniff'); res.set('Referrer-Policy', 'same-origin'); next(); });
 
   app.get('/', (req, res) => res.redirect('/pm/'));
-  app.get('/healthz', (req, res) => res.json({ ok: true, sheets: store.sheets.size }));
+  const startedAt = new Date(Date.now() + 8 * 3600e3).toISOString().replace('T', ' ').slice(0, 19);
+  let version = '';
+  try { version = fs.readFileSync(path.join(cfg.dataDir, 'version.txt'), 'utf8').trim(); } catch (e) {}
+  app.get('/healthz', (req, res) => res.json({ ok: true, sheets: store.sheets.size, version, started: startedAt,
+    line: cfg.lineEnabled ? (cfg.lineSecret ? 'on' : 'on-no-secret') : 'off' }));
   app.get(['/pm', '/pm/'], (req, res) => {
     if (req.path === '/pm') return res.redirect('/pm/');
     res.set('Cache-Control', 'no-store');

@@ -97,6 +97,7 @@ function Wait-Healthy {
 $LockOld = if (Test-Path "$Root\package-lock.json") { (Get-FileHash "$Root\package-lock.json").Hash } else { '' }
 Write-Host '停止服務、更新程式…'
 Stop-ScheduledTask -TaskName 'JakerServer' -ErrorAction SilentlyContinue
+Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Where-Object { $_.CommandLine -like '*src\server.js*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 Start-Sleep -Seconds 3
 $ok = $false
 try {

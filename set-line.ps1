@@ -26,7 +26,17 @@ Remove-Item Env:JK_LINE_SECRET, Env:JK_LINE_TOKEN -ErrorAction SilentlyContinue
 if ($code -eq 0) {
   Stop-ScheduledTask -TaskName 'JakerServer' -ErrorAction SilentlyContinue
   Start-Sleep -Seconds 2
+  # 確認舊的程式真的停了，再啟動
+  Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Where-Object { $_.CommandLine -like '*src\server.js*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+  Start-Sleep -Seconds 2
   Start-ScheduledTask -TaskName 'JakerServer'
-  Write-Host '服務已重新啟動。' -ForegroundColor Green
+  $port = ((Get-Content .env -Encoding UTF8 | Where-Object { $_ -match '^\s*PORT\s*=' } | Select-Object -First 1) -split '=', 2)[1]
+  if (-not $port) { $port = '8080' }
+  $want = if ($c -eq '1') { 'on' } else { 'off' }
+  $h = $null
+  for ($i = 0; $i -lt 20; $i++) { Start-Sleep -Seconds 2; try { $h = Invoke-RestMethod "http://127.0.0.1:$($port.Trim())/healthz" -TimeoutSec 3; break } catch {} }
+  if (-not $h) { Write-Host '服務沒有啟動，請把 data\logs\server.log 最後幾行傳給 Claude。' -ForegroundColor Red }
+  elseif ($h.line -eq $want) { Write-Host ("服務已重新啟動，LINE 串接：" + $(if ($want -eq 'on') { '開啟' } else { '關閉' })) -ForegroundColor Green }
+  else { Write-Host ("服務已重新啟動，但 LINE 狀態是 " + $h.line + "（應該是 $want），請截圖給 Claude。") -ForegroundColor Red }
 } else { Write-Host '沒有變更設定。' -ForegroundColor Red }
 Read-Host '按 Enter 結束'
