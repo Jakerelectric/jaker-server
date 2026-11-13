@@ -75,7 +75,7 @@ const DUE_SOON_DAYS = 3;                  // 到期前幾天提醒
 const SH = { P: '專案', T: '任務', U: '每週更新', F: '照片', M: '成員', R: '意見回饋', E: '研究試驗單', D: '單位', C: '變更紀錄' };
 const HEAD = {
   P: ['編號', '專案名稱', '目的與預期成果', '負責人', '參與成員', '階段', '燈號', '開始日', '截止日', '卡關事項', '建立時間', '最近更新', '類型', '部門', '產品規格', '實際開案日', '實際結案日', '基準開始日', '基準結案日', '基準鎖定日', '基準鎖定人', '核准狀態', '申請人', '核准人', '核准時間', '退回原因'],
-  T: ['編號', '專案編號', '任務', '負責人', '完成日', '狀態', '完成時間', '建立人', '建立時間', '開始日', '實際開始日', '層級', '排序', '權重', '完成度', '進度回報日', '提醒延後至', '基準開始日', '基準完成日'],
+  T: ['編號', '專案編號', '任務', '負責人', '完成日', '狀態', '完成時間', '建立人', '建立時間', '開始日', '實際開始日', '層級', '排序', '權重', '完成度', '進度回報日', '提醒延後至', '基準開始日', '基準完成日', '申請完成日', '確認人'],
   U: ['時間', '專案編號', '填寫人', '燈號', '階段', '本週完成', '下週計畫', '卡關事項'],
   F: ['時間', '專案編號', '上傳人', '檔案連結', '檔名', '分類', '說明'],
   M: ['姓名', 'LINE userId', '角色', '綁定時間', '接收提醒', '公司信箱'],
@@ -84,7 +84,7 @@ const HEAD = {
   C: ['時間', '專案編號', '任務編號', '項目', '原值', '新值', '原因', '修改人'],
   E: ['試驗單編號', '專案編號', '試驗名稱', '試驗日期', '試驗人員', '試驗目的', '試驗條件與參數', '試驗結果', '判定', '附件', '建立人', '建立時間']
 };
-const FILE_CATS = ['客戶需求', '圖面', '規格書', '報價／合約', '試驗報告', '會議記錄', '照片', '其他'];
+const FILE_CATS = ['客戶需求', '圖面', '規格書', '報價／合約', '試驗報告', '審查紀錄', '會議記錄', '照片', '其他'];
 const FILE_MAX_MB = 20;   // 網頁上傳單一檔案上限
 const FB_TYPES = ['錯誤', '建議'];
 const FB_STATUS = ['待處理', '處理中', '已完成', '不採用'];
@@ -259,6 +259,7 @@ function handleEvent_(ev) {
   if (inp.data.indexOf('snz:') === 0) return reply_(rt, snoozeLine_(inp.data.slice(4), me));
   if (inp.data.indexOf('xfer:') === 0) return startTransfer_(uid, rt, me, inp.data.slice(5));
   if (inp.data.indexOf('pa:') === 0 || inp.data.indexOf('pr:') === 0) return approveLine_(uid, rt, me, inp.data.slice(0, 2), inp.data.slice(3));
+  if (inp.data.indexOf('tc:') === 0 || inp.data.indexOf('tj:') === 0) return confirmLine_(uid, rt, me, inp.data.slice(0, 2), inp.data.slice(3));
   if (inp.data.indexOf('pct:') === 0 && !(st && st.flow === 'prog')) {   // 從「我的任務」直接回報單一任務
     const a = inp.data.slice(4).split(':');
     return reply_(rt, progressLine_(a[0], Number(a[1]), me));
@@ -311,7 +312,7 @@ function startCommand_(cmd, me, uid, rt) {
       setState_(uid, { flow: 'fb', step: 'type', d: { files: [] } });
       return reply_(rt, txt_('💬 意見回饋\n系統哪裡怪怪的，或希望多什麼功能，都歡迎告訴我們。\n\n要回報哪一種？', fbTypeItems_()));
     case '我的回饋': return reply_(rt, myFeedback_(me));
-    case '試驗單': return askProject_(uid, rt, { flow: 'test', d: { files: [] } }, '🧪 要開哪個專案的研究試驗單？', me);
+    case '試驗單': return reply_(rt, txt_('🧪 研究試驗單已改成「上傳檔案」：\n直接在這裡傳試驗報告（PDF、照片、Word…），選專案後存檔；\n或在網頁儀表板的「專案資料」上傳，分類選「試驗報告」。', menuItems_()));
   }
   return reply_(rt, menu_());
 }
@@ -484,7 +485,7 @@ function continueFlow_(st, inp, me, uid, rt) {
       withLock_(function () {
         const t = rows_('T').filter(function (x) { return x['編號'] === d.code; })[0];
         if (!t) { msg = '找不到任務 ' + d.code; return; }
-        if (!canToggleTask_(me, projectByCode_(t['專案編號']), t)) { msg = '只有任務負責人、專案負責人或主管可以轉派這個任務。'; return; }
+        if (!canManageTasks_(me, projectByCode_(t['專案編號']))) { msg = '只有專案負責人或主管可以轉派任務。'; return; }
         if (t['負責人'] === to) { msg = d.code + ' 的負責人本來就是 ' + to + '。'; return; }
         transferTask_(t, to, me['姓名'], '');
         msg = '↪ 已轉派：' + d.code + ' ' + t['任務'] + '\n' + (t['負責人'] || '未指定') + ' → ' + to + '\n（已用 LINE 通知 ' + to + '）';
@@ -503,7 +504,7 @@ function continueFlow_(st, inp, me, uid, rt) {
       if (v === null && d.i < d.codes.length) return reply_(rt, progAsk_(d, '請點按鈕選完成度，或輸入 0～100 的數字。'));
       if (v !== null && v >= 0) {
         const t = rows_('T').filter(function (x) { return x['編號'] === code; })[0];
-        if (t && canToggleTask_(me, projectByCode_(t['專案編號']), t)) { withLock_(function () { const f = rows_('T').filter(function (x) { return x['編號'] === code; })[0]; if (f) saveProgress_(f, v); }); d.n++; }
+        if (t && canToggleTask_(me, projectByCode_(t['專案編號']), t)) { withLock_(function () { const f = rows_('T').filter(function (x) { return x['編號'] === code; })[0]; if (f && !isTaskClosed_(f)) saveProgress_(f, v, me); }); d.n++; }
       }
       if (v !== null) d.i++;
       if (d.i >= d.codes.length) {
@@ -599,6 +600,21 @@ function continueFlow_(st, inp, me, uid, rt) {
       const code = saveFeedback_({ type: d.type, content: inp.text, files: d.files || [] }, me['姓名'], 'LINE');
       return reply_(rt, txt_('✅ 已收到你的' + (d.type === '錯誤' ? '錯誤回報' : '建議') + '（' + code + '），謝謝！\n主管處理後會用 LINE 通知你。' +
         ((d.files || []).length ? '\n附件 ' + d.files.length + ' 個已一起存檔。' : ''), [qPost_('我的回饋', 'cmd:我的回饋', '我的回饋')].concat(menuItems_())));
+    }
+
+    // ===== 任務完成申請退回原因（專案負責人） =====
+    case 'tjr/reason': {
+      if (!inp.text) return reply_(rt, txt_('請輸入退回原因。', [qMsg_('取消', '取消')]));
+      clearState_(uid);
+      let msg = '';
+      withLock_(function () {
+        const t = rows_('T').filter(function (x) { return x['編號'] === d.code; })[0];
+        if (!t || t['狀態'] !== '待確認') { msg = d.code + ' 已經不是待確認狀態了。'; return; }
+        if (!canManageTasks_(me, projectByCode_(t['專案編號']))) { msg = '只有專案負責人或主管可以退回。'; return; }
+        rejectTask_(t, me, inp.text.slice(0, 200));
+        msg = '↩ 已退回 ' + d.code + '，已通知 ' + (t['負責人'] || '負責人') + '。';
+      });
+      return reply_(rt, menu_(msg));
     }
 
     // ===== 專案退回原因（核准人） =====
@@ -863,13 +879,16 @@ function completeTask_(code, me, rt) {
   const t = rows_('T').filter(function (x) { return x['編號'] === code; })[0];
   if (!t) return reply_(rt, txt_('找不到任務 ' + code + '。輸入「我的任務」可以看到自己的任務編號。'));
   if (t['狀態'] === '已完成') return reply_(rt, txt_(code + ' 已經是完成狀態了。', menuItems_()));
+  if (t['狀態'] === '待確認') return reply_(rt, txt_(code + ' 已申請完成，等待專案負責人確認。', menuItems_()));
   if (isContainer_(t)) return reply_(rt, txt_(code + ' 是主任務，底下的子任務全部完成後會自動完成。', menuItems_()));
   if (!canToggleTask_(me, projectByCode_(t['專案編號']), t)) return reply_(rt, txt_('只有任務負責人、專案負責人或主管可以標記 ' + code + '。', menuItems_()));
+  let r = '';
   withLock_(function () {
     const fresh = rows_('T').filter(function (x) { return x['編號'] === code; })[0];
-    if (fresh) taskDone_(fresh);
+    if (fresh) r = finishTask_(fresh, me);
   });
-  const left = rows_('T').filter(function (x) { return x['負責人'] === me['姓名'] && x['狀態'] !== '已完成'; }).length;
+  const left = rows_('T').filter(function (x) { return x['負責人'] === me['姓名'] && !isTaskClosed_(x); }).length;
+  if (r === 'wait') return reply_(rt, txt_('📨 已申請完成：' + code + ' ' + t['任務'] + '\n已通知 ' + (confirmersFor_(projectByCode_(t['專案編號'])).join('、') || '專案負責人') + ' 確認，確認後才算完成。\n（' + me['姓名'] + ' 還有 ' + left + ' 項未完成）', menuItems_()));
   return reply_(rt, txt_('✅ 完成：' + code + ' ' + t['任務'] + '\n（' + me['姓名'] + ' 還有 ' + left + ' 項未完成）', menuItems_()));
 }
 
@@ -878,7 +897,7 @@ function completeTask_(code, me, rt) {
 // =====================================================================
 function myTasks_(me) {
   const today = todayStr_();
-  const ts = rows_('T').filter(function (t) { return t['負責人'] === me['姓名'] && t['狀態'] !== '已完成' && !isContainer_(t); })
+  const ts = rows_('T').filter(function (t) { return t['負責人'] === me['姓名'] && !isTaskClosed_(t) && !isContainer_(t); })
     .sort(function (a, b) { return (a['完成日'] || '9999') < (b['完成日'] || '9999') ? -1 : 1; });
   if (!ts.length) return txt_('目前沒有未完成的任務 👍', menuItems_());
   const lines = ['📋 ' + me['姓名'] + ' 的未完成任務（' + ts.length + '）'];
@@ -892,7 +911,9 @@ function myTasks_(me) {
     if (!t['實際開始日']) items.push(qPost_('▶ 開始 ' + t['任務'], 'start:' + t['編號'], '開始 ' + t['編號']));
     else items.push(qPost_('✅ 完成 ' + t['任務'], 'done:' + t['編號'], '完成 ' + t['編號']));
   });
-  items.push(qPost_('↪ 轉派任務', 'cmd:轉派任務', '轉派任務'));
+  if (isAdmin_(me) || rows_('P').some(function (p) { return p['負責人'] === me['姓名']; })) items.push(qPost_('↪ 轉派任務', 'cmd:轉派任務', '轉派任務'));
+  const wait = rows_('T').filter(function (t) { return t['負責人'] === me['姓名'] && t['狀態'] === '待確認'; });
+  if (wait.length) lines.push('\n📨 已申請完成、等待確認：' + wait.map(function (t) { return t['編號']; }).join('、'));
   return txt_(lines.join('\n'), items);
 }
 // ----- 轉派任務 -----
@@ -918,8 +939,8 @@ function notifyTransfer_(t, from, to, byName, note) {
 /** LINE：轉派流程（code 空白＝先選任務） */
 function startTransfer_(uid, rt, me, code) {
   if (!code) {
-    const ts = rows_('T').filter(function (t) { return t['負責人'] === me['姓名'] && t['狀態'] !== '已完成' && !isContainer_(t); }).slice(0, 12);
-    if (!ts.length) { clearState_(uid); return reply_(rt, txt_('你目前沒有未完成的任務可以轉派。\n（主管或專案負責人也可以在網頁的任務清單按「↪ 轉派」）', menuItems_())); }
+    const ts = rows_('T').filter(function (t) { return !isTaskClosed_(t) && !isContainer_(t) && canManageTasks_(me, projectByCode_(t['專案編號'])); }).slice(0, 12);
+    if (!ts.length) { clearState_(uid); return reply_(rt, txt_('轉派任務要由專案負責人或主管操作；你負責的專案目前沒有可以轉派的任務。', menuItems_())); }
     setState_(uid, { flow: 'xfer', step: 'task', d: {} });
     return reply_(rt, txt_('↪ 要轉派哪一個任務？\n' + ts.map(function (t) { return t['編號'] + ' ' + t['任務']; }).join('\n') + '\n\n（點選，或輸入任務編號）',
       ts.map(function (t) { return qPost_(t['任務'], 'xt:' + t['編號'], '轉派 ' + t['編號']); }).concat([qMsg_('取消', '取消')])));
@@ -927,8 +948,8 @@ function startTransfer_(uid, rt, me, code) {
   const t = rows_('T').filter(function (x) { return x['編號'] === code; })[0];
   if (!t) { clearState_(uid); return reply_(rt, txt_('找不到任務 ' + code + '。', menuItems_())); }
   if (isContainer_(t)) { clearState_(uid); return reply_(rt, txt_(code + ' 是主任務，請轉派底下的子任務。', menuItems_())); }
-  if (t['狀態'] === '已完成') { clearState_(uid); return reply_(rt, txt_(code + ' 已經完成了。', menuItems_())); }
-  if (!canToggleTask_(me, projectByCode_(t['專案編號']), t)) { clearState_(uid); return reply_(rt, txt_('只有任務負責人、專案負責人或主管可以轉派 ' + code + '。', menuItems_())); }
+  if (isTaskClosed_(t)) { clearState_(uid); return reply_(rt, txt_(code + (t['狀態'] === '待確認' ? ' 已申請完成，等待確認中。' : ' 已經完成了。'), menuItems_())); }
+  if (!canManageTasks_(me, projectByCode_(t['專案編號']))) { clearState_(uid); return reply_(rt, txt_('只有專案負責人或主管可以轉派 ' + code + '。', menuItems_())); }
   setState_(uid, { flow: 'xfer', step: 'who', d: { code: code } });
   return reply_(rt, txt_('↪ ' + code + ' ' + t['任務'] + '\n目前負責人：' + (t['負責人'] || '未指定') + '\n\n要轉給誰？（點選，或輸入名字）', transferWhoItems_(code, me)));
 }
@@ -943,6 +964,7 @@ function transferWhoItems_(code, me) {
 /** 任務狀態文字：未開始／進行中 50% */
 function taskStateText_(t, today) {
   if (t['狀態'] === '已完成') return '已完成';
+  if (t['狀態'] === '待確認') return '📨 已申請完成，等待確認';
   if (!t['實際開始日']) {
     const ps = t['開始日'] || String(t['建立時間'] || '').slice(0, 10);
     return ps && ps < today ? '⚠ 應開始未開始（預定 ' + shortDate_(ps) + '）' : '未開始' + (ps ? '（預定 ' + shortDate_(ps) + ' 開始）' : '');
@@ -960,12 +982,13 @@ function startTask_(t, dateStr) {
   if (p && !p['實際開案日']) setCells_('P', p._row, { '實際開案日': d });
 }
 /** 回報完成度：100＝完成；大於 0 時自動補實際開始日 */
-function saveProgress_(t, pct) {
+function saveProgress_(t, pct, me) {
   pct = Math.max(0, Math.min(100, Math.round(Number(pct) || 0)));
   ensureHead_('T');
-  if (pct >= 100) { setCells_('T', t._row, { '完成度': '100', '進度回報日': todayStr_() }); taskDone_(t); return; }
+  if (pct >= 100) { setCells_('T', t._row, { '完成度': '100', '進度回報日': todayStr_() }); return me ? finishTask_(t, me) : (taskDone_(t), 'done'); }
   setCells_('T', t._row, { '完成度': String(pct), '進度回報日': todayStr_() });
   if (pct > 0 && !t['實際開始日']) startTask_(t);
+  return '';
 }
 function findTaskFor_(code, me) {
   const t = rows_('T').filter(function (x) { return x['編號'] === code; })[0];
@@ -985,8 +1008,10 @@ function startTaskLine_(code, me) {
 function progressLine_(code, pct, me) {
   const r = findTaskFor_(code, me);
   if (r.err) return txt_(r.err, menuItems_());
-  withLock_(function () { const f = rows_('T').filter(function (x) { return x['編號'] === code; })[0]; if (f) saveProgress_(f, pct); });
-  return txt_((pct >= 100 ? '✅ 已完成：' : '📊 已回報 ' + pct + '%：') + code + ' ' + r.t['任務'], menuItems_());
+  if (isTaskClosed_(r.t)) return txt_(code + (r.t['狀態'] === '待確認' ? ' 已申請完成，等待確認中。' : ' 已經完成了。'), menuItems_());
+  let res = '';
+  withLock_(function () { const f = rows_('T').filter(function (x) { return x['編號'] === code; })[0]; if (f) res = saveProgress_(f, pct, me); });
+  return txt_((res === 'wait' ? '📨 已回報 100%，已申請完成（等待專案負責人確認）：' : pct >= 100 ? '✅ 已完成：' : '📊 已回報 ' + pct + '%：') + code + ' ' + r.t['任務'], menuItems_());
 }
 /** snz:代碼,代碼:天數 → 這段期間不再提醒「應開始未開始」 */
 function snoozeLine_(arg, me) {
@@ -1005,7 +1030,7 @@ function pct1_(v) { return v === null || v === undefined ? '—' : Number(v).toF
 function addDays_(s, n) { return new Date(Date.parse(s + 'T00:00:00Z') + n * 86400000).toISOString().slice(0, 10); }
 /** LINE：逐一回報自己進行中任務的完成度 */
 function startProgress_(uid, rt, me) {
-  const ts = rows_('T').filter(function (t) { return t['負責人'] === me['姓名'] && t['狀態'] !== '已完成' && !isContainer_(t); })
+  const ts = rows_('T').filter(function (t) { return t['負責人'] === me['姓名'] && !isTaskClosed_(t) && !isContainer_(t); })
     .sort(function (a, b) { return (a['實際開始日'] ? 0 : 1) - (b['實際開始日'] ? 0 : 1) || ((a['完成日'] || '9999') < (b['完成日'] || '9999') ? -1 : 1); }).slice(0, 15);
   if (!ts.length) return reply_(rt, txt_('目前沒有未完成的任務 👍', menuItems_()));
   const d = { codes: ts.map(function (t) { return t['編號']; }), i: 0, n: 0 };
@@ -1070,11 +1095,6 @@ function projectDetail_(code) {
     if (u['下週計畫']) L.push('計畫：' + u['下週計畫']);
     if (u['卡關事項']) L.push('卡關：' + u['卡關事項']);
   });
-  const tests = rows_('E').filter(function (e) { return e['專案編號'] === code; });
-  if (tests.length) {
-    L.push('\n【研究試驗單 ' + tests.length + ' 份】');
-    tests.slice(-3).reverse().forEach(function (e) { L.push(e['試驗單編號'] + ' ' + e['試驗名稱'] + '｜' + e['判定'] + '｜' + e['試驗日期']); });
-  }
   if (photos.length) L.push('\n📎 照片與檔案 ' + photos.length + ' 個\n' + projectFolder_(p).getUrl());
   return txt_(L.join('\n'), [qPost_('更新這個專案', 'cmd:每週更新', '每週更新')].concat(menuItems_()));
 }
@@ -1085,11 +1105,11 @@ function help_() {
     '',
     '【每週更新】選專案 →（階段）→ 本週完成 → 下週計畫 → 卡關；燈號依進度與日期自動判斷',
     '【新增任務】選專案 → 任務內容 → 主任務 → 負責人 → 預定完成日',
-    '【我的任務】看自己未完成的任務；未開始的按「▶ 開始」，做完按「✅ 完成」（完成度依經過時間自動推算）',
-    '【轉派任務】把自己的任務轉給別人（例如主管轉給部屬），對方會收到 LINE 通知',
+    '【我的任務】看自己未完成的任務；未開始的按「▶ 開始」，做完按「✅ 完成」送專案負責人確認，確認後才算完成（完成度依經過時間自動推算）',
+    '【轉派任務】專案負責人或主管把任務轉給別人，對方會收到 LINE 通知',
     '【專案總覽】所有專案的燈號、階段、任務與逾期狀況',
     '【新增專案】名稱 → 單位（自動編號 JK-HV-2601）→ 類型 → 目的 → 負責人 → 成員 → 截止日（成員開的專案要由提案單位主管核准）',
-    '【試驗單】選專案 → 試驗名稱 → 條件與參數 → 結果 → 判定，可附照片；編號自動產生（例如 JK-HV-2601-001）',
+    '【試驗報告】直接傳檔案或照片，選專案後存檔（網頁上傳時分類選「試驗報告」）',
     '【意見回饋】回報系統錯誤或提出建議，可附截圖；輸入「我的回饋」看處理進度',
     '',
     '其他：',
@@ -1148,8 +1168,11 @@ function dailyOverdue() {
 /** 組出每個人今天要收到的提醒訊息 { 姓名: 訊息 }（dow：1＝週一） */
 function dailyDigest_(today, dow) {
   const soon = addDays_(today, DUE_SOON_DAYS), by = {};
-  function bucket(n) { return (by[n] = by[n] || { startToday: [], notStarted: [], soon: [], due: [] }); }
-  rows_('T').filter(function (t) { return t['狀態'] !== '已完成' && t['負責人'] && !isContainer_(t); }).forEach(function (t) {
+  function bucket(n) { return (by[n] = by[n] || { startToday: [], notStarted: [], soon: [], due: [], wait: [] }); }
+  rows_('T').filter(function (t) { return t['狀態'] === '待確認'; }).forEach(function (t) {
+    confirmersFor_(projectByCode_(t['專案編號'])).forEach(function (n) { bucket(n).wait.push(t); });
+  });
+  rows_('T').filter(function (t) { return !isTaskClosed_(t) && t['負責人'] && !isContainer_(t); }).forEach(function (t) {
     const ps = t['開始日'] || String(t['建立時間'] || '').slice(0, 10), due = t['完成日'];
     if (due && due <= today) { bucket(t['負責人']).due.push(t); return; }
     if (!t['實際開始日'] && ps) {
@@ -1164,6 +1187,7 @@ function dailyDigest_(today, dow) {
   Object.keys(by).forEach(function (name) {
     const b = by[name], L = ['📌 今日任務提醒（' + shortDate_(today) + '）'], items = [], unstarted = [];
     function line(t, note) { return '・' + t['編號'] + ' ' + t['任務'] + '（' + t['專案編號'] + '）' + (note || ''); }
+    if (b.wait.length) L.push('\n📨 等你確認完成：\n' + b.wait.map(function (t) { return line(t, '　' + (t['負責人'] || '') + ' 於 ' + shortDate_(t['申請完成日'] || '') + ' 申請'); }).join('\n'));
     if (b.due.length) L.push('\n⚠ 今天到期／已逾期：\n' + b.due.map(function (t) { return line(t, dueNote_(t['完成日'], today)); }).join('\n'));
     if (b.startToday.length) L.push('\n▶ 今天預定開始：\n' + b.startToday.map(function (t) { return line(t); }).join('\n'));
     if (b.notStarted.length) L.push('\n⏳ 已過預定開始日、還沒開始：\n' + b.notStarted.map(function (t) { return line(t, '　預定 ' + shortDate_(t['開始日'] || String(t['建立時間']).slice(0, 10))); }).join('\n'));
@@ -1172,6 +1196,7 @@ function dailyDigest_(today, dow) {
       unstarted.push(t['編號']);
       if (items.length < 9) items.push(qPost_('▶ 開始 ' + t['任務'], 'start:' + t['編號'], '開始 ' + t['編號']));
     });
+    b.wait.slice(0, 4).forEach(function (t) { items.push(qPost_('✅ 確認 ' + t['任務'], 'tc:' + t['編號'], '確認完成 ' + t['編號'])); });
     if (unstarted.length) items.push(qPost_('⏸ 未開始的延後 3 天', 'snz:' + unstarted.slice(0, 20).join(',') + ':3', '延後提醒 3 天'));
     items.push(qPost_('📋 我的任務', 'cmd:我的任務', '我的任務'));
     out[name] = txt_(L.join('\n'), items);
@@ -1264,7 +1289,7 @@ function menuItems_() {
   return [qPost_('📝 每週更新', 'cmd:每週更新', '每週更新'), qPost_('➕ 新增任務', 'cmd:新增任務', '新增任務'),
     qPost_('📋 我的任務', 'cmd:我的任務', '我的任務'), qPost_('📊 專案總覽', 'cmd:專案總覽', '專案總覽'),
     qPost_('📁 新增專案', 'cmd:新增專案', '新增專案'), qPost_('📖 使用說明', 'cmd:使用說明', '使用說明'),
-    qPost_('🧪 試驗單', 'cmd:試驗單', '試驗單'), qPost_('💬 意見回饋', 'cmd:意見回饋', '意見回饋')];
+    qPost_('💬 意見回饋', 'cmd:意見回饋', '意見回饋')];
 }
 function fbTypeItems_() { return [qPost_('🐞 錯誤回報', 'fbt:錯誤', '錯誤回報'), qPost_('💡 功能建議', 'fbt:建議', '功能建議'), qMsg_('取消', '取消')]; }
 function menu_(prefix) { return txt_((prefix ? prefix + '\n\n' : '') + '請選擇功能 👇', menuItems_()); }
@@ -1580,6 +1605,51 @@ function deptKidItems_(code) {
     .concat([qPost_(ds[code] + '（部門案）', 'deptx:' + code, ds[code] + '（部門案）'), qMsg_('取消', '取消')]);
 }
 function deptListText_() { return '\n（也可以直接輸入單位代碼，例如 HV）'; }
+/** 研究試驗單改用上傳檔案：把舊的試驗單轉成檔案（分類「試驗報告」）；只做一次，原本的試驗單資料保留在資料庫 */
+function migrateTestsToFiles_() {
+  const P = PropertiesService.getScriptProperties();
+  if (P.getProperty('TESTS_TO_FILES')) return 0;
+  let n = 0;
+  withLock_(function () {
+    const es = rows_('E');
+    if (es.length) ensureHead_('F');
+    es.forEach(function (e) {
+      const p = projectByCode_(e['專案編號']);
+      if (!p) return;
+      const name = (e['試驗單編號'] + ' 研究試驗單 ' + (e['試驗名稱'] || '')).replace(/[\\/:*?"<>|]+/g, '_').trim().slice(0, 120) + '.html';
+      const file = projectFolder_(p).createFile(Utilities.newBlob(testHtml_(e, p), 'text/html', name));
+      append_('F', { '時間': e['建立時間'] || nowStr_(), '專案編號': p['編號'], '上傳人': e['建立人'] || e['試驗人員'] || '', '檔案連結': file.getUrl(),
+        '檔名': name, '分類': '試驗報告', '說明': '由研究試驗單 ' + e['試驗單編號'] + ' 轉存' });
+      n++;
+    });
+    P.setProperty('TESTS_TO_FILES', nowStr_() + '（' + n + ' 份）');
+  });
+  return n;
+}
+/** 研究試驗單的版面（與原本網頁列印的版面相同） */
+function testHtml_(e, p) {
+  const esc = function (v) { return String(v == null ? '' : v).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+  const slash = function (v) { const m = String(v || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? m[1] + '/' + Number(m[2]) + '/' + Number(m[3]) : ''; };
+  const row = function (k, v, cls) { return '<tr><th style="width:18%">' + k + '</th><td colspan="3" class="' + (cls || '') + '">' + esc(v) + '</td></tr>'; };
+  const files = String(e['附件'] || '').split(/\n/).filter(Boolean);
+  const unit = depts_()[p['部門'] || deptOfCode_(p['編號'])] || '';
+  const css = '@page{size:A4 portrait;margin:6mm}*{box-sizing:border-box}body{margin:0;font-family:"Microsoft JhengHei","PingFang TC","Noto Sans TC",sans-serif;color:#000}' +
+    '.note{background:#F4F6FA;border-bottom:1px solid #ccc;padding:8px 16px;font-size:13px}@media print{.note{display:none}}.page{padding:8mm 10mm;max-width:210mm;margin:0 auto}' +
+    '.hd{display:grid;grid-template-columns:1fr auto 1fr;align-items:end;margin-bottom:6px}.logo{font-weight:900;color:#0064F3;font-size:15px}.unit{font-size:11px}' +
+    '.ttl{text-align:center;font-size:14px;line-height:1.5}.ttl strong{display:block;font-size:15px}.dt{text-align:right;font-size:11px}' +
+    'table{border-collapse:collapse;width:100%;table-layout:fixed}th,td{border:1px solid #000;font-size:12px;padding:4px 6px;vertical-align:middle;overflow-wrap:anywhere}th{font-weight:normal;background:#F2F2F2}' +
+    '.tall{height:110px;vertical-align:top;white-space:pre-wrap}.sign td{height:48px}a{color:#0064F3}';
+  return '<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + esc(e['試驗單編號'] + ' 研究試驗單') + '</title><style>' + css + '</style></head><body>' +
+    '<div class="note">由原本的研究試驗單轉存。要列印或存成 PDF：按 Ctrl+P（手機用瀏覽器的分享 → 列印）。</div><div class="page">' +
+    '<div class="hd"><div><div class="logo">JK JAKER ELECTRIC</div><div class="unit">' + esc(unit) + '</div></div><div class="ttl"><strong>傑克電機股份有限公司</strong>研究試驗單</div><div class="dt">日期：' + slash(e['試驗日期']) + '</div></div>' +
+    '<table><tr><th style="width:18%">試驗單編號</th><td style="width:32%">' + esc(e['試驗單編號']) + '</td><th style="width:18%">試驗日期</th><td>' + slash(e['試驗日期']) + '</td></tr>' +
+    '<tr><th>案件編號</th><td>' + esc(e['專案編號']) + '</td><th>試驗人員</th><td>' + esc(e['試驗人員']) + '</td></tr>' +
+    row('產品名稱', (p['專案名稱'] || '') + (p['產品規格'] ? '／' + p['產品規格'] : '')) + row('試驗名稱', e['試驗名稱']) +
+    row('試驗目的', e['試驗目的'], 'tall') + row('試驗條件與參數', e['試驗條件與參數'], 'tall') + row('試驗結果', e['試驗結果'], 'tall') + row('判定', e['判定']) +
+    '<tr><th>附件</th><td colspan="3">' + (files.length ? files.map(function (u, i) { return '<a href="' + esc(u) + '">附件 ' + (i + 1) + '</a>'; }).join('　') : '無') + '</td></tr>' +
+    '</table><table class="sign" style="margin-top:10px"><tr><th>試驗人員</th><th>審核</th><th>核准</th></tr><tr><td></td><td></td><td></td></tr></table>' +
+    '<p style="font-size:11px;color:#555">建立：' + esc(e['建立人']) + ' ' + esc(e['建立時間']) + '</p></div></body></html>';
+}
 /** 研究試驗單編號：案件編號-流水號三碼，例如 JK-HV-2601-001 */
 function nextTestCode_(pid) {
   const pre = pid + '-';
@@ -1599,8 +1669,10 @@ function autoDates_(p, stage) {
   return o;
 }
 /** 標記任務完成；沒填實際開始日時，以預定開始日（不晚於今天）補上 */
-function taskDone_(t) {
-  const today = todayStr_(), cells = { '狀態': '已完成', '完成時間': nowStr_() };
+function taskDone_(t, dateStr, by) {
+  const today = todayStr_(), d = dateStr && dateStr < today ? dateStr : today;
+  const cells = { '狀態': '已完成', '完成時間': d === today ? nowStr_() : d + ' 00:00' };
+  if (by !== undefined) cells['確認人'] = by;
   if (!t['實際開始日']) cells['實際開始日'] = t['開始日'] && t['開始日'] < today ? t['開始日'] : today;
   setCells_('T', t._row, cells);
   const p = projectByCode_(t['專案編號']);
@@ -1898,11 +1970,38 @@ function api_addTask(f) {
 
 function api_setTaskDone(code, done) {
   return webWrite_(function (me) {
+    ensureHead_('T');
     const t = rows_('T').filter(function (x) { return x['編號'] === code; })[0];
     if (!t) throw new Error('找不到任務 ' + code);
-    if (!canToggleTask_(me, projectByCode_(t['專案編號']), t)) throw new Error('只有任務負責人、專案負責人或主管可以標記這個任務');
+    const p = projectByCode_(t['專案編號']);
+    if (!canToggleTask_(me, p, t)) throw new Error('只有任務負責人、專案負責人或主管可以標記這個任務');
     if (isContainer_(t)) throw new Error('主任務會在底下的子任務全部完成後自動完成');
-    if (done) taskDone_(t); else setCells_('T', t._row, { '狀態': '未完成', '完成時間': '' });
+    const mgr = canManageTasks_(me, p);
+    if (done) {
+      if (t['狀態'] === '已完成') throw new Error('這個任務已經完成了');
+      if (t['狀態'] === '待確認' && !mgr) throw new Error('已申請完成，等待專案負責人確認');
+      finishTask_(t, me);
+    } else {
+      if (t['狀態'] === '已完成' && !mgr) throw new Error('已確認完成的任務，要由專案負責人或主管改回未完成');
+      setCells_('T', t._row, { '狀態': '未完成', '完成時間': '', '申請完成日': '', '確認人': '' });
+    }
+  });
+}
+/** 專案負責人／主管：確認或退回任務的完成申請 */
+function api_confirmTask(code, ok, f) {
+  return webWrite_(function (me) {
+    ensureHead_('T');
+    const t = rows_('T').filter(function (x) { return x['編號'] === code; })[0];
+    if (!t) throw new Error('找不到任務 ' + code);
+    if (t['狀態'] !== '待確認') throw new Error('這個任務不是「待確認」狀態');
+    if (!canManageTasks_(me, projectByCode_(t['專案編號']))) throw new Error('只有專案負責人或主管可以確認完成');
+    f = f || {};
+    if (ok) confirmTask_(t, me, cleanDate_(f.date));
+    else {
+      const reason = cleanText_(f.reason, 200);
+      if (!reason) throw new Error('請填寫退回原因');
+      rejectTask_(t, me, reason);
+    }
   });
 }
 
@@ -1912,7 +2011,19 @@ function api_updateTask(code, f) {
     ensureHead_('T');
     const t = rows_('T').filter(function (x) { return x['編號'] === code; })[0];
     if (!t) throw new Error('找不到任務 ' + code);
-    if (!canManageTasks_(me, projectByCode_(t['專案編號']))) throw new Error('只有專案負責人或主管可以修改任務');
+    const p0 = projectByCode_(t['專案編號']);
+    if (!canManageTasks_(me, p0)) {
+      // 任務負責人：只能填實際開始日；其他欄位由專案負責人填（稽核）
+      if (!canToggleTask_(me, p0, t) || isContainer_(t)) throw new Error('只有專案負責人或主管可以修改任務');
+      const as = cleanDate_(f.actualStart);
+      if (as && as > todayStr_()) throw new Error('實際開始日不能晚於今天');
+      if (!as && isTaskClosed_(t)) throw new Error('任務已申請完成，不能清除實際開始日');
+      if (as !== (t['實際開始日'] || '')) {
+        setCells_('T', t._row, { '實際開始日': as, '提醒延後至': '' });
+        if (as && p0 && !p0['實際開案日']) setCells_('P', p0._row, { '實際開案日': as });
+      }
+      return;
+    }
     const title = cleanText_(f.title, 120);
     if (!title) throw new Error('請輸入任務內容');
     const start = cleanDate_(f.start), due = cleanDate_(f.due);
@@ -1940,11 +2051,17 @@ function api_updateTask(code, f) {
       cells['實際開始日'] = as;
       const curEnd = t['狀態'] === '已完成' ? String(t['完成時間']).slice(0, 10) : '';
       if (ae !== curEnd) {
-        if (ae) { cells['狀態'] = '已完成'; cells['完成時間'] = ae === todayStr_() ? nowStr_() : ae + ' 00:00'; }
-        else { cells['狀態'] = '未完成'; cells['完成時間'] = ''; }
+        if (ae) { cells['狀態'] = '已完成'; cells['完成時間'] = ae === todayStr_() ? nowStr_() : ae + ' 00:00'; cells['確認人'] = me['姓名']; }
+        else { cells['狀態'] = '未完成'; cells['完成時間'] = ''; cells['申請完成日'] = ''; cells['確認人'] = ''; }
       }
     }
     setCells_('T', t._row, cells);
+    if (t['狀態'] === '待確認' && cells['狀態'] === '已完成') {   // 在修改視窗填實際完成日＝確認完成申請
+      logChange_(t['專案編號'], code, '確認完成', '待確認', '已完成（' + String(cells['完成時間']).slice(0, 10) + '）', '', me['姓名']);
+      const om = memberByName_(t['負責人']);
+      if (om && om['姓名'] !== me['姓名'] && om['LINE userId'] && om['接收提醒'] !== '否')
+        pushLater_(om['LINE userId'], txt_('✅ ' + me['姓名'] + ' 已確認你的任務完成\n' + code + ' ' + t['任務'] + '\n實際完成日：' + String(cells['完成時間']).slice(0, 10)));
+    }
     if (cells['負責人'] !== (t['負責人'] || '') && cells['負責人']) {   // 在修改視窗換了負責人：一樣記錄並通知
       logChange_(t['專案編號'], code, '轉派負責人', t['負責人'] || '未指定', cells['負責人'], cleanText_(f.reason, 200), me['姓名']);
       notifyTransfer_(t, t['負責人'] || '', cells['負責人'], me['姓名'], '');
@@ -1972,7 +2089,7 @@ function api_transferTask(code, to, note) {
     const t = rows_('T').filter(function (x) { return x['編號'] === code; })[0];
     if (!t) throw new Error('找不到任務 ' + code);
     if (isContainer_(t)) throw new Error('主任務請轉派底下的子任務');
-    if (!canToggleTask_(me, projectByCode_(t['專案編號']), t)) throw new Error('只有任務負責人、專案負責人或主管可以轉派這個任務');
+    if (!canManageTasks_(me, projectByCode_(t['專案編號']))) throw new Error('只有專案負責人或主管可以轉派任務');
     to = cleanText_(to, 20);
     if (!to || !memberByName_(to)) throw new Error('請選擇成員表裡的人');
     if (to === t['負責人']) throw new Error('負責人本來就是 ' + to);
@@ -2002,7 +2119,8 @@ function api_setProgress(code, pct) {
     if (!canToggleTask_(me, projectByCode_(t['專案編號']), t)) throw new Error('只有任務負責人、專案負責人或主管可以回報這個任務');
     const n = Number(pct);
     if (isNaN(n) || n < 0 || n > 100) throw new Error('完成度請填 0～100');
-    saveProgress_(t, n);
+    if (isTaskClosed_(t)) throw new Error(t['狀態'] === '待確認' ? '這個任務已申請完成，等待確認中' : '這個任務已經完成了');
+    saveProgress_(t, n, me);
   });
 }
 /** 鎖定基準計畫（主管）：把目前的預定日期存成基準；之後改預定日期要填原因並留紀錄 */
@@ -2357,6 +2475,72 @@ function isOwner_(m) { return !!m && m['角色'] === '管理員'; }
 function canManageTasks_(m, p) { if (isPending_(p)) return false; return isAdmin_(m) || (!!m && !!p && p['負責人'] === m['姓名']); }
 function canUpdate_(m, p) { if (isPending_(p)) return false; return canManageTasks_(m, p) || (!!m && !!p && splitNames_(p['參與成員']).indexOf(m['姓名']) >= 0); }
 function canToggleTask_(m, p, t) { if (isPending_(p)) return false; return canManageTasks_(m, p) || (!!m && !!t && t['負責人'] === m['姓名']); }
+
+// ----- 任務完成要由專案總負責人確認（稽核）：任務負責人只能「申請完成」 -----
+/** 對任務負責人來說已經做完（已完成，或已申請完成等待確認） */
+function isTaskClosed_(t) { return t['狀態'] === '已完成' || t['狀態'] === '待確認'; }
+/** 誰會收到確認通知：專案負責人；沒有負責人或負責人沒綁 LINE 時，給管理員 */
+function confirmersFor_(p) {
+  const pm = p && p['負責人'] ? memberByName_(p['負責人']) : null;
+  if (pm && pm['LINE userId']) return [pm['姓名']];
+  return rows_('M').filter(function (m) { return isOwner_(m); }).map(function (m) { return m['姓名']; });
+}
+/** 任務負責人按「完成」：能直接確認的人（專案負責人、主管、管理員）直接完成，其他人變成「待確認」並通知專案負責人 */
+function finishTask_(t, me, dateStr) {
+  const p = projectByCode_(t['專案編號']);
+  if (canManageTasks_(me, p)) { taskDone_(t, dateStr, me['姓名']); return 'done'; }
+  ensureHead_('T');
+  const today = todayStr_(), d = dateStr && dateStr < today ? dateStr : today;
+  const cells = { '狀態': '待確認', '申請完成日': d, '確認人': '' };
+  if (!t['實際開始日']) cells['實際開始日'] = t['開始日'] && t['開始日'] < d ? t['開始日'] : d;
+  setCells_('T', t._row, cells);
+  if (p && !p['實際開案日']) setCells_('P', p._row, { '實際開案日': cells['實際開始日'] || d });
+  logChange_(t['專案編號'], t['編號'], '申請完成', '', d, '', me['姓名']);
+  const head = t['編號'] + ' ' + t['任務'] + '\n專案：' + t['專案編號'] + (p ? ' ' + p['專案名稱'] : '');
+  confirmersFor_(p).forEach(function (n) {
+    const m = memberByName_(n);
+    if (!m || !m['LINE userId'] || m['接收提醒'] === '否') return;
+    pushLater_(m['LINE userId'], txt_('📨 ' + me['姓名'] + ' 申請任務完成，請你確認\n\n' + head + '\n申請完成日：' + d +
+      '\n\n請確認任務是否真的完成；也可以到網頁儀表板確認或修改實際完成日。',
+      [qPost_('✅ 確認完成', 'tc:' + t['編號'], '確認完成 ' + t['編號']), qPost_('↩ 退回', 'tj:' + t['編號'], '退回 ' + t['編號'])]));
+  });
+  return 'wait';
+}
+function confirmTask_(t, me, dateStr) {
+  const d = dateStr || t['申請完成日'] || todayStr_();
+  taskDone_(t, d, me['姓名']);
+  logChange_(t['專案編號'], t['編號'], '確認完成', '待確認', '已完成（' + d + '）', '', me['姓名']);
+  const m = memberByName_(t['負責人']);
+  if (m && m['姓名'] !== me['姓名'] && m['LINE userId'] && m['接收提醒'] !== '否')
+    pushLater_(m['LINE userId'], txt_('✅ ' + me['姓名'] + ' 已確認你的任務完成\n' + t['編號'] + ' ' + t['任務'] + '\n實際完成日：' + d));
+}
+function rejectTask_(t, me, reason) {
+  setCells_('T', t._row, { '狀態': '未完成', '申請完成日': '', '確認人': '', '完成時間': '' });
+  logChange_(t['專案編號'], t['編號'], '退回完成申請', '待確認', '未完成', reason, me['姓名']);
+  const m = memberByName_(t['負責人']);
+  if (m && m['姓名'] !== me['姓名'] && m['LINE userId'] && m['接收提醒'] !== '否')
+    pushLater_(m['LINE userId'], txt_('↩ ' + me['姓名'] + ' 退回了你的完成申請\n' + t['編號'] + ' ' + t['任務'] + '\n原因：' + reason + '\n\n處理好之後再按一次「✅ 完成」。',
+      [qPost_('✅ 完成 ' + t['任務'], 'done:' + t['編號'], '完成 ' + t['編號']), qPost_('📋 我的任務', 'cmd:我的任務', '我的任務')]));
+}
+/** LINE：專案負責人按「確認完成／退回」 */
+function confirmLine_(uid, rt, me, act, code) {
+  const t = rows_('T').filter(function (x) { return x['編號'] === code; })[0];
+  if (!t) return reply_(rt, menu_('找不到任務 ' + code + '，可能已經被刪除了。'));
+  if (t['狀態'] !== '待確認') return reply_(rt, menu_(code + ' 目前不是待確認狀態（' + (t['狀態'] || '未完成') + '）。'));
+  if (!canManageTasks_(me, projectByCode_(t['專案編號']))) return reply_(rt, menu_('只有專案負責人或主管可以確認 ' + code + '。'));
+  if (act === 'tc') {
+    let msg = '';
+    withLock_(function () {
+      const f = rows_('T').filter(function (x) { return x['編號'] === code; })[0];
+      if (!f || f['狀態'] !== '待確認') { msg = code + ' 已經處理過了。'; return; }
+      confirmTask_(f, me);
+      msg = '✅ 已確認完成：' + code + ' ' + f['任務'] + '\n實際完成日：' + (f['申請完成日'] || todayStr_()) + '\n（要改實際完成日，可以到網頁儀表板修改）';
+    });
+    return reply_(rt, menu_(msg));
+  }
+  setState_(uid, { flow: 'tjr', step: 'reason', d: { code: code } });
+  return reply_(rt, txt_('↩ 退回 ' + code + ' ' + t['任務'] + '\n請輸入退回原因（' + (t['負責人'] || '負責人') + ' 會看到）：', [qMsg_('取消', '取消')]));
+}
 
 // ----- 專案核准：成員開的專案由提案單位的主管核准（待核准、退回的專案還不能新增任務、更新、上傳） -----
 function isPending_(p) { return !!p && (p['核准狀態'] === '待核准' || p['核准狀態'] === '退回'); }

@@ -53,7 +53,8 @@ const TABLES = {
     '任務': ['title', V(200)], '完成日': ['end_date', 'DATE', 1], '完成時間': ['done_at', 'DATETIME'],
     '實際開始日': ['actual_start', 'DATE'], '層級': ['level', 'TINYINT'], '權重': ['weight', 'DOUBLE'],
     '完成度': ['progress', 'DOUBLE'], '進度回報日': ['progress_date', 'DATE'], '提醒延後至': ['snooze_until', 'DATE'],
-    '基準開始日': ['baseline_start', 'DATE'], '基準完成日': ['baseline_end', 'DATE']
+    '基準開始日': ['baseline_start', 'DATE'], '基準完成日': ['baseline_end', 'DATE'],
+    '申請完成日': ['done_request_date', 'DATE'], '確認人': ['confirmed_by', NAME]
   },
   pm_updates: { '填寫人': ['author', NAME, 1], '本週完成': ['done_this_week', 'TEXT'], '下週計畫': ['plan_next_week', 'TEXT'] },
   pm_files: { '上傳人': ['uploader', NAME, 1], '檔案連結': ['file_url', V(500)], '檔名': ['file_name', V(255)], '分類': ['category', SHORT] },

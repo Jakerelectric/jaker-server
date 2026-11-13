@@ -157,6 +157,7 @@ async function main() {
     const name = encodeURIComponent(m.name);
     res.set('Content-Type', m.mime || 'application/octet-stream');
     res.set('Content-Disposition', (req.query.dl ? 'attachment' : 'inline') + "; filename*=UTF-8''" + name);
+    res.set('Content-Security-Policy', 'sandbox');   // 上傳的 HTML 等檔案不能執行程式
     res.sendFile(pm.drive._path(m.id));
   });
   app.get('/pm/drive/folder/:id', (req, res) => {
@@ -171,6 +172,10 @@ async function main() {
       '</title><body style="font-family:system-ui,\'Microsoft JhengHei\',sans-serif;max-width:760px;margin:24px auto;padding:0 16px;line-height:1.8">' +
       up + '<h1 style="font-size:20px">' + esc(m.name) + '</h1><ul style="padding-left:1.2em">' + (rows || '<li>（沒有檔案）</li>') + '</ul></body>');
   });
+
+  // 研究試驗單改用上傳檔案：舊的試驗單轉成檔案（只做一次）
+  run('migrateTests', () => pm.call('migrateTestsToFiles_')).then(n => { if (n) log('已把 ' + n + ' 份研究試驗單轉成檔案（分類：試驗報告）'); })
+    .catch(e => log('研究試驗單轉檔失敗', e));
 
   // ===== 系統更新（只有管理員）：/pm/admin/update =====
   // 按下更新 → 執行 Windows 排程工作 JakerUpdate（以 SYSTEM 身分跑 update.ps1 -Auto，失敗會自動還原）

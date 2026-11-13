@@ -289,6 +289,7 @@ table.tt{border-collapse:collapse;font-size:13px;white-space:nowrap;min-width:10
 .t-state{display:inline-block;font-size:11px;padding:1px 7px;border-radius:10px;background:var(--sunken);color:var(--muted)}
 .t-state.doing{background:var(--accent-soft);color:var(--accent)}
 .t-state.miss{background:#FBE9E9;color:var(--bad)}
+.t-state.wait{background:#FFF3D6;color:#8A5A00}
 .g-bar.bl{top:2px;height:3px;background:#5B6B82;opacity:.55;border-radius:2px;min-width:2px}
 .aptag{font-size:11px;font-weight:600;border-radius:4px;padding:0 6px;line-height:1.7;margin-left:6px;background:var(--warn-soft);color:var(--warn)}
 .aptag.rej{background:var(--bad-soft,#fdecec);color:var(--bad,#c0392b)}
@@ -520,7 +521,7 @@ table.ut{border-collapse:collapse;width:100%;font-size:14px}
         <ol class="log" id="d-updates"></ol>
       </section>
     </div>
-    <section class="panel">
+    <section class="panel" hidden>
       <div class="panel-head"><h2>研究試驗單</h2><button class="btn small" id="btn-new-test" type="button">新增試驗單</button></div>
       <p class="hint">開發過程的各項試驗，請留存試驗條件、參數及結果。編號自動產生（案件編號-001）；在 LINE 按「🧪 試驗單」也能開單並附上照片。</p>
       <ul class="tests" id="d-tests"></ul>
@@ -969,7 +970,7 @@ function openDetail(code){
 
 // ===== 專案資料 =====
 var FCAT = "";
-function fileCats(){ return D.fileCats || ["客戶需求","圖面","規格書","報價／合約","試驗報告","會議記錄","照片","其他"]; }
+function fileCats(){ return D.fileCats || ["客戶需求","圖面","規格書","報價／合約","試驗報告","審查紀錄","會議記錄","照片","其他"]; }
 function renderFiles(p){
   var all = D.photos.filter(function(f){ return f["專案編號"] === p["編號"]; }).reverse();
   var cu = canUpdate(p);
@@ -1049,10 +1050,30 @@ function taskAct(p, t){
   var est = estPct(t);
   var st = !started ? (ps && ps < D.today ? h("span",{class:"t-state miss",text:"應開始未開始"}) : h("span",{class:"t-state",text:"未開始"}))
     : h("span",{class:"t-state doing",title:"從實際開始日起經過的天數 ÷ 預定天數（比計畫早開始的，從計畫開始日才起算）",text:"進行中 · 依經過時間推算 " + (est === null ? "—" : est.toFixed(1) + "%")});
+  if (t["狀態"] === "待確認"){
+    var wb = h("div",{class:"t-act"}, h("span",{class:"t-state wait",text:"📨 " + (t["負責人"]||"") + " 申請完成（" + fmt(t["申請完成日"]) + "），等待確認"}));
+    if (canManage(p)){
+      wb.append(h("button",{class:"btn small",type:"button",title:"確認這個任務真的完成了",onclick:function(){
+        var d = prompt("確認完成。實際完成日（YYYY-MM-DD）：", t["申請完成日"] || D.today);
+        if (d === null) return;
+        if (d && (!/^\d{4}-\d{2}-\d{2}$/.test(d) || d > D.today)){ toast("日期格式要像 2026-11-13，而且不能晚於今天。", true); return; }
+        call("api_confirmTask",[t["編號"], true, {date:d}],"已確認完成");
+      }},"✅ 確認完成"));
+      wb.append(h("button",{class:"btn small",type:"button",title:"退回給負責人",onclick:function(){
+        var r = prompt("退回原因（" + (t["負責人"]||"負責人") + " 會看到）：", "");
+        if (r === null) return;
+        if (!r.trim()){ toast("請填寫退回原因。", true); return; }
+        call("api_confirmTask",[t["編號"], false, {reason:r}],"已退回");
+      }},"↩ 退回"));
+    } else if (can){
+      wb.append(h("button",{class:"btn small",type:"button",title:"撤回完成申請",onclick:function(){ call("api_setTaskDone",[t["編號"], false],"已撤回申請"); }},"撤回申請"));
+    }
+    return wb;
+  }
   var box = h("div",{class:"t-act"}, st);
   if (!can) return box;
   if (!started) box.append(h("button",{class:"btn small",type:"button",title:"記錄今天為實際開始日",onclick:function(){ call("api_startTask",[t["編號"]],"已記錄開始"); }},"▶ 開始"));
-  box.append(h("button",{class:"btn small",type:"button",title:"把這個任務轉給別人",onclick:function(){ openTransfer(p, t); }},"↪ 轉派"));
+  if (canManage(p)) box.append(h("button",{class:"btn small",type:"button",title:"把這個任務轉給別人",onclick:function(){ openTransfer(p, t); }},"↪ 轉派"));
   return box;
 }
 /** 主任務進度：階段＝主任務，逐一列出預定／實際進度 */
@@ -1193,16 +1214,18 @@ function renderDetail(code){
   var tl = $("d-tasks"); tl.textContent = "";
   if (!ts.length) tl.append(h("li",{class:"muted",style:"display:block",text:"尚無任務，用下方表單或 LINE「新增任務」加入。"}));
   ts.forEach(function(t){
-    var cont = t._kids > 0, done = cont ? t._done : t["狀態"]==="已完成";
-    var pe = cont ? t._pe : t["完成日"], late = pe && !done && pe < D.today;
+    var cont = t._kids > 0, done = cont ? t._done : t["狀態"]==="已完成", wait = !cont && t["狀態"]==="待確認";
+    var pe = cont ? t._pe : t["完成日"], late = pe && !done && !wait && pe < D.today;
+    var own = !cont && !cm && canToggle(p,t);
     var ae = cont ? t._ae : (done ? String(t["完成時間"]||"").slice(0,10) : "");
-    var meta = [t["編號"], t["負責人"], pe && "預定 "+fmt(cont ? t._ps : taskStart(t))+"→"+fmt(pe), ae && "實際完成 "+fmt(ae), "權重 "+wPct(code, t._w) + (cont ? "（子任務合計）" : "")].filter(Boolean).join(" · ");
+    var meta = [t["編號"], t["負責人"], pe && "預定 "+fmt(cont ? t._ps : taskStart(t))+"→"+fmt(pe), ae && "實際完成 "+fmt(ae) + (t["確認人"] ? "（" + t["確認人"] + " 確認）" : ""), "權重 "+wPct(code, t._w) + (cont ? "（子任務合計）" : "")].filter(Boolean).join(" · ");
     function op(label, o, tip){ return h("button",{type:"button",title:tip,"aria-label":tip+"："+t["任務"],onclick:function(){ call("api_moveTask",[t["編號"], o]); }},label); }
     tl.append(h("li",{class:"t"+(done?" done":"")+(t._lv===2?" sub":"")+(cont?" main":"")},
-      h("input",{type:"checkbox",checked:done,disabled:cont || !canToggle(p,t),title:cont?"子任務全部完成後自動完成":null,"aria-label":"完成："+t["任務"],onchange:function(ev){
-        call("api_setTaskDone",[t["編號"], ev.target.checked], ev.target.checked ? "已標記完成" : "已改回未完成");
+      h("input",{type:"checkbox",checked:done || wait,disabled:cont || wait || !canToggle(p,t) || (done && !cm),
+        title:cont?"子任務全部完成後自動完成":wait?"已申請完成，等待專案負責人確認":(done && !cm)?"已確認完成，要由專案負責人改回":(!cm && canToggle(p,t))?"做完了：送給專案負責人確認":null,"aria-label":"完成："+t["任務"],onchange:function(ev){
+        call("api_setTaskDone",[t["編號"], ev.target.checked], ev.target.checked ? (cm ? "已標記完成" : "已申請完成，等待專案負責人確認") : "已改回未完成");
       }}),
-      h("div",null, h("div",{class:"t-title"+(cm?" edit":""),text:t["任務"],title:cm?"點一下修改":null,onclick:cm?function(){ openTaskDialog(t); }:null}), h("div",{class:"t-meta"+(late?" bad":""), text: meta + (late ? " · 逾期 "+days(pe,D.today)+" 天" : "")}),
+      h("div",null, h("div",{class:"t-title"+(cm||own?" edit":""),text:t["任務"],title:cm?"點一下修改":own?"點一下填實際開始日":null,onclick:cm||own?function(){ openTaskDialog(t); }:null}), h("div",{class:"t-meta"+(late?" bad":""), text: meta + (late ? " · 逾期 "+days(pe,D.today)+" 天" : "")}),
         cont || done ? null : taskAct(p, t)),
       cm ? h("span",{class:"t-ops"}, op("↑","up","上移"), op("↓","down","下移"),
         t._lv === 1 ? op("→","indent","變成上一個主任務的子任務") : op("←","outdent","變回主任務"),
@@ -1311,7 +1334,7 @@ function renderGantt(p){
   if (vis < span) wrap.scrollLeft = Math.max(0, (today - min - vis * 0.15) * ppd);
 }
 
-var editingTask = null, editingTaskCont = false, editingTaskOrig = ["",""];
+var editingTask = null, editingTaskCont = false, editingTaskOrig = ["",""], editingTaskOwn = false;
 function openTaskDialog(t){
   editingTask = t["編號"];
   $("tdlg-title").textContent = "修改任務 " + t["編號"];
@@ -1337,11 +1360,28 @@ function openTaskDialog(t){
   $("te-base").hidden = !lk;
   $("te-base").textContent = lk ? "基準計畫：" + (t["基準開始日"] ? t["基準開始日"] + " → " + (t["基準完成日"] || "未定") : "（鎖定後新增的任務，沒有基準）") + (isAdmin() ? "" : "。已鎖定基準，預定日期要由主管修改。") : "";
   editingTaskOrig = [$("te-start").value, $("te-due").value];
-  $("tdlg").showModal(); $("te-title").focus();
+  editingTaskOwn = !canManage(pp);
+  $("te-title").disabled = editingTaskOwn; $("te-assignee").disabled = editingTaskOwn;
+  if (editingTaskOwn){
+    ["te-start","te-due","te-aend","te-weight"].forEach(function(id){ $(id).disabled = true; });
+    $("te-reason-wrap").hidden = true; $("te-base").hidden = true;
+    $("tdlg-title").textContent = "實際開始日 " + t["編號"];
+    $("te-hint").textContent = "任務負責人只能填實際開始日；其他欄位與實際完成日由專案負責人填寫。做完時請在清單勾選，送給專案負責人確認。";
+  } else if (t["狀態"] === "待確認" && !cont){
+    $("te-hint").textContent = t["負責人"] + " 已在 " + t["申請完成日"] + " 申請完成：填上實際完成日並儲存＝確認完成。";
+    if (!$("te-aend").value) $("te-aend").value = t["申請完成日"] || "";
+  }
+  $("tdlg").showModal(); (editingTaskOwn ? $("te-astart") : $("te-title")).focus();
 }
 $("te-cancel").addEventListener("click", function(){ $("tdlg").close(); });
 $("task-edit-form").addEventListener("submit", function(ev){
   ev.preventDefault();
+  if (editingTaskOwn){
+    var as = $("te-astart").value;
+    if (as && as > D.today){ toast("實際開始日不能晚於今天。", true); return; }
+    call("api_updateTask",[editingTask, {actualStart: as}],"已儲存實際開始日").then(function(ok){ if (ok) $("tdlg").close(); });
+    return;
+  }
   var f = {title:$("te-title").value, assignee:$("te-assignee").value, start:$("te-start").value, due:$("te-due").value, actualStart:$("te-astart").value, actualEnd:$("te-aend").value, weight:$("te-weight").value};
   if (editingTaskCont){ f.actualStart = undefined; delete f.weight; }
   else if (!/^\d+(\.\d+)?$/.test(String(f.weight).trim()) || Number(f.weight) > 100){ toast("權重請填 0～100 的百分比數字，例如 25 代表 25%。", true); return; }
@@ -1368,6 +1408,7 @@ $("tab-btn-proj").addEventListener("click", function(){ setTab("proj"); });
 $("tab-btn-task").addEventListener("click", function(){ setTab("task"); renderTasks(); });
 function taskState(t, s, e, today){
   if (t["狀態"] === "已完成") return "done";
+  if (t["狀態"] === "待確認") return "doing";
   if (e !== null && e < today) return "late";
   if (s > today) return "todo";
   return "doing";
