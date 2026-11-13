@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>系統更新｜傑克電機</title>
+<style>
+  :root{--bg:#F4F6FA;--surface:#FFFFFF;--ink:#0D1B30;--muted:#5B6B82;--line:#DCE3EE;--accent:#0064F3;--ok:#1E8E5A;--bad:#C0392B}
+  @media (prefers-color-scheme: dark){:root{--bg:#0E1624;--surface:#162133;--ink:#E8EEF7;--muted:#9AA9BF;--line:#26344A;--accent:#4D94FF;--ok:#4CC38A;--bad:#FF7B6B}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:"Microsoft JhengHei","PingFang TC","Noto Sans TC",system-ui,sans-serif;padding:16px}
+  .card{max-width:560px;margin:24px auto;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:24px}
+  .brand{color:var(--accent);font-weight:900;letter-spacing:.04em}
+  h1{font-size:20px;margin:6px 0 18px}
+  .row{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--line);font-size:14px}
+  .row span:first-child{color:var(--muted)}
+  .row b{font-family:ui-monospace,Consolas,monospace}
+  .msg{font-size:13px;color:var(--muted);margin-top:4px}
+  button{margin-top:20px;width:100%;font:inherit;font-weight:700;font-size:15px;padding:12px;border:0;border-radius:8px;background:var(--accent);color:#fff;cursor:pointer}
+  button:disabled{opacity:.5;cursor:default}
+  .state{margin-top:14px;font-size:14px;font-weight:700}
+  .ok{color:var(--ok)} .bad{color:var(--bad)}
+  pre{white-space:pre-wrap;word-break:break-all;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px;font-size:12px;line-height:1.6;max-height:320px;overflow:auto;margin:8px 0 0}
+  a{color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="brand">傑克電機</div>
+  <h1>系統更新</h1>
+  <div class="row"><span>目前版本</span><b id="cur">…</b></div>
+  <div class="row"><span>GitHub 最新版本</span><b id="new">…</b></div>
+  <div class="msg" id="newmsg"></div>
+  <button id="go" disabled>更新到最新版</button>
+  <div class="state" id="state" role="status"></div>
+  <div class="msg" style="margin-top:18px">上次更新紀錄</div>
+  <pre id="log">（尚無）</pre>
+  <p class="msg">更新時服務會重新啟動約 10–30 秒；新版啟動失敗會自動還原。<a href="/pm/">回到專案儀表板</a></p>
+</div>
+<script>
+(function(){
+  var $ = function(id){ return document.getElementById(id); };
+  var busy = false, timer = null, started = 0;
+  function load(){
+    return fetch("/pm/admin/update/status", {cache:"no-store"}).then(function(r){ return r.json(); }).then(function(j){
+      $("cur").textContent = j.current || "（未知）";
+      var L = j.latest || {};
+      $("new").textContent = L.sha || "—";
+      $("newmsg").textContent = L.error ? L.error : (L.msg || "");
+      $("log").textContent = j.log || "（尚無）";
+      busy = !!j.running;
+      var same = L.sha && j.current === L.sha;
+      $("go").disabled = busy || !L.sha || same || !j.canRun;
+      $("go").textContent = busy ? "更新中…" : same ? "已經是最新版" : "更新到最新版";
+      if (busy) { $("state").className = "state"; $("state").textContent = "正在更新，請稍候…"; }
+      else if (timer && Date.now() - started > 12000) {
+        clearInterval(timer); timer = null;
+        var ok = /更新完成/.test(j.log || "");
+        $("state").className = "state " + (ok ? "ok" : "bad");
+        $("state").textContent = ok ? "更新完成。" : "更新沒有完成，請看下方紀錄。";
+      }
+    }, function(){ if (timer) { $("state").className = "state"; $("state").textContent = "服務重新啟動中…"; } });
+  }
+  $("go").addEventListener("click", function(){
+    if (!confirm("確定要更新嗎？服務會重新啟動約 10–30 秒。")) return;
+    $("go").disabled = true;
+    fetch("/pm/admin/update/run", {method:"POST"}).then(function(r){ return r.json(); }).then(function(j){
+      if (!j.ok) { $("state").className = "state bad"; $("state").textContent = j.error || "無法啟動更新"; $("go").disabled = false; return; }
+      $("state").className = "state"; $("state").textContent = "已開始更新…";
+      started = Date.now(); timer = setInterval(load, 4000);
+    });
+  });
+  load();
+})();
+</script>
+</body>
+</html>

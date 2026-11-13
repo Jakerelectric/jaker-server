@@ -1,10 +1,17 @@
 ﻿# 從 GitHub 下載最新版程式並更新（資料、.env、上傳的檔案都不會動）
 # 更新失敗會自動還原成更新前的版本
+# 加上 -Auto：不詢問任何問題（給網頁上的「系統更新」按鈕／排程用），過程寫到 data\logs\update.log
+param([switch]$Auto)
 $ErrorActionPreference = 'Stop'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $Root
 $EnvFile = Join-Path $Root '.env'
+if ($Auto) {
+  New-Item -ItemType Directory (Join-Path $Root 'data\logs') -Force | Out-Null
+  Start-Transcript -Path (Join-Path $Root 'data\logs\update.log') -Force | Out-Null
+  Write-Host ('開始時間：' + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'))
+}
 
 function Get-EnvValue($key) {
   $line = Get-Content $EnvFile -Encoding UTF8 | Where-Object { $_ -match "^\s*$key\s*=" } | Select-Object -First 1
@@ -15,7 +22,11 @@ function Set-EnvValue($key, $value) {
   $lines += "$key=$value"
   [IO.File]::WriteAllLines($EnvFile, $lines, (New-Object Text.UTF8Encoding $false))
 }
-function Done($msg, $color) { Write-Host $msg -ForegroundColor $color; Read-Host '按 Enter 結束'; exit 0 }
+function Done($msg, $color) {
+  Write-Host $msg -ForegroundColor $color
+  if ($Auto) { Write-Host ('結果：' + $msg); Stop-Transcript | Out-Null; exit 0 }
+  Read-Host '按 Enter 結束'; exit 0
+}
 
 $Repo = Get-EnvValue 'GITHUB_REPO'; if (-not $Repo) { $Repo = 'Jakerelectric/jaker-server' }
 # 權杖只會有英文、數字、底線；貼上時夾帶的控制字元（例如按 Ctrl+V 產生的 ^V）、空白一律去掉
@@ -23,6 +34,7 @@ function Clean-Token($t) { return ([string]$t -replace '[^A-Za-z0-9_]', '') }
 function Valid-Token($t) { return $t -match '^(github_pat_|ghp_)[A-Za-z0-9_]{20,}$' }
 $Token = Clean-Token (Get-EnvValue 'GITHUB_TOKEN')
 if (-not (Valid-Token $Token)) {
+  if ($Auto) { Done '.env 裡沒有可用的 GitHub 權杖，請在測試機手動執行一次 update.bat 設定權杖。' Red }
   if ($Token) { Write-Host '.env 裡的 GitHub 權杖格式不對，請重新輸入。' -ForegroundColor Yellow }
   Write-Host '請輸入 GitHub 的唯讀權杖（只能讀取 jaker-server 這個儲存庫），之後會記在 .env。'
   Write-Host '貼上方式：在視窗裡按「滑鼠右鍵」（不要按 Ctrl+V）。畫面不會顯示，貼上後直接按 Enter。'

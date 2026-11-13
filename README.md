@@ -33,6 +33,9 @@
 - 會從 GitHub（私人儲存庫 `Jakerelectric/jaker-server`）下載最新版，資料、`.env`、上傳的檔案都不會動。
 - 更新前自動備份目前的程式到 `data\versions`（保留 5 份）；新版啟動失敗會自動還原。
 - 第一次執行要貼上 GitHub 的**唯讀權杖**（只能讀這個儲存庫），之後記在 `.env`。
+- **遠端更新**：專案系統的「管理員」登入儀表板後，打開 `https://work.jaker-ai.com/pm/admin/update`，
+  可以看到目前／最新版本，按「更新到最新版」就會在主機上執行更新（排程工作 `JakerUpdate`，服務啟動時自動建立），
+  過程記錄在 `data\logs\update.log`。
 
 ## LINE 串接
 

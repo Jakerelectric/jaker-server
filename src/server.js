@@ -13,7 +13,8 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const cron = require('node-cron');
-const { loadConfig } = require('./config');
+const { loadConfig, readEnvFile } = require('./config');
+const { execFile } = require('child_process');
 const { Store } = require('./store');
 const { createRuntime } = require('./runtime');
 
@@ -165,6 +166,77 @@ async function main() {
     res.type('html').send('<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + esc(m.name) +
       '</title><body style="font-family:system-ui,\'Microsoft JhengHei\',sans-serif;max-width:760px;margin:24px auto;padding:0 16px;line-height:1.8">' +
       up + '<h1 style="font-size:20px">' + esc(m.name) + '</h1><ul style="padding-left:1.2em">' + (rows || '<li>（沒有檔案）</li>') + '</ul></body>');
+  });
+
+  // ===== 系統更新（只有管理員）：/pm/admin/update =====
+  // 按下更新 → 執行 Windows 排程工作 JakerUpdate（以 SYSTEM 身分跑 update.ps1 -Auto，失敗會自動還原）
+  const isWin = process.platform === 'win32';
+  const run$ = (cmd, args, timeout) => new Promise(ok => execFile(cmd, args, { timeout: timeout || 30000, windowsHide: true },
+    (err, out, errOut) => ok({ err, out: String(out || ''), errOut: String(errOut || '') })));
+  const ps = script => run$('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script]);
+  if (isWin) {
+    const arg = '-NoProfile -ExecutionPolicy Bypass -File "' + path.join(ROOT, 'update.ps1') + '" -Auto';
+    ps("$a = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument '" + arg.replace(/'/g, "''") + "' -WorkingDirectory '" + ROOT.replace(/'/g, "''") + "';" +
+      "$p = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest;" +
+      "$s = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes 30) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries;" +
+      "Register-ScheduledTask -TaskName 'JakerUpdate' -Action $a -Principal $p -Settings $s -Force | Out-Null")
+      .then(r => { if (r.err) log('建立更新排程 JakerUpdate 失敗', r.errOut || r.err.message); });
+  }
+  async function adminOf(req) {
+    const t = cookieToken(req);
+    if (!t) return null;
+    const who = await run('auth', () => pm.call('tokenUser_', t)).catch(() => null);
+    if (!who) return null;
+    const m = store.sheets.get('成員') || [[]], h = m[0] || [];
+    const iN = h.indexOf('姓名'), iE = h.indexOf('公司信箱'), iR = h.indexOf('角色');
+    const row = m.slice(1).find(r => (who.email && iE >= 0 && String(r[iE] || '').toLowerCase() === who.email) || (iN >= 0 && r[iN] === who.name));
+    return row && row[iR] === '管理員' ? who : null;
+  }
+  async function requireAdmin(req, res, next) {
+    const who = await adminOf(req);
+    if (who) { req.who = who; return next(); }
+    res.status(403).type('html').send('<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
+      '<body style="font-family:system-ui,\'Microsoft JhengHei\',sans-serif;padding:32px;line-height:1.8">只有專案系統的「管理員」可以使用這一頁。' +
+      '<p><a href="/pm/">先登入專案儀表板</a>，再回到這一頁。</p></body>');
+  }
+  function readLog() {
+    try {
+      const b = fs.readFileSync(path.join(cfg.dataDir, 'logs', 'update.log'));
+      const txt = b[0] === 0xff && b[1] === 0xfe ? b.slice(2).toString('utf16le') : b.toString('utf8').replace(/^﻿/, '');
+      return txt.split(/\r?\n/).filter(l => l.trim() && !/^\*{5,}|^(Windows PowerShell|開始時間|Start time|Username|RunAs|Machine|Host Application|Process ID|PSVersion|PSEdition|PSCompatible|BuildVersion|CLRVersion|WSManStack|PSRemoting|Serialization|使用者|執行身分|電腦)/.test(l)).slice(-30).join('\n');
+    } catch (e) { return ''; }
+  }
+  let latestCache = { at: 0, v: null };
+  async function latest() {
+    if (Date.now() - latestCache.at < 60000 && latestCache.v) return latestCache.v;
+    const env = readEnvFile(path.join(ROOT, '.env'));
+    const token = String(env.GITHUB_TOKEN || '').replace(/[^A-Za-z0-9_]/g, ''), repo = env.GITHUB_REPO || 'Jakerelectric/jaker-server';
+    if (!token) return { error: '測試機還沒設定 GitHub 權杖' };
+    try {
+      const r = await fetch('https://api.github.com/repos/' + repo + '/commits/main', { headers: { Authorization: 'Bearer ' + token, 'User-Agent': 'jaker-server', Accept: 'application/vnd.github+json' } });
+      if (!r.ok) return { error: 'GitHub 回應 ' + r.status + '（權杖可能過期）' };
+      const c = await r.json();
+      const v = { sha: c.sha.slice(0, 7), msg: String(c.commit.message).split('\n')[0], at: c.commit.committer && c.commit.committer.date };
+      latestCache = { at: Date.now(), v };
+      return v;
+    } catch (e) { return { error: '連不到 GitHub' }; }
+  }
+  app.get('/pm/admin/update/status', requireAdmin, async (req, res) => {
+    let current = '';
+    try { current = fs.readFileSync(path.join(cfg.dataDir, 'version.txt'), 'utf8').trim(); } catch (e) {}
+    let running = false;
+    if (isWin) { const r = await ps("(Get-ScheduledTask -TaskName 'JakerUpdate' -ErrorAction SilentlyContinue).State"); running = /Running/i.test(r.out); }
+    res.set('Cache-Control', 'no-store').json({ ok: true, current, latest: await latest(), running, log: readLog(), canRun: isWin });
+  });
+  app.post('/pm/admin/update/run', requireAdmin, async (req, res) => {
+    if (!isWin) return res.json({ ok: false, error: '只有 Windows 主機能執行' });
+    const r = await ps("Start-ScheduledTask -TaskName 'JakerUpdate'");
+    if (r.err) { log('啟動更新失敗', r.errOut || r.err.message); return res.json({ ok: false, error: '啟動更新失敗：' + (r.errOut || r.err.message).slice(0, 200) }); }
+    log('管理員 ' + req.who.name + ' 從網頁啟動系統更新');
+    res.json({ ok: true });
+  });
+  app.get('/pm/admin/update', requireAdmin, (req, res) => {
+    res.set('Cache-Control', 'no-store').sendFile(path.join(ROOT, 'public', 'update.html'));
   });
 
   // 定時工作（每日提醒、週五提醒、週一報告）：只有 LINE 開啟時才跑
