@@ -223,7 +223,7 @@ async function main() {
       const v = { sha: c.sha.slice(0, 7), msg: String(c.commit.message).split('\n')[0], at: c.commit.committer && c.commit.committer.date };
       latestCache = { at: Date.now(), v };
       return v;
-    } catch (e) { return { error: '連不到 GitHub' }; }
+    } catch (e) { log('查詢 GitHub 版本失敗', e); return { error: '連不到 GitHub（' + String((e.cause && e.cause.code) || e.message).slice(0, 80) + '）' }; }
   }
   app.get('/pm/admin/update/status', requireAdmin, async (req, res) => {
     let current = '';

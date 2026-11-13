@@ -6,7 +6,7 @@ const path = require('path');
 function readEnvFile(file) {
   const out = {};
   if (!fs.existsSync(file)) return out;
-  fs.readFileSync(file, 'utf8').replace(/^﻿/, '').split(/\r?\n/).forEach(line => {
+  fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '').split(/\r\n|\n|\r/).forEach(line => {
     const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$/);
     if (!m) return;
     let v = m[2];

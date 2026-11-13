@@ -12,13 +12,16 @@ const { Store } = require('../src/store');
 const ROOT = path.resolve(__dirname, '..');
 const ENV = path.join(ROOT, '.env');
 
+/** 逐行改 .env：有這個設定就改那一行，沒有就加在最後（一律用 Windows 換行） */
 function setEnv(pairs) {
-  let s = fs.existsSync(ENV) ? fs.readFileSync(ENV, 'utf8').replace(/^﻿/, '') : '';
+  const s = fs.existsSync(ENV) ? fs.readFileSync(ENV, 'utf8').replace(/^\uFEFF/, '') : '';
+  const lines = s.split(/\r\n|\n|\r/);
+  while (lines.length && lines[lines.length - 1].trim() === '') lines.pop();
   for (const [k, v] of Object.entries(pairs)) {
-    const re = new RegExp('^\\s*' + k + '\\s*=.*$', 'm');
-    s = re.test(s) ? s.replace(re, k + '=' + v) : s.replace(/\s*$/, '') + '\r\n' + k + '=' + v + '\r\n';
+    const i = lines.findIndex(l => new RegExp('^\\s*' + k + '\\s*=').test(l));
+    if (i >= 0) lines[i] = k + '=' + v; else lines.push(k + '=' + v);
   }
-  fs.writeFileSync(ENV, s);
+  fs.writeFileSync(ENV, lines.join('\r\n') + '\r\n');
 }
 
 (async () => {
