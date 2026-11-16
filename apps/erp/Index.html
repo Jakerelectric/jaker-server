@@ -1373,7 +1373,7 @@ nav.tabs [data-tab].g-off{display:none}
       <thead id="docLHead"></thead><tbody id="docLines"></tbody>
     </table></div>
     <div class="row" style="margin-top:8px;align-items:flex-start">
-      <button type="button" class="btn sm" id="dAddLine">＋ 新增品項</button>
+      <button type="button" class="btn sm" id="dAddLine">＋ 新增品項</button><button type="button" class="btn sm" id="dAllAsap" hidden title="每一行的交期都設成 ASAP（急單）">整張 ASAP</button>
       <span class="muted" id="docHint" style="font-size:12px;flex:1"></span>
       <div class="doc-total" id="docTotal" data-price></div>
     </div>
@@ -5962,6 +5962,8 @@ function asapCell(i, k, v, dis){
 }
 function renderDocLines(){
   const ed = docEditable(), me = matEditable(), cols = docCols(), cur = $("dCur").value;
+  { const k = DOC.kind === "quote" ? "wantDate" : DOC.kind === "order" ? "dueDate" : ""; const b = $("dAllAsap");
+    b.hidden = !k || !ed; if (k){ const all = DOC.lines.length && DOC.lines.every(l => String(l[k]||"").toUpperCase() === "ASAP"); b.textContent = all ? "取消整張 ASAP" : "整張 ASAP"; } }
   const sh = DOC.kind === "order" && DOC.doc ? shippedByLine(DOC.doc) : {};
   $("docLHead").innerHTML = `<tr>${cols.map(c => `<th class="${c[2]||""}">${c[0]}</th>`).join("")}</tr>`;
   const be = saleBillEdit();   // 已出貨：只能改單價、計價、備註（不影響庫存）
@@ -6084,6 +6086,9 @@ function renderDocTotal(){
   const cur = $("dCur").value; const rate = { "應稅5%":0.05, "零稅率":0, "免稅":0 }[$("dTax").value] || 0; const t = docTotals(DOC.lines, cur, rate);
   $("docTotal").innerHTML = `<div><span>小計</span><b>${cur} ${money(t.sub, cur)}</b></div><div><span>稅額（${esc($("dTax").value)}）</span><b>${money(t.tax, cur)}</b></div><div class="grand"><span>總計</span><b>${cur} ${money(t.total, cur)}</b></div>`;
 }
+$("dAllAsap").addEventListener("click", () => { const k = DOC.kind === "quote" ? "wantDate" : "dueDate";
+  const all = DOC.lines.length && DOC.lines.every(l => String(l[k]||"").toUpperCase() === "ASAP");
+  DOC.lines.forEach(l => { l[k] = all ? "" : "ASAP"; }); renderDocLines(); });
 $("dAddLine").addEventListener("click", () => { DOC.lines.push({ lid:uid8(), qty:"" }); renderDocLines(); const all = $("docLines").querySelectorAll('[data-k="itemCode"]'); all[all.length-1]?.focus(); });
 function docPayload(){
   return { isNew: !DOC.no, no: DOC.no || $("dNo").value.trim(), date:$("dDate").value, custCode: DOC.custCode || "", customer:$("dCustomer").value, contact:$("dContact").value, custPO:$("dPO").value,
