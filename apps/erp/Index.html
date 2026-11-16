@@ -3281,7 +3281,7 @@ $("qtSearch").addEventListener("input", renderQuotes); $("odSearch").addEventLis
 function renderQuotes(){
   const pm = PM(); const q = $("qtSearch").value.trim().toLowerCase();
   const rows = SD().quotes.filter(x => (!QT.st || x.status === QT.st) &&
-    (!q || [x.no, x.customer, x.custCode, x.salesName, ...qLinesOf(x.no).map(l => l.itemCode + " " + l.name)].some(v => String(v||"").toLowerCase().includes(q))))
+    (!q || [x.no, x.erpNo, x.orderNo, x.customer, ...custNames(x.custCode, x.customer), x.custCode, x.salesName, ...qLinesOf(x.no).map(l => l.itemCode + " " + l.name)].some(v => String(v||"").toLowerCase().includes(q))))
     .sort((a,b) => String(b.date).localeCompare(String(a.date)) || String(b.no).localeCompare(String(a.no)));
   $("qtRows").innerHTML = rows.map(x => {
     const L = qLinesOf(x.no); const rep = L.filter(l => l.leadDate).length; const t = docTotals(L, x.currency, x.taxRate);
@@ -3297,7 +3297,7 @@ function renderOrders(){
   const pm = PM(); const q = $("odSearch").value.trim().toLowerCase();
   const rows = SD().orders.map(o => ({ o, pg: orderProgress(o) })).filter(({o, pg}) =>
       (!OD.st || (OD.st === "未出完" ? (o.status === "進行中" && pg.done < pg.qty) : o.status === OD.st)) &&
-      (!q || [o.no, o.erpNo, o.customer, o.custCode, o.custPO, o.salesName, o.quoteNo, ...oLinesOf(o.no).map(l => l.itemCode + " " + l.name)].some(v => String(v||"").toLowerCase().includes(q))))
+      (!q || [o.no, o.erpNo, o.customer, ...custNames(o.custCode, o.customer), o.custCode, o.custPO, o.salesName, o.quoteNo, ...oLinesOf(o.no).map(l => l.itemCode + " " + l.name)].some(v => String(v||"").toLowerCase().includes(q))))
     .sort((a,b) => String(b.o.date).localeCompare(String(a.o.date)) || String(b.o.no).localeCompare(String(a.o.no)));
   const td = today();
   $("odRows").innerHTML = rows.map(({o, pg}) => {
@@ -3868,7 +3868,7 @@ $("saSearch").addEventListener("input", () => renderSales());
 function renderSales(){
   const pm = PM(); const q = $("saSearch").value.trim().toLowerCase();
   const rows = (SD().sales || []).filter(x => (!SAF.st || x.status === SAF.st) &&
-      (!q || [x.no, x.customer, x.orderNo, x.salesName, ...saLinesOf(x.no).map(l => l.itemCode + " " + l.name)].some(v => String(v||"").toLowerCase().includes(q))))
+      (!q || [x.no, x.customer, ...custNames(x.custCode, x.customer), x.orderNo, x.salesName, ...saLinesOf(x.no).map(l => l.itemCode + " " + l.name)].some(v => String(v||"").toLowerCase().includes(q))))
     .sort((a,b) => String(b.date).localeCompare(String(a.date)) || String(b.no).localeCompare(String(a.no)));
   $("saRows").innerHTML = rows.map(x => { const L = saLinesOf(x.no); const t = docTotals(L, x.currency, x.taxRate);
     return `<tr class="clickable" data-sa="${esc(x.no)}"><td class="mono">${esc(x.no)}</td><td class="mono">${esc(x.date)}</td><td>${esc(x.customer)}${x.custCode?`<span class="sub mono">${esc(x.custCode)}</span>`:""}</td><td class="mono">${esc(x.orderNo||"")}</td>
@@ -3886,7 +3886,7 @@ function renderShipBadge(){
 const lineWh = (x, l) => l.whId || x.whId || itemByAny(l.itemCode)?.mainWh || "";
 function renderShip(){
   const q = $("shSearch").value.trim().toLowerCase(); const td = today();
-  const P = (SD().sales || []).filter(x => x.status === "待出貨" && (!q || [x.no, x.customer, ...saLinesOf(x.no).map(l => l.itemCode + " " + l.name)].some(v => String(v||"").toLowerCase().includes(q))))
+  const P = (SD().sales || []).filter(x => x.status === "待出貨" && (!q || [x.no, x.customer, ...custNames(x.custCode, x.customer), ...saLinesOf(x.no).map(l => l.itemCode + " " + l.name)].some(v => String(v||"").toLowerCase().includes(q))))
     .sort((a,b) => String(a.shipDate||"9").localeCompare(String(b.shipDate||"9")) || String(a.no).localeCompare(String(b.no)));
   $("shRows").innerHTML = P.map(x => { const L = saLinesOf(x.no);
     const short = L.filter(l => { const it = itemByAny(l.itemCode); return it && qtyOf(it.id, lineWh(x, l)) < Number(l.qty); }).length;
@@ -4227,6 +4227,10 @@ $("ivExcel").addEventListener("click", async () => {
 
 /* ====================== 客戶主檔 ====================== */
 const CUSTS = () => SD().customers || [];
+/** 搜尋單據時，客戶的代號、簡稱、全名、英文名稱都能找（例如打 HJ 找到 恒杰(天津)） */
+function custNames(code, name){ const c = CUSTS().find(x => (code && x.code === code) || (name && (x.short === name || x.full === name)));
+  const v = c ? [c.code, c.short, c.full, c.nameEn, c.alias].filter(Boolean) : [];
+  return v.concat(v.map(x => String(x).replace(/[^0-9A-Za-z\u4e00-\u9fff]/g, ""))); }   // 去掉符號再比一次：H-J 也找得到 HJ
 const custByAny = v => { v = String(v||"").trim(); if (!v) return null; const code = v.split(/\s+/)[0].toUpperCase();
   return CUSTS().find(c => c.code.toUpperCase() === code) || CUSTS().find(c => c.short === v || c.full === v || c.nameEn === v) || null; };
 function custHint(){
@@ -5873,7 +5877,7 @@ function renderMatQ(){
   const q = $("mqSearch").value.trim().toLowerCase(); const td = today();
   const rows = SD().quotes.filter(x => x.status !== "草稿" && x.sentAt &&
       (!MQ.st || (MQ.st === "todo" ? x.status === "待資材確認" : x.status !== "待資材確認")) &&
-      (!q || [x.no, x.customer, x.custCode, x.salesName, ...qLinesOf(x.no).map(l => l.itemCode + " " + l.name)].some(v => String(v||"").toLowerCase().includes(q))))
+      (!q || [x.no, x.erpNo, x.orderNo, x.customer, ...custNames(x.custCode, x.customer), x.custCode, x.salesName, ...qLinesOf(x.no).map(l => l.itemCode + " " + l.name)].some(v => String(v||"").toLowerCase().includes(q))))
     .sort((a,b) => MQ.st === "todo" ? String(a.sentAt).localeCompare(String(b.sentAt)) : String(b.repliedAt||b.sentAt).localeCompare(String(a.repliedAt||a.sentAt)));
   $("mqRows").innerHTML = rows.map(x => {
     const L = qLinesOf(x.no); const fill = L.filter(l => l.leadDate).length; const want = L.map(l => l.wantDate).filter(Boolean).sort()[0] || "";
