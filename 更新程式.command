@@ -3,6 +3,7 @@
 cd "$(dirname "$0")"
 export PATH="/opt/homebrew/bin:/opt/homebrew/opt/node@22/bin:$PATH"
 LABEL="tw.jaker.server"
+if [ ! -d .git ]; then echo "這份是用 zip 安裝的：請下載新版 zip，解壓縮後蓋過這個資料夾（data、.env 不要刪），再執行一次 install-mac.sh。"; read -r -p "按 Enter 關閉視窗"; exit 0; fi
 BEFORE="$(git rev-parse --short HEAD)"
 git pull --ff-only || { echo "下載失敗（有改過程式檔案、或連不到 GitHub），請把畫面截圖給 IT。"; read -r -p "按 Enter 關閉視窗"; exit 1; }
 npm ci --omit=dev --no-audit --no-fund
