@@ -1130,9 +1130,25 @@ function nextNo_(prefix, date, list) {
   return head + ('00' + (n + 1)).slice(-3);
 }
 const TAX_ = { '應稅5%': 0.05, '零稅率': 0, '免稅': 0, '應稅內含': 0.05 };
+/** 出入庫紀錄的訂單單號有時少了前面的單別（例如填 20260923001，實際是 2204-20260923001）：
+ *  依「單號結尾相同、而且訂單有這個品號」找出唯一的訂單；找不到或不只一張就照原樣。只影響計算，不改紀錄。 */
+function orderNoResolver_() {
+  const nos = readAll_('orders').map(o => o.no), set = new Set(nos), has = {};
+  readAll_('orderLines').forEach(l => { has[l.orderNo + '__' + l.itemCode] = 1; });
+  const memo = {};
+  return (no, itemCode) => {
+    no = String(no || '').trim(); if (!no || set.has(no)) return no;
+    const k = no + '__' + itemCode; if (memo[k] !== undefined) return memo[k];
+    const c = nos.filter(x => x.endsWith('-' + no) && has[x + '__' + itemCode]);
+    return (memo[k] = c.length === 1 ? c[0] : no);
+  };
+}
 /** 從舊 Excel 匯入、已出貨的銷貨單：當時的出庫已經在異動紀錄裡，不另外扣庫存，只計入訂單的已出貨數量 */
 function importedShipped_(onlyOrder) {
-  const out = {}; const sales = readAll_('sales').filter(x => x.imported === '是' && x.status === '已出貨'); if (!sales.length) return out;
+  // 這張銷貨單後來在出入庫登記有填訂單單號的出庫（單號對得上），出貨量已經從出庫紀錄算過，不再重複算
+  const counted = new Set(); readAll_('txns').forEach(t => { if (t.typeLabel === '出庫' && t.orderNo && t.ref) { counted.add(String(t.ref).trim()); } });
+  const out = {}; const sales = readAll_('sales').filter(x => x.imported === '是' && x.status === '已出貨' &&
+    !counted.has(x.no) && !counted.has(String(x.no).split('-').pop())); if (!sales.length) return out;
   const by = {}; sales.forEach(x => by[x.no] = x);
   readAll_('salesLines').forEach(l => { const x = by[l.saleNo]; if (!x) return; const o = l.orderNo || x.orderNo; if (!o || (onlyOrder && o !== onlyOrder)) return;
     const k = o + '__' + l.itemCode; out[k] = round_((out[k] || 0) + Number(l.shipQty !== '' && l.shipQty != null ? l.shipQty : l.qty || 0)); });
@@ -1145,9 +1161,9 @@ function salesLoad_(u) {
   const orders = readAll_('orders').map(o => strip_(o, pm));
   const oLines = readAll_('orderLines').map(l => strip_(l, pm));
   // 出貨進度：出庫（且有填訂單單號）加總，客戶退回扣回
-  const shipped = {};
+  const shipped = {}; const ono = orderNoResolver_();
   readAll_('txns').forEach(t => {
-    if (!t.orderNo || String(t.purpose || '').indexOf('生產') === 0) return; const k = t.orderNo + '__' + t.itemCode;  // 工單領料／耗用不算出貨
+    if (!t.orderNo || String(t.purpose || '').indexOf('生產') === 0) return; const k = ono(t.orderNo, t.itemCode) + '__' + t.itemCode;  // 工單領料／耗用不算出貨
     if (t.typeLabel === '出庫') shipped[k] = round_((shipped[k] || 0) + Number(t.qty || 0));
     else if (t.typeLabel === '入庫' && t.purpose === '客戶退回') shipped[k] = round_((shipped[k] || 0) - Number(t.qty || 0));
   });
@@ -1915,7 +1931,8 @@ function orderToSale_(u, p) {
   const o = readAll_('orders').find(y => y.no === p.no); if (!o) throw new Error('找不到訂單。');
   if (o.status !== '進行中') throw new Error('訂單已' + o.status + '，不能再開銷貨單。');
   const lines = readAll_('orderLines').filter(l => l.orderNo === o.no && l.itemCode).sort((a, b) => a.seq - b.seq);
-  const shipped = {}; readAll_('txns').forEach(t => { if (t.orderNo !== o.no || String(t.purpose || '').indexOf('生產') === 0) return; const k = t.itemCode;
+  const ono = orderNoResolver_();
+  const shipped = {}; readAll_('txns').forEach(t => { if (!t.orderNo || ono(t.orderNo, t.itemCode) !== o.no || String(t.purpose || '').indexOf('生產') === 0) return; const k = t.itemCode;
     if (t.typeLabel === '出庫') shipped[k] = (shipped[k] || 0) + Number(t.qty || 0); else if (t.typeLabel === '入庫' && t.purpose === '客戶退回') shipped[k] = (shipped[k] || 0) - Number(t.qty || 0); });
   const imp = importedShipped_(o.no); Object.keys(imp).forEach(k => { const it = k.split('__')[1]; shipped[it] = (shipped[it] || 0) + imp[k]; });
   const pend = {}; const openSales = {}; readAll_('sales').filter(x => x.status === '待出貨').forEach(x => openSales[x.no] = x);
