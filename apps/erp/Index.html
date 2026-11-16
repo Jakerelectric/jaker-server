@@ -559,6 +559,11 @@ nav.tabs [data-tab].g-off{display:none}
       <div id="opMsg"></div>
     </div>
   </section>
+  <dialog id="askDlg" style="width:min(520px,calc(100vw - 24px))"><form method="dialog">
+    <div id="askMsg" style="white-space:pre-line;line-height:1.7;margin-bottom:12px"></div>
+    <input id="askIn" hidden style="width:100%;margin-bottom:12px" autocomplete="off">
+    <div class="row" style="justify-content:flex-end;gap:8px"><button value="cancel" class="btn" type="submit">取消</button><button value="ok" class="btn primary" type="submit" id="askOk">確定</button></div>
+  </form></dialog>
   <dialog id="opDlg" style="width:min(560px,calc(100vw - 24px))">
     <form method="dialog" autocomplete="off">
       <h2 id="opDlgTitle" style="margin:0 0 10px">代碼</h2>
@@ -2096,6 +2101,14 @@ function onPack(){
 PK.forEach(id => $(id).addEventListener("input", onPack));
 packEditor($("pkLines"), onPack);
 $("mvQty").addEventListener("input", () => { qtyAuto = false; onPack(); });
+/* ---------- 系統內的確認／輸入視窗（取代瀏覽器的 confirm、prompt：瀏覽器可能把那些視窗擋掉） ---------- */
+function ask(msg, def){
+  return new Promise(res => { const d = $("askDlg"), inp = $("askIn"); if (d.parentNode !== document.body) document.body.appendChild(d); $("askMsg").textContent = msg;
+    inp.hidden = def === undefined; inp.value = def ?? ""; d.returnValue = "";
+    d.onclose = () => res(d.returnValue === "ok" ? (def === undefined ? true : inp.value) : (def === undefined ? false : null));
+    d.showModal(); setTimeout(() => (inp.hidden ? $("askOk") : inp).focus(), 30); });
+}
+$("askIn").addEventListener("keydown", e => { if (e.key === "Enter"){ e.preventDefault(); $("askDlg").close("ok"); } });
 /* ---------- 庫位：倉庫代號-區-4位數編號（例 WO-A-0001），格式不對只提醒 ---------- */
 const locNorm = v => String(v||"").trim().toUpperCase().replace(/\s+/g,"").replace(/[－—–]/g,"-");
 const LOC_RE = /^[A-Z0-9]{1,4}-[A-Z0-9]{1,3}-\d{4}$/;
@@ -2158,7 +2171,7 @@ $("moveForm").addEventListener("submit", async e => {
     const pk2 = packText(packParse(x.pack));
     extra.push(Object.assign({}, p, { itemId:it2.id, qty:q2, packLines:pk2, pack:"", palletWt:"", report:p.report||"" }));
   }
-  if (extra.length && !p.pack && !p.palletWt && !confirm("混裝板還沒填棧板尺寸或棧板重量，Packing List 會少這一板的尺寸和重量。仍要入庫？")) return;
+  if (extra.length && !p.pack && !p.palletWt && !(await ask("混裝板還沒填棧板尺寸或棧板重量，Packing List 會少這一板的尺寸和重量。仍要入庫？"))) return;
   $("mvSubmit").disabled = true;
   try{
     if (extra.length){
@@ -4023,8 +4036,8 @@ $("paClear").addEventListener("click", () => { PA.sel = {}; paRender(); });
 $("paSave").addEventListener("click", async () => {
   msg("paMsg", ""); const lots = Object.values(PA.sel); if (!lots.length) return;
   const bad = lots.find(x => { const l = PA.lots.find(y => y.lotNo === x.lotNo); const n = packQty(packParse(x.packLines)); return l && n && Math.abs(n - Number(l.qty)) > 1e-9; });
-  if (bad && !confirm(`批號 ${bad.lotNo} 的新包裝數量和在庫數量不一致，仍要儲存？`)) return;
-  if (lots.length > 1 && !$("paPack").value.trim() && !confirm("還沒填整板尺寸，Packing List 會少這一板的尺寸。仍要儲存？")) return;
+  if (bad && !(await ask(`批號 ${bad.lotNo} 的新包裝數量和在庫數量不一致，仍要儲存？`))) return;
+  if (lots.length > 1 && !$("paPack").value.trim() && !(await ask("還沒填整板尺寸，Packing List 會少這一板的尺寸。仍要儲存？"))) return;
   $("paSave").disabled = true;
   try{ const r = await busy(() => call("savePallet", { lots, pack:$("paPack").value.trim(), palletWt:$("paWt").value, loc:locNorm($("paLoc").value), note:$("paNote").value.trim(), date:$("paDate").value || today() }));
     PA.sel = {}; $("paPack").value = ""; $("paWt").value = ""; $("paNote").value = ""; $("paLoc").value = ""; locHint($("paLoc"), $("paLocHint")); await paLoad();
@@ -4281,7 +4294,7 @@ $("cuSync").addEventListener("click", async () => {
   try{ const pv = await busy(() => call("syncCustNames", { dry:true }));
     if (!(pv.quotes + pv.orders + pv.sales)) return flash("客戶名稱都已經一致，不用改。");
     const list = Object.entries(pv.names).map(([a,b]) => `　${a} → ${b}`).join("\n");
-    if (!confirm(`會把下面的客戶名稱統一成客戶資料的簡稱（依客戶代號對應）：\n${list}\n\n報價單 ${pv.quotes}、訂單 ${pv.orders}、銷貨單 ${pv.sales} 張。出入庫紀錄不會改。要執行嗎？`)) return;
+    if (!(await ask(`會把下面的客戶名稱統一成客戶資料的簡稱（依客戶代號對應）：\n${list}\n\n報價單 ${pv.quotes}、訂單 ${pv.orders}、銷貨單 ${pv.sales} 張。出入庫紀錄不會改。要執行嗎？`))) return;
     const r = await busy(() => call("syncCustNames", {})); await refresh(true);
     const ch = Object.entries(r.names).map(([a,b]) => `${a} → ${b}`).join("、");
     flash(r.quotes + r.orders + r.sales ? `已統一：報價單 ${r.quotes}、訂單 ${r.orders}、銷貨單 ${r.sales} 張。${ch}` : "客戶名稱都已經一致，不用改。"); }
@@ -4625,7 +4638,7 @@ function bcRender(){
   if (!BC.d) return;
   if (BC.mode === "a") renderBcA(); if (BC.mode === "b") renderBcB(); if (BC.mode === "c") renderBcC(); if (BC.mode === "d") renderBcD();
 }
-$("bcMode").querySelectorAll("button").forEach(b => b.addEventListener("click", () => { if (BC.edit && !confirm("BOM 還沒儲存，確定離開？")) return; BC.edit = null; BC.mode = b.dataset.m; msg("bcMsg",""); bcRender(); }));
+$("bcMode").querySelectorAll("button").forEach(b => b.addEventListener("click", async () => { if (BC.edit && !(await ask("BOM 還沒儲存，確定離開？"))) return; BC.edit = null; BC.mode = b.dataset.m; msg("bcMsg",""); bcRender(); }));
 /** 成本項目：成本資料庫優先，沒有就用庫存品號 */
 function bcItem(code){ const k = String(code||"").toLowerCase(); const c = BC.ci[k]; if (c) return c;
   const it = S.items.find(i => String(i.code).toLowerCase() === k); return it ? { code:it.code, name:it.name, spec:it.spec, unit:it.unit, price:Number(it.cost)||0, cat:"材料", fromItems:true } : null; }
@@ -6158,11 +6171,11 @@ function renderDocBtns(){
     else B.push(["", "重新開啟", () => docRun(() => call("orderStatus", { no:DOC.no, status:"進行中" }), "訂單已重新開啟。", true)]);
     if (d.quoteNo) B.push(["", "開啟報價單 " + d.quoteNo, () => openDoc("quote", d.quoteNo)]);
   }
-  if (!sa && pm.sales && DOC.no && d.status !== "已轉訂單") B.push(["", "修改單號", () => { const lab = q ? "報價單號" : "訂單單號";
-    const v = prompt(`把${lab} ${DOC.no} 改成（例如鼎新的單號 ${q ? "2101-20261116001" : "2204-20261116001"}）：`, d.erpNo || DOC.no); if (v == null) return; const nv = v.trim(); if (!nv || nv === DOC.no) return;
+  if (!sa && pm.sales && DOC.no && d.status !== "已轉訂單") B.push(["", "修改單號", async () => { const lab = q ? "報價單號" : "訂單單號";
+    const v = await ask(`把${lab} ${DOC.no} 改成（例如鼎新的單號 ${q ? "2101-20261116001" : "2204-20261116001"}）：`, d.erpNo || DOC.no); if (v == null) return; const nv = v.trim(); if (!nv || nv === DOC.no) return;
     docRun(async () => { const r = await call("renameDoc", { kind: q ? "quote" : "order", no:DOC.no, newNo:nv, asErp:true }); DOC.no = r.no; },
       `單號已改為 ${nv}${q ? "" : "，銷貨單、工單、出庫紀錄上的訂單單號也一起更新"}。`, true); }]);
-  if (sa && pm.sales && DOC.no) B.push(["", "修改單號", () => { const v = prompt(`把銷貨單號 ${DOC.no} 改成（例如鼎新的單號 2304-20261103001）：`, DOC.no); if (v == null) return; const nv = v.trim(); if (!nv || nv === DOC.no) return;
+  if (sa && pm.sales && DOC.no) B.push(["", "修改單號", async () => { const v = await ask(`把銷貨單號 ${DOC.no} 改成（例如鼎新的單號 2304-20261103001）：`, DOC.no); if (v == null) return; const nv = v.trim(); if (!nv || nv === DOC.no) return;
     docRun(async () => { const r = await call("renameSale", { no:DOC.no, newNo:nv }); DOC.no = r.no; }, `單號已改為 ${nv}，Packing List、Invoice、出庫紀錄也一起更新。`, true); }]);
   B.push(["", "關閉", () => $("docDlg").close()]);
   if (pm.sales && DOC.no && !(q && d.orderNo) && !sa) B.push(["danger", "刪除", () => $("docDelConfirm").hidden = false, true]);
