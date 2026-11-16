@@ -3297,12 +3297,12 @@ function renderOrders(){
   const pm = PM(); const q = $("odSearch").value.trim().toLowerCase();
   const rows = SD().orders.map(o => ({ o, pg: orderProgress(o) })).filter(({o, pg}) =>
       (!OD.st || (OD.st === "未出完" ? (o.status === "進行中" && pg.done < pg.qty) : o.status === OD.st)) &&
-      (!q || [o.no, o.customer, o.custCode, o.custPO, o.salesName, o.quoteNo, ...oLinesOf(o.no).map(l => l.itemCode + " " + l.name)].some(v => String(v||"").toLowerCase().includes(q))))
+      (!q || [o.no, o.erpNo, o.customer, o.custCode, o.custPO, o.salesName, o.quoteNo, ...oLinesOf(o.no).map(l => l.itemCode + " " + l.name)].some(v => String(v||"").toLowerCase().includes(q))))
     .sort((a,b) => String(b.o.date).localeCompare(String(a.o.date)) || String(b.o.no).localeCompare(String(a.o.no)));
   const td = today();
   $("odRows").innerHTML = rows.map(({o, pg}) => {
     const t = docTotals(oLinesOf(o.no), o.currency, o.taxRate); const late = pg.due && pg.due < td && o.status === "進行中";
-    return `<tr class="clickable" data-od="${esc(o.no)}"><td class="mono">${esc(o.no)}${o.quoteNo?`<span class="sub mono">報價 ${esc(o.quoteNo)}</span>`:""}</td><td class="mono">${esc(o.date)}</td>
+    return `<tr class="clickable" data-od="${esc(o.no)}"><td class="mono">${esc(o.no)}${o.erpNo && o.erpNo !== o.no ? `<span class="sub mono">鼎新 ${esc(o.erpNo)}</span>` : ""}${o.quoteNo?`<span class="sub mono">報價 ${esc(o.quoteNo)}</span>`:""}</td><td class="mono">${esc(o.date)}</td>
       <td>${esc(o.customer)}<span class="sub">${esc([o.custCode, o.custPO ? "PO " + o.custPO : ""].filter(Boolean).join("　"))}</span></td><td>${esc(o.salesName||"")}</td><td class="r num">${oLinesOf(o.no).length}</td>
       <td><div class="row" style="flex-wrap:nowrap;gap:8px"><span class="bar-meter" style="flex:1;margin:0"><span class="${pg.pct>=100?"":"l"}" style="width:${pg.pct}%;${pg.pct>=100?"background:var(--ok)":""}"></span></span><span class="num" style="font-size:12px;white-space:nowrap">${fmt(pg.done,2)} / ${fmt(pg.qty,2)}</span></div></td>
       <td class="mono">${pg.due ? `${esc(pg.due)}${late?' <span class="chip low">逾期</span>':""}` : (pg.qty && pg.done>=pg.qty ? '<span class="chip in">已出完</span>' : "—")}</td>
