@@ -390,6 +390,7 @@ const HANDLERS = {
   saveSale:    ['user', saveSale_, true],
   saleStatus:  ['user', saleStatus_, true],
   renameSale:  ['user', renameSale_, true],
+  renameDoc:   ['user', renameDoc_, true],
   orderToSale: ['user', orderToSale_, true],
   shipSale:    ['user', shipSale_, true],
   deleteTxn:   ['admin', deleteTxn_, true]
@@ -1918,6 +1919,31 @@ function renameSale_(u, p) {
   y.no = to; y.updatedAt = nowStr_();
   y.editLog = (y.editLog ? y.editLog + '\n' : '') + nowStr_() + ' ' + u.name + '｜單號由 ' + from + ' 改為 ' + to;
   update_('sales', y);
+  return { no: to, moved: n };
+}
+/** 訂單、報價單改單號（例如改成跟鼎新一樣）：所有引用這個單號的地方一起改，單號以外的內容不動 */
+function renameDoc_(u, p) {
+  needSales_(u);
+  const kind = p.kind === 'quote' ? 'quote' : 'order', k = kind === 'quote' ? 'quotes' : 'orders', label = kind === 'quote' ? '報價單號' : '訂單單號';
+  const from = String(p.no || '').trim(), to = String(p.newNo || '').trim();
+  if (!to) throw new Error('請輸入新的' + label + '。');
+  if (!/^[A-Za-z0-9][A-Za-z0-9\-_]{2,39}$/.test(to)) throw new Error('單號只能用英文、數字和「-」，例如 2204-20261116001。');
+  if (from === to) throw new Error('新單號和原單號一樣。');
+  const all = readAll_(k); const d = all.find(y => y.no === from); if (!d) throw new Error('找不到' + label + ' ' + from + '。');
+  if (all.some(y => y.no === to)) throw new Error(label + ' ' + to + ' 已經有了，請確認是不是重複的單。');
+  const n = {};
+  if (kind === 'quote') {
+    n.lines = replaceCol_('quoteLines', 'quoteNo', from, to); n.orders = replaceCol_('orders', 'quoteNo', from, to);
+  } else {
+    n.lines = replaceCol_('orderLines', 'orderNo', from, to); n.quotes = replaceCol_('quotes', 'orderNo', from, to);
+    n.sales = replaceCol_('sales', 'orderNo', from, to); n.salesLines = replaceCol_('salesLines', 'orderNo', from, to);
+    n.wos = replaceCol_('wos', 'orderNo', from, to); n.txns = replaceCol_('txns', 'orderNo', from, to);
+  }
+  n.mails = replaceCol_('mails', 'docNo', from, to);
+  const y = readAll_(k).find(z => z.no === from);
+  y.no = to; if (!String(y.erpNo || '').trim() && p.asErp) y.erpNo = to; y.updatedAt = nowStr_();
+  y.note = y.note || '';
+  update_(k, y);
   return { no: to, moved: n };
 }
 function saleStatus_(u, p) {

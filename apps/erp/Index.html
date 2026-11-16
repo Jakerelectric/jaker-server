@@ -6144,6 +6144,10 @@ function renderDocBtns(){
     else B.push(["", "重新開啟", () => docRun(() => call("orderStatus", { no:DOC.no, status:"進行中" }), "訂單已重新開啟。", true)]);
     if (d.quoteNo) B.push(["", "開啟報價單 " + d.quoteNo, () => openDoc("quote", d.quoteNo)]);
   }
+  if (!sa && pm.sales && DOC.no && d.status !== "已轉訂單") B.push(["", "修改單號", () => { const lab = q ? "報價單號" : "訂單單號";
+    const v = prompt(`把${lab} ${DOC.no} 改成（例如鼎新的單號 ${q ? "2101-20261116001" : "2204-20261116001"}）：`, d.erpNo || DOC.no); if (v == null) return; const nv = v.trim(); if (!nv || nv === DOC.no) return;
+    docRun(async () => { const r = await call("renameDoc", { kind: q ? "quote" : "order", no:DOC.no, newNo:nv, asErp:true }); DOC.no = r.no; },
+      `單號已改為 ${nv}${q ? "" : "，銷貨單、工單、出庫紀錄上的訂單單號也一起更新"}。`, true); }]);
   if (sa && pm.sales && DOC.no) B.push(["", "修改單號", () => { const v = prompt(`把銷貨單號 ${DOC.no} 改成（例如鼎新的單號 2304-20261103001）：`, DOC.no); if (v == null) return; const nv = v.trim(); if (!nv || nv === DOC.no) return;
     docRun(async () => { const r = await call("renameSale", { no:DOC.no, newNo:nv }); DOC.no = r.no; }, `單號已改為 ${nv}，Packing List、Invoice、出庫紀錄也一起更新。`, true); }]);
   B.push(["", "關閉", () => $("docDlg").close()]);
