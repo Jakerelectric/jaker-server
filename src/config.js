@@ -18,11 +18,13 @@ function readEnvFile(file) {
 
 function loadConfig(root) {
   const env = Object.assign(readEnvFile(path.join(root, '.env')), process.env);
-  const need = ['DB_USER', 'DB_PASSWORD', 'DB_NAME'];
+  const store = String(env.STORE || 'mysql').toLowerCase() === 'file' ? 'file' : 'mysql';   // file：單機版，不用 MySQL
+  const need = store === 'file' ? [] : ['DB_USER', 'DB_PASSWORD', 'DB_NAME'];
   const miss = need.filter(k => !env[k]);
   if (miss.length) throw new Error('.env 缺少設定：' + miss.join('、') + '（請重新執行安裝腳本，或參考 .env.example）');
   return {
     port: Number(env.PORT || 8080),
+    store,
     apps: String(env.APPS || 'pm').split(/[,\s]+/).map(x => x.trim().toLowerCase()).filter(x => x === 'pm' || x === 'erp'),
     host: env.HOST || '0.0.0.0',
     publicBase: env.PUBLIC_BASE || '',

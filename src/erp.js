@@ -10,6 +10,7 @@ const path = require('path');
 const fs = require('fs');
 const cron = require('node-cron');
 const { Store } = require('./store');
+const { FileStore } = require('./file-store');
 const { createRuntime } = require('./runtime');
 const { loadErpSchema } = require('./erp-schema');
 
@@ -17,9 +18,11 @@ async function setupErp(app, { cfg, ROOT, log, serial }) {
   const appDir = path.join(ROOT, 'apps', 'erp');
   const schema = loadErpSchema(appDir);
   const backupDir = path.join(cfg.dataDir, 'backups', 'erp');
-  const store = new Store(cfg.db, { prefix: 'erp_', tableName: schema.tableName, defFor: schema.defFor, backupDir, log });
+  const store = cfg.store === 'file'
+    ? new FileStore(path.join(cfg.dataDir, 'erp-db'), { log })
+    : new Store(cfg.db, { prefix: 'erp_', tableName: schema.tableName, defFor: schema.defFor, backupDir, log });
   await store.open();
-  log('進銷存系統：資料庫已連線，工作表 ' + store.sheets.size + ' 張');
+  log('進銷存系統：' + (cfg.store === 'file' ? '單機資料（' + path.join(cfg.dataDir, 'erp-db') + '）' : '資料庫已連線') + '，工作表 ' + store.sheets.size + ' 張');
 
   const rt = createRuntime(store, {
     appDir, dataDir: cfg.dataDir, driveDir: path.join(cfg.dataDir, 'erp-drive'), mount: '/erp', publicBase: cfg.publicBase,

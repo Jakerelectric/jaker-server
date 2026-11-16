@@ -11,6 +11,7 @@ const fs = require('fs');
 const XLSX = require('xlsx');
 const { loadConfig } = require('../src/config');
 const { Store } = require('../src/store');
+const { FileStore } = require('../src/file-store');
 const { rewriteDriveLinks } = require('./drive-links');
 const { loadErpSchema } = require('../src/erp-schema');
 
@@ -55,7 +56,8 @@ function erpRows(ws) {
   let store, only = null;
   if (appName === 'erp') {
     const schema = loadErpSchema(path.join(ROOT, 'apps', 'erp'));
-    store = new Store(cfg.db, { prefix: 'erp_', tableName: schema.tableName, defFor: schema.defFor, backupDir: path.join(cfg.dataDir, 'backups', 'erp') });
+    store = cfg.store === 'file' ? new FileStore(path.join(cfg.dataDir, 'erp-db'))
+      : new Store(cfg.db, { prefix: 'erp_', tableName: schema.tableName, defFor: schema.defFor, backupDir: path.join(cfg.dataDir, 'backups', 'erp') });
     only = new Set(schema.sheetNames);
   } else store = new Store(cfg.db, { backupDir: path.join(cfg.dataDir, 'backups') });
   await store.open();
