@@ -293,7 +293,7 @@ nav.tabs [data-tab].g-off{display:none}
         <button aria-pressed="false" data-cat="備品/工具">備品/工具</button>
       </div>
       <select id="whFilter" style="width:auto" aria-label="庫別"></select>
-      <input id="itemSearch" type="search" placeholder="搜尋品號、舊料號、中英文品名、規格、儲位" style="max-width:280px">
+      <input id="itemSearch" type="search" placeholder="搜尋品號、品名、規格、儲位；多個用空白或逗號分開" style="max-width:420px;min-width:260px" title="可以一次搜尋多個料品：用空白、逗號或換行分開，也可以從 Excel 貼一整欄品號"><span class="muted" id="itemSearchMiss" style="font-size:12px"></span>
       <label class="row" style="font-size:13px"><input type="checkbox" id="onlyLow"> 只看需補貨</label>
       <span style="flex:1"></span>
       <button class="btn" id="sfEdit" data-admin hidden>設定安全存量</button>
@@ -1866,12 +1866,16 @@ function renderDash(){
   bindItemClicks($("lowList"));
 }
 function renderItems(){
-  const q = $("itemSearch").value.trim().toLowerCase();
+  // 可以一次搜尋多個料品：用空白、逗號、頓號或換行分開（例如從 Excel 貼一整欄品號），符合任一個就列出
+  const terms = $("itemSearch").value.trim().toLowerCase().split(/[\s,，、;；]+/).filter(Boolean);
+  const q = terms.length ? terms : null;
   const onlyLow = $("onlyLow").checked; const wh = $("whFilter").value;
   $("qtyHead").textContent = wh ? "本庫別數量" : "庫存數量（合計）";
   const rows = S.items.filter(i => (!S.cat || i.cat===S.cat) && (!onlyLow || isLow(i) || qtyOf(i.id)<=0) &&
     (!wh || (BY_ITEM[i.id]||[]).some(s=>s.whId===wh) || i.mainWh===wh) &&
-    (!q || [i.code,i.alias,i.name,i.nameEn,i.spec,...(BY_ITEM[i.id]||[]).map(s=>s.loc)].some(v=>String(v||"").toLowerCase().includes(q))));
+    (!q || q.some(t => [i.code,i.alias,i.name,i.nameEn,i.spec,...(BY_ITEM[i.id]||[]).map(s=>s.loc)].some(v=>String(v||"").toLowerCase().includes(t)))));
+  const miss = q && q.length > 1 ? q.filter(t => !rows.some(i => [i.code,i.alias,i.name,i.nameEn,i.spec].some(v => String(v||"").toLowerCase().includes(t)))) : [];
+  $("itemSearchMiss").textContent = q && q.length > 1 ? `${q.length} 個關鍵字，找到 ${rows.length} 個品號` + (miss.length ? `；找不到：${miss.join("、")}` : "") : "";
   if (!rows.length){ $("itemRows").innerHTML = `<tr><td colspan="7"><div class="empty">${S.items.length?"沒有符合條件的品號。":"品號資料是空的。"}</div></td></tr>`; return; }
   $("itemRows").innerHTML = rows.map(i => {
     const total = qtyOf(i.id); const shown = wh ? qtyOf(i.id, wh) : total;
