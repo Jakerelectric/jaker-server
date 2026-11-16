@@ -62,6 +62,33 @@
 - 只有公司內網連得到；外部連線等 Cloudflare 設定好再開。
 - 第一次登入行政服務的人，要先到行政服務入口設定自己的密碼才能登入。
 
+## 進銷存系統（/erp）— Mac 安裝
+
+進銷存系統也可以跑在這套伺服器上（網址 `/erp/`）。資料比較敏感，先只在公司內網用；Google 版照常運作，兩邊互不影響。
+
+1. **下載程式**：打開 Mac 的「終端機」，貼上：
+   `git clone https://github.com/Jakerelectric/jaker-server ~/jaker-server && cd ~/jaker-server && bash install-mac.sh`
+   - 第一次會安裝 Homebrew（要輸入 Mac 的登入密碼），接著自動裝 Node.js、MySQL、建資料庫、設定自動啟動。
+   - 最後會關閉 Mac 的自動睡眠，並顯示同事要用的網址，例如 `http://192.168.1.30:8080/erp/`。
+2. **匯入資料**：打開進銷存的 Google 試算表 →「檔案」→「下載」→「Microsoft Excel (.xlsx)」，
+   再到 `~/jaker-server` 資料夾雙擊「**匯入進銷存資料.command**」選這個檔案。匯入前會自動備份。
+3. **登入**：用行政服務的員工編號和密碼（或原本進銷存的密碼）。權限照進銷存「帳號管理」的設定；
+   員工編號不在進銷存帳號裡的人不能登入。
+4. **更新程式**：雙擊「**更新程式.command**」。新版沒有正常啟動會自動退回。
+
+| 要做的事 | 怎麼做 |
+| --- | --- |
+| 看錯誤紀錄 | `~/jaker-server/data/logs/server.log` |
+| 重新啟動服務 | 終端機：`launchctl kickstart -k gui/$(id -u)/tw.jaker.server` |
+| 備份 | 每天凌晨 2:10 自動存一份到 `data/backups/erp`（保留 30 天），匯入前也會備份 |
+| 資料表 | MySQL 資料庫 `jaker_apps`，進銷存的表都以 `erp_` 開頭（例如 `erp_items`、`erp_txns`），欄位名稱來自程式裡的欄位代號 |
+
+注意：
+- Mac 要一直開著、登入狀態（服務在登入後自動啟動）。用 Wi-Fi 時 IP 可能會變，建議請 IT 在路由器固定這台 Mac 的 IP。
+- MySQL 只接受這台 Mac 自己連線；網頁只開在公司內網，外部連不到。
+- 系統寄信、自動翻譯在這個版本不會動作（只留紀錄），要寄信請先用 Google 版。
+- `.env` 的 `APPS` 決定這台主機跑哪些系統：Mac 是 `APPS=erp`；公司 Windows 主機維持只有專案系統（沒寫就是 `pm`）。
+
 ## 技術說明（給 IT）
 
 - Node.js（Express）＋ MySQL。原本 Apps Script 的程式碼（`apps\pm\Code.gs`、`Dashboard.html`）直接沿用，

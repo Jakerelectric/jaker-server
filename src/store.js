@@ -7,6 +7,8 @@
  *   - 常用的欄位（編號、專案編號、負責人、狀態…）建索引，可以直接用 SQL 查詢、統計
  * 程式執行時資料也放一份在記憶體（很快）；每次請求結束，只把有變動的列寫回 MySQL。
  * 其他：gas_props（設定值）、gas_docs（檔案索引等）、gas_tables（工作表 ↔ 資料表）、gas_columns（表頭 ↔ 欄位）
+ * 多個系統共用同一個資料庫：opts.prefix（例如 'erp_'）讓這些管理用的表各自分開（erp_gas_tables…），
+ * opts.tableName / opts.defFor 決定該系統的資料表名稱與欄位定義。
  */
 const mysql = require('mysql2/promise');
 const fs = require('fs');
@@ -37,6 +39,7 @@ class Store {
     this.deletedProps = new Set();
     this.dirtyDocs = new Set();
     this.pool = null;
+    this.px = this.opts.prefix || '';
   }
 
   async open() {
@@ -45,6 +48,16 @@ class Store {
       user: this.cfg.DB_USER, password: this.cfg.DB_PASSWORD, database: this.cfg.DB_NAME,
       charset: 'utf8mb4', connectionLimit: 4, dateStrings: true, multipleStatements: false
     });
+    if (this.px) {
+      // 這個系統的管理用資料表加上前置字（gas_tables → erp_gas_tables），跟其他系統分開
+      const px = this.px, rw = sql => (typeof sql === 'string' ? sql.replace(/\bgas_(tables|props|docs|columns)\b/g, px + 'gas_$1') : sql);
+      const wrap = o => new Proxy(o, { get: (t, k) => {
+        if (k === 'query' || k === 'execute') return (sql, ...a) => t[k](rw(sql), ...a);
+        if (k === 'getConnection') return async () => wrap(await t.getConnection());
+        const v = t[k]; return typeof v === 'function' ? v.bind(t) : v;
+      } });
+      this.pool = wrap(this.pool);
+    }
     await this.pool.query(`CREATE TABLE IF NOT EXISTS gas_tables (
       sheet VARCHAR(100) NOT NULL PRIMARY KEY, tbl VARCHAR(64) NOT NULL, sort INT NOT NULL DEFAULT 0
     ) DEFAULT CHARSET=utf8mb4`);
@@ -61,6 +74,7 @@ class Store {
 
   /** 第一版測試是把整張表存成一筆 JSON（gas_sheets）；有的話轉成正式資料表 */
   async migrateLegacy() {
+    if (this.px) return;
     const [t] = await this.pool.query("SHOW TABLES LIKE 'gas_sheets'");
     if (!t.length) return;
     const [rows] = await this.pool.query('SELECT name, data FROM gas_sheets');
@@ -156,12 +170,13 @@ class Store {
 
   tableNameFor(sheet) {
     if (this.tables.has(sheet)) return this.tables.get(sheet);
+    if (this.opts.tableName) return this.opts.tableName(sheet);
     return TABLE_NAMES[sheet] || ('sheet_' + crypto.createHash('md5').update(sheet).digest('hex').slice(0, 10));
   }
 
   /** 欄位定義：表頭 → 欄位名稱、型別（名稱重複時加 _2、_3…） */
   newColumn(tbl, header, pos, used) {
-    const d = defFor(tbl, header) || { col: 'col_' + (pos + 1), type: 'VARCHAR(255)', index: false };
+    const d = (this.opts.defFor ? this.opts.defFor(tbl, header) : defFor(tbl, header)) || { col: 'col_' + (pos + 1), type: 'VARCHAR(255)', index: false };
     let col = d.col, n = 2;
     while (used.has(col.toLowerCase())) col = d.col + '_' + (n++);
     used.add(col.toLowerCase());
@@ -201,7 +216,7 @@ class Store {
           meta.push(c); changed = true;
         } else if (meta[j].header !== h) {
           // 表頭文字改了：欄位跟著改名（新表頭有英文名稱且沒被用過才改名）
-          const c = meta[j], d = defFor(tbl, h);
+          const c = meta[j], d = this.opts.defFor ? this.opts.defFor(tbl, h) : defFor(tbl, h);
           const nc = Object.assign({}, c, { header: h });
           if (d && d.col !== c.col && !used.has(d.col.toLowerCase())) { used.delete(c.col.toLowerCase()); nc.col = d.col; used.add(d.col.toLowerCase()); }
           await conn.query('ALTER TABLE ' + q(tbl) + ' CHANGE ' + q(c.col) + ' ' + this.colDef(conn, nc));

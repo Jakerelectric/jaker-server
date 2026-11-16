@@ -23,6 +23,7 @@ function loadConfig(root) {
   if (miss.length) throw new Error('.env 缺少設定：' + miss.join('、') + '（請重新執行安裝腳本，或參考 .env.example）');
   return {
     port: Number(env.PORT || 8080),
+    apps: String(env.APPS || 'pm').split(/[,\s]+/).map(x => x.trim().toLowerCase()).filter(x => x === 'pm' || x === 'erp'),
     host: env.HOST || '0.0.0.0',
     publicBase: env.PUBLIC_BASE || '',
     dataDir: path.resolve(root, env.DATA_DIR || 'data'),
