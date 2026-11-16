@@ -1296,7 +1296,8 @@ function quoteToOrder_(u, p) {
   const no = String(p.orderNo || '').trim() || nextNo_('SO', date, all.map(x => x.no));
   if (all.some(x => x.no === no)) throw new Error('訂單單號 ' + no + ' 已經存在。');
   const o = { no, date, custCode: q.custCode || '', customer: q.customer, contact: q.contact, custPO: String(p.custPO || '').trim(), currency: q.currency, taxType: q.taxType, taxRate: q.taxRate,
-    quoteNo: q.no, terms: q.terms, note: q.note, salesId: u.id, salesName: u.name, status: '進行中', createdAt: nowStr_(), updatedAt: nowStr_() };
+    quoteNo: q.no, terms: q.terms, note: q.note, salesId: u.id, salesName: u.name, status: '進行中', createdAt: nowStr_(), updatedAt: nowStr_(),
+    erpNo: String(p.orderNo || '').trim() };   // 轉訂單時自己填的單號（通常是鼎新單號）同時記成鼎新單號
   append_('orders', [o]);
   append_('orderLines', lines.map((l, i) => ({ orderNo: no, lid: Utilities.getUuid().slice(0, 8), seq: i + 1, itemCode: l.itemCode, name: l.name, nameEn: l.nameEn, spec: l.spec, unit: l.unit,
     qty: l.qty, price: l.price, cost: l.cost, dueDate: l.leadDate || l.wantDate || '', note: l.matNote || '' })));
