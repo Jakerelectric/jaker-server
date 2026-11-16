@@ -5954,6 +5954,12 @@ function docCols(){
     ["", "del"]
   ];
 }
+/** 交期欄：日期，或勾「ASAP」（客戶希望盡快、急單）。存成文字 ASAP，印出來也是 ASAP */
+function asapCell(i, k, v, dis){
+  const asap = String(v||"").toUpperCase() === "ASAP";
+  return (asap ? `<span class="chip low" style="font-weight:600">ASAP</span>` : `<input data-dl="${i}" data-k="${k}" value="${esc(v ?? "")}" type="date" ${dis?"disabled":""}>`) +
+    `<label class="sub" style="display:flex;gap:4px;align-items:center;white-space:nowrap;margin-top:2px"><input type="checkbox" data-asap="${i}" data-k="${k}" ${asap?"checked":""} ${dis?"disabled":""} style="width:auto">ASAP 急單</label>`;
+}
 function renderDocLines(){
   const ed = docEditable(), me = matEditable(), cols = docCols(), cur = $("dCur").value;
   const sh = DOC.kind === "order" && DOC.doc ? shippedByLine(DOC.doc) : {};
@@ -5970,8 +5976,8 @@ function renderDocLines(){
       case "name": return td(ed && !lk(l) ? inp(i, "name", l.name, { ph:"品名", st:"min-width:150px" }) + `<span class="sub">${esc(l.spec||"")}</span>` : `${esc(l.name||"")}<span class="sub">${esc(l.spec||"")}</span>`);
       case "qty": return td(inp(i, "qty", l.qty, { type:"number", st:"width:90px;text-align:right", dis:!ed }) + (lk(l) && ed && l._max != null ? `<span class="sub" data-qmax="${i}">未出 ${fmt(l._max,2)}</span>` : ""));
       case "unit": return td(lk(l) ? esc(l.unit||"") : inp(i, "unit", l.unit, { st:"width:60px", dis:!ed }));
-      case "want": return td(inp(i, "wantDate", l.wantDate, { type:"date", dis:!ed }));
-      case "due": return td(inp(i, "dueDate", l.dueDate, { type:"date", dis:!ed }));
+      case "want": return td(asapCell(i, "wantDate", l.wantDate, !ed));
+      case "due": return td(asapCell(i, "dueDate", l.dueDate, !ed));
       case "cost": return td(inp(i, "cost", l.cost, { type:"number", st:"width:100px;text-align:right", dis:!me }) + `<span data-bomhint="${i}">${bomHint(l.itemCode, i, me)}</span>`);
       case "lead": return td(inp(i, "leadDate", l.leadDate, { type:"date", dis:!me }) + (l.wantDate && l.leadDate && l.leadDate > l.wantDate ? '<span class="sub" style="color:var(--bad)">晚於客戶希望</span>' : ""));
       case "matNote": return td(inp(i, "matNote", l.matNote, { st:"min-width:120px", dis:!me }) + (l.matBy ? `<span class="sub">${esc(l.matBy)} ${esc(String(l.matAt||"").slice(5))}</span>` : ""));
@@ -6001,6 +6007,8 @@ function renderDocLines(){
       const bh = tr.querySelector(`[data-bomhint="${i}"]`); if (bh) bh.innerHTML = bomHint(l.itemCode, i, matEditable());
     });
   });
+  $("docLines").querySelectorAll("[data-asap]").forEach(cb => cb.addEventListener("change", () => {
+    const l = DOC.lines[Number(cb.dataset.asap)]; l[cb.dataset.k] = cb.checked ? "ASAP" : ""; renderDocLines(); }));
   $("docLines").querySelectorAll("[data-dldel]").forEach(b => b.addEventListener("click", () => { DOC.lines.splice(Number(b.dataset.dldel), 1);
     if (DOC.kind === "sale"){ DOC.orders = DOC.orders.filter(no => DOC.lines.some(l => l.orderNo === no)); if (!DOC.lines.length) DOC.lines = [{ lid:uid8(), qty:"" }]; } renderDocLines(); }));
   if (DOC.kind === "sale"){ saRenderOrders(); $("dAddLine").hidden = !ed || DOC.orders.length > 0;
