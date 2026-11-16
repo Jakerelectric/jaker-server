@@ -718,7 +718,7 @@ nav.tabs [data-tab].g-off{display:none}
       <div class="tools">
         <input id="cuSearch" type="search" placeholder="搜尋代號、名稱、聯絡人" style="width:220px">
         <label class="row" style="font-size:13px"><input type="checkbox" id="cuShowOff"> 顯示停用</label>
-        <button class="btn primary" id="cuNew">新增客戶</button>
+        <button class="btn" id="cuSync" title="報價單、訂單、銷貨單上的客戶名稱，統一改成客戶資料的簡稱">統一單據客戶名稱</button><button class="btn primary" id="cuNew">新增客戶</button>
       </div>
     </div>
     <p class="muted" style="margin-top:-8px">客戶代號請和鼎新一致（例如 Jaker Korea = A20007）。報價單、訂單、銷貨單選客戶時，會自動帶入聯絡人、幣別、稅別與交易條件；Invoice 會帶英文名稱、收貨資訊與付款條件。</p>
@@ -4277,6 +4277,16 @@ function openCust(code){
 }
 $("cuCur").addEventListener("change", () => { $("cuTax").value = $("cuCur").value === "TWD" ? "應稅5%" : "零稅率"; });
 $("cuNew").addEventListener("click", () => openCust(null));
+$("cuSync").addEventListener("click", async () => {
+  try{ const pv = await busy(() => call("syncCustNames", { dry:true }));
+    if (!(pv.quotes + pv.orders + pv.sales)) return flash("客戶名稱都已經一致，不用改。");
+    const list = Object.entries(pv.names).map(([a,b]) => `　${a} → ${b}`).join("\n");
+    if (!confirm(`會把下面的客戶名稱統一成客戶資料的簡稱（依客戶代號對應）：\n${list}\n\n報價單 ${pv.quotes}、訂單 ${pv.orders}、銷貨單 ${pv.sales} 張。出入庫紀錄不會改。要執行嗎？`)) return;
+    const r = await busy(() => call("syncCustNames", {})); await refresh(true);
+    const ch = Object.entries(r.names).map(([a,b]) => `${a} → ${b}`).join("、");
+    flash(r.quotes + r.orders + r.sales ? `已統一：報價單 ${r.quotes}、訂單 ${r.orders}、銷貨單 ${r.sales} 張。${ch}` : "客戶名稱都已經一致，不用改。"); }
+  catch(err){ flash(err.message); }
+});
 $("cuCancel").addEventListener("click", () => $("custDlg").close());
 $("custForm").addEventListener("submit", async e => {
   e.preventDefault(); const cust = {}; Object.entries(CU_F).forEach(([id, k]) => cust[k] = $(id).value.trim());

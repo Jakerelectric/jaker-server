@@ -325,6 +325,7 @@ const HANDLERS = {
   getInvoice:  ['user', getInvoice_],
   saveInvoice: ['user', saveInvoice_, true],
   saveCustomer:['user', saveCustomer_, true],
+  syncCustNames:['user', syncCustNames_, true],
   mailPrep:    ['user', mailPrep_],
   saveBom:     ['user', saveBom_, true],
   deleteBom:   ['user', deleteBom_, true],
@@ -2112,6 +2113,19 @@ function saveInvoice_(u, p) {
 
 // ======================= 客戶主檔 =======================
 const CUST_KEYS_ = ['short', 'full', 'nameEn', 'contact', 'phone', 'email', 'address', 'shipTo', 'currency', 'taxType', 'payTerms', 'tradeTerms', 'salesName', 'note'];
+/** 統一單據上的客戶名稱：報價單、訂單、銷貨單有客戶代號的，客戶名稱改成客戶資料的簡稱（同一個客戶只出現一個名稱）。
+ *  出入庫紀錄不動。p.code 有填就只處理這個客戶。 */
+function syncCustNames_(u, p) {
+  needSales_(u);
+  const only = String(p.code || '').trim(); const cs = {};
+  readAll_('customers').forEach(c => { const n = String(c.short || c.full || '').trim(); if (c.code && n) cs[c.code] = n; });
+  const out = { quotes: 0, orders: 0, sales: 0, names: {} };
+  ['quotes', 'orders', 'sales'].forEach(k => readAll_(k).forEach(d => {
+    const n = cs[d.custCode]; if (!n || (only && d.custCode !== only) || d.customer === n) return;
+    out.names[d.customer || '（空白）'] = n; out[k]++; if (p.dry) return; d.customer = n; update_(k, d);
+  }));
+  return out;
+}
 function saveCustomer_(u, p) {
   needSales_(u); const c = p.cust || {};
   const code = String(c.code || '').trim(); if (!code) throw new Error('請輸入客戶代號（和鼎新一致，例如 A20007）。');
