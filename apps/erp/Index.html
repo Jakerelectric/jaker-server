@@ -651,7 +651,31 @@ nav.tabs [data-tab].g-off{display:none}
   <!-- 倉庫：重新包裝 -->
   <section id="tab-repack" hidden>
     <div class="sec-head"><h2>包裝</h2></div>
-    <p class="muted" style="margin-top:-8px">拆掉包裝重新打包時，在這裡更新庫存的包裝方式。只改包裝，不改庫存數量；要從未包裝庫移到已包裝庫，請用「出入庫登記 › 調撥」。</p>
+    <div class="panel" style="margin-bottom:18px">
+      <h3 style="margin:0 0 4px">棧板調整：併板／改包裝</h3>
+      <p class="muted" style="margin:0 0 10px;font-size:13px">客戶要求併板、併貨，或某幾板重新打包時用。<b>原本的入庫紀錄、批號、品管出廠檢驗都不會改</b>，系統另外記一筆棧板資料；Packing List 會帶出調整後的包裝、尺寸和棧板重。勾選要放在同一板的批號（只勾一個就是改那一板的包裝）。</p>
+      <div class="row" style="gap:8px;margin-bottom:8px"><input id="paSearch" type="search" placeholder="搜尋品號、品名、批號" style="width:240px"><select id="paWh" style="width:auto" aria-label="庫別"></select>
+        <button type="button" class="btn sm" id="paReload">重新整理</button><span class="muted" id="paCount" style="font-size:13px"></span></div>
+      <div class="tbl-wrap" style="max-height:380px;overflow:auto"><table>
+        <thead><tr><th style="width:34px"></th><th>批號</th><th>入庫日</th><th>品號 / 品名</th><th class="r">在庫</th><th>目前包裝</th><th>尺寸 / 棧板重</th><th>目前同板</th></tr></thead>
+        <tbody id="paRows"></tbody></table></div>
+      <div id="paEdit" hidden style="margin-top:14px">
+        <h4 style="margin:0 0 6px" id="paEditTitle">調整後</h4>
+        <div class="tbl-wrap"><table><thead><tr><th>批號</th><th>品號</th><th class="r">在庫</th><th>原包裝</th><th style="width:240px">新包裝（箱數×每箱）</th><th></th></tr></thead><tbody id="paSelRows"></tbody></table></div>
+        <div class="form-grid" style="margin-top:10px">
+          <label class="f">整板尺寸<input id="paPack" list="packOptions" placeholder="例：120*100*130"></label>
+          <label class="f">棧板重量（kg）<input id="paWt" type="number" min="0" step="any"></label>
+          <label class="f">日期<input id="paDate" type="date"></label>
+          <label class="f span2">原因 / 備註<input id="paNote" placeholder="例：客戶要求併板、外箱破損重新打包"></label>
+        </div>
+        <div class="row" style="margin-top:10px"><button type="button" class="btn primary" id="paSave" data-write>確認調整</button><button type="button" class="btn" id="paClear">取消勾選</button></div>
+      </div>
+      <div id="paMsg"></div>
+      <details style="margin-top:12px"><summary style="cursor:pointer;font-weight:500">最近的棧板調整</summary>
+        <div class="tbl-wrap" style="margin-top:8px"><table><thead><tr><th>棧板編號</th><th>日期</th><th>庫別</th><th>批號 / 品號 / 包裝</th><th>尺寸 / 棧板重</th><th>狀態</th><th>原因 / 紀錄</th></tr></thead><tbody id="paHist"></tbody></table></div></details>
+    </div>
+    <h3 style="margin:0 0 4px">整批改包裝（依品號）</h3>
+    <p class="muted" style="margin-top:0">拆掉包裝重新打包時，在這裡更新庫存的包裝方式。只改包裝，不改庫存數量；要從未包裝庫移到已包裝庫，請用「出入庫登記 › 調撥」。</p>
     <div class="panel" style="margin-bottom:18px">
       <div class="form-grid">
         <label class="f span2">品號<input data-scan id="rpItem" list="itemOptions" placeholder="輸入或刷品號"></label>
@@ -2626,7 +2650,7 @@ function pickList(sel){ return sel.filter(t => t.lotId).map(t => ({ lotId:t.lotI
   packLines:t.packLines||"", pack:t.pack||"", palletWt:Number(t.palletWt)||0, newPlt:t.newPlt !== false, pltNo:t.pltNo||"" })); }
 function lotRow(l){ const t = Object.assign({}, l, { type:"out", itemId:l.itemCode, qty0:Number(l.qty)||0, qty:Number(l.qty)||0, on:false });
   t.packLines = l.packLines || packText(packOf(l)); if (l.partial && t.packLines) t.packLines = pickPack(t, t.qty); t.pk0 = t.packLines;
-  if (l.pltNo && l.pltNo !== l.lotNo) t.newPlt = false;  // 混裝板的其他品項：預設併到同一板
+  if (l.pltNo && !l.pltHead) t.newPlt = false;  // 混裝板／併板的其他品項：預設併到同一板
   return t; }
 $("plPick").addEventListener("change", e => {
   const el = e.target, L = PL.src || [];
@@ -3903,6 +3927,7 @@ enterToNext($("shipForm"));
 /* ====================== 重新包裝 ====================== */
 const pkSum = txt => packQty(packParse(txt));
 function renderRepack(){
+  paTouch();
   if (!$("rpDate").value) $("rpDate").value = today();
   const wopt = S.whs.map(w => `<option value="${esc(w.code)}">${esc(whLabel(w.code))}</option>`).join("");
   const keep1 = $("rpWh").value, keep2 = $("rpListWh").value;
@@ -3913,6 +3938,68 @@ function renderRepack(){
     <td>${esc(r.before ? ctPkText(packParse(r.before)) : "（未登記）")} → <b>${esc(ctPkText(packParse(r.after)))}</b>${r.packSize?`<span class="sub">${esc(r.packSize)}</span>`:""}</td><td class="wrap-cell">${esc(r.note||"")}</td><td>${esc(r.filler||"")}</td></tr>`).join("")
     || `<tr><td colspan="6"><div class="empty">還沒有包裝紀錄。</div></td></tr>`;
 }
+/* ---------- 棧板調整：併板／改包裝（入庫紀錄不動） ---------- */
+const PA = { lots:[], pallets:[], sel:{}, loaded:false, busy:false };
+function paTouch(){
+  const keep = $("paWh").value;
+  $("paWh").innerHTML = `<option value="">全部庫別</option>` + S.whs.map(w => `<option value="${esc(w.code)}">${esc(whLabel(w.code))}</option>`).join("");
+  $("paWh").value = keep; if (!$("paDate").value) $("paDate").value = today();
+  if (!PA.loaded && !PA.busy) paLoad(); else paRender();
+}
+async function paLoad(){
+  PA.busy = true;
+  try{ const r = await call("palletsLoad", {}); PA.lots = r.lots || []; PA.pallets = r.pallets || []; PA.loaded = true;
+    Object.keys(PA.sel).forEach(k => { if (!PA.lots.some(l => l.lotNo === k)) delete PA.sel[k]; }); paRender(); }
+  catch(err){ msg("paMsg", err.message, "err"); } finally { PA.busy = false; }
+}
+const paPk = l => l.packLines || packText(packOf(l));   // 舊資料用箱數／每箱數量
+const paGroup = l => !l.pltNo ? "" : (String(l.pltNo).startsWith("PLT") ? `棧板 ${l.pltNo}` : `混裝板 ${l.pltNo}`);
+function paRender(){
+  const q = $("paSearch").value.trim().toLowerCase(), wh = $("paWh").value;
+  const L = PA.lots.filter(l => (!wh || l.whId === wh) && (!q || [l.lotNo, l.itemCode, l.itemName, l.pltNo].some(v => String(v||"").toLowerCase().includes(q))));
+  $("paCount").textContent = `${L.length} 批在庫`;
+  $("paRows").innerHTML = L.slice(0, 400).map(l => `<tr${PA.sel[l.lotNo] ? ' class="sel"' : ""}><td><input type="checkbox" data-pa="${esc(l.lotNo)}" ${PA.sel[l.lotNo] ? "checked" : ""} style="width:auto"></td>
+    <td class="mono">${esc(l.lotNo)}</td><td class="mono">${esc(l.date||"")}</td><td><span class="mono">${esc(l.itemCode)}</span><span class="sub">${esc(l.itemName||"")}</span></td>
+    <td class="r num">${fmt(l.qty,2)}${l.partial ? `<span class="sub">入庫 ${fmt(l.qtyIn,2)}</span>` : ""}</td><td>${esc(paPk(l) || "—")}</td>
+    <td>${esc(l.pack || "")}${Number(l.palletWt) ? `<span class="sub">${fmt(l.palletWt,2)} kg</span>` : ""}</td><td>${esc(paGroup(l))}${l.adjusted ? ' <span class="chip">已調整</span>' : ""}</td></tr>`).join("")
+    || `<tr><td colspan="8"><div class="empty">沒有符合的在庫批號。</div></td></tr>`;
+  $("paRows").querySelectorAll("[data-pa]").forEach(cb => cb.addEventListener("change", () => {
+    const l = PA.lots.find(x => x.lotNo === cb.dataset.pa); if (!l) return;
+    if (cb.checked){ PA.sel[l.lotNo] = { lotNo:l.lotNo, packLines:paPk(l) || "" };
+      if (!$("paPack").value && Object.keys(PA.sel).length === 1){ $("paPack").value = l.pack && l.pack !== "併板" ? l.pack : ""; $("paWt").value = Number(l.palletWt) || ""; } }
+    else delete PA.sel[l.lotNo];
+    paRender(); }));
+  const sel = Object.values(PA.sel).map(x => ({ x, l: PA.lots.find(y => y.lotNo === x.lotNo) })).filter(o => o.l);
+  $("paEdit").hidden = !sel.length;
+  $("paEditTitle").textContent = sel.length > 1 ? `調整後：這 ${sel.length} 批放在同一板` : "調整後：改這一板的包裝";
+  $("paSelRows").innerHTML = sel.map(({ x, l }) => `<tr><td class="mono">${esc(l.lotNo)}</td><td><span class="mono">${esc(l.itemCode)}</span><span class="sub">${esc(l.itemName||"")}</span></td>
+    <td class="r num">${fmt(l.qty,2)}</td><td>${esc(paPk(l) || "—")}</td><td><input data-pap="${esc(l.lotNo)}" value="${esc(x.packLines)}" placeholder="例：10×24 + 1×6"><span class="sub" data-pah="${esc(l.lotNo)}"></span></td>
+    <td><button type="button" class="btn sm" data-pad="${esc(l.lotNo)}">移除</button></td></tr>`).join("");
+  const chk = lot => { const x = PA.sel[lot], l = PA.lots.find(y => y.lotNo === lot), el = $("paSelRows").querySelector(`[data-pah="${lot}"]`); if (!el || !l) return;
+    const n = packQty(packParse(x.packLines)); el.textContent = n ? `合計 ${fmt(packBoxes(packParse(x.packLines)))} 箱、${fmt(n,2)} 個` + (Math.abs(n - Number(l.qty)) > 1e-9 ? `　與在庫 ${fmt(l.qty,2)} 不一致` : "") : ""; };
+  $("paSelRows").querySelectorAll("[data-pap]").forEach(inp => { chk(inp.dataset.pap); inp.addEventListener("input", () => { PA.sel[inp.dataset.pap].packLines = inp.value; chk(inp.dataset.pap); }); });
+  $("paSelRows").querySelectorAll("[data-pad]").forEach(b => b.addEventListener("click", () => { delete PA.sel[b.dataset.pad]; paRender(); }));
+  $("paHist").innerHTML = PA.pallets.slice(0, 50).map(t => `<tr><td class="mono">${esc(t.id)}</td><td class="mono">${esc(t.date||"")}</td><td>${esc(whLabel(t.whId))}</td>
+    <td>${(t.lotList||[]).map(x => `<div><span class="mono">${esc(x.lotNo)}</span> ${esc(x.itemCode)} · ${esc(x.before && x.before !== x.packLines ? x.before + " → " : "")}<b>${esc(x.packLines||"—")}</b></div>`).join("") || '<span class="muted">（已全部移到其他棧板）</span>'}</td>
+    <td>${esc(t.pack||"")}${Number(t.palletWt) ? `<span class="sub">${fmt(t.palletWt,2)} kg</span>` : ""}</td><td>${esc(t.status||"")}</td>
+    <td class="wrap-cell">${esc(t.note||"")}<span class="sub" style="white-space:pre-line">${esc(t.history||"")}</span></td></tr>`).join("")
+    || `<tr><td colspan="7"><div class="empty">還沒有棧板調整紀錄。</div></td></tr>`;
+}
+$("paSearch").addEventListener("input", paRender); $("paWh").addEventListener("change", paRender);
+$("paReload").addEventListener("click", paLoad);
+$("paClear").addEventListener("click", () => { PA.sel = {}; paRender(); });
+$("paSave").addEventListener("click", async () => {
+  msg("paMsg", ""); const lots = Object.values(PA.sel); if (!lots.length) return;
+  const bad = lots.find(x => { const l = PA.lots.find(y => y.lotNo === x.lotNo); const n = packQty(packParse(x.packLines)); return l && n && Math.abs(n - Number(l.qty)) > 1e-9; });
+  if (bad && !confirm(`批號 ${bad.lotNo} 的新包裝數量和在庫數量不一致，仍要儲存？`)) return;
+  if (lots.length > 1 && !$("paPack").value.trim() && !confirm("還沒填整板尺寸，Packing List 會少這一板的尺寸。仍要儲存？")) return;
+  $("paSave").disabled = true;
+  try{ const r = await busy(() => call("savePallet", { lots, pack:$("paPack").value.trim(), palletWt:$("paWt").value, note:$("paNote").value.trim(), date:$("paDate").value || today() }));
+    PA.sel = {}; $("paPack").value = ""; $("paWt").value = ""; $("paNote").value = ""; await paLoad();
+    msg("paMsg", `已建立 ${r.id}（${lots.length > 1 ? "併板 " + lots.length + " 批" : "改包裝"}）。入庫紀錄沒有變動，Packing List 會帶出新的包裝。`, "ok"); }
+  catch(err){ msg("paMsg", err.message, "err"); }
+  finally{ $("paSave").disabled = !can("user"); }
+});
 function rpStock(){ const it = findItemFromInput($("rpItem").value); return it ? { it, st: S.stock.find(x => x.itemId === it.id && x.whId === $("rpWh").value) } : null; }
 let RP_KEY = "";
 function rpShowCur(force){

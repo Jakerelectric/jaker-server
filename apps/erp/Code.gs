@@ -38,6 +38,8 @@ const F = {
           ['phone','電話','s'],['email','E-mail','s'],['address','地址','s'],['shipTo','收貨資訊','s'],['currency','幣別','s'],['taxType','稅別','s'],
           ['payTerms','付款條件','s'],['tradeTerms','貿易條件','s'],['salesName','負責業務','s'],['note','備註','s'],['active','啟用','s'],['updatedAt','更新時間','s']],
   invoices:[['sc','銷貨單號','s'],['json','內容JSON','s'],['updatedAt','更新時間','s'],['byName','更新人','s']],
+  pallets:[['id','棧板編號','s'],['date','日期','d'],['whId','庫別','s'],['lots','批號明細','s'],['pack','棧板尺寸','s'],['palletWt','棧板重量','n'],
+          ['status','狀態','s'],['note','備註','s'],['history','調整紀錄','s'],['filler','填寫人','s'],['byId','登記帳號','s'],['ts','建立時間','n']],
   repacks:[['date','日期','d'],['itemCode','品號','s'],['itemName','品名','s'],['whId','庫別','s'],['qty','當時庫存','n'],['before','原包裝','s'],
           ['after','新包裝','s'],['packSize','包裝/棧板尺寸','s'],['note','備註','s'],['filler','填寫人','s'],['byId','登記帳號','s'],['ts','建立時間','n']],
   txns:  [['id','編號','s'],['date','日期','d'],['typeLabel','類型','s'],['purpose','類別','s'],['itemCode','品號','s'],['itemName','品名','s'],
@@ -88,7 +90,7 @@ const F = {
           ['finalItem','最終產品','s'],['station','工作站','s'],['opCode','製程代號','s'],['stationCode','工作站代號','s'],['prevDept','前站單位','s'],['prevOp','前站製程','s'],['nextDept','下站單位','s'],['nextOp','下站製程','s']]
 };
 const TAB = { users:'帳號', whs:'庫別', items:'品號', stock:'庫存', txns:'異動紀錄', counts:'盤點紀錄', packings:'PackingList', consignees:'收件人',
-  quotes:'報價單', quoteLines:'報價單身', orders:'訂單', orderLines:'訂單單身', wos:'工單', woMats:'工單用料', sales:'銷貨單', salesLines:'銷貨單身', repacks:'包裝紀錄', invoices:'Invoice', customers:'客戶', costLog:'單價紀錄', costItems:'成本資料庫', bom:'BOM', bomHeads:'BOM表頭', bomLog:'BOM修改紀錄', metalPrices:'金屬價格', ops:'製程', settings:'設定', mails:'寄信紀錄', woOps:'工單製程', woOut:'委外紀錄', woReports:'報工紀錄' };
+  quotes:'報價單', quoteLines:'報價單身', orders:'訂單', orderLines:'訂單單身', wos:'工單', woMats:'工單用料', sales:'銷貨單', salesLines:'銷貨單身', repacks:'包裝紀錄', pallets:'棧板', invoices:'Invoice', customers:'客戶', costLog:'單價紀錄', costItems:'成本資料庫', bom:'BOM', bomHeads:'BOM表頭', bomLog:'BOM修改紀錄', metalPrices:'金屬價格', ops:'製程', settings:'設定', mails:'寄信紀錄', woOps:'工單製程', woOut:'委外紀錄', woReports:'報工紀錄' };
 const TYPE_LABEL = { in:'入庫', out:'出庫', xfer:'調撥', adj:'調整' };
 const LABEL_TYPE = { '入庫':'in', '出庫':'out', '調撥':'xfer', '調整':'adj' };
 const ROLE_RANK = { staff:0, viewer:1, user:2, admin:3 };
@@ -318,6 +320,8 @@ const HANDLERS = {
   stocktake:   ['user', whOnly_(stocktake_), true],
   saveLoc:     ['user', whOnly_(saveLoc_), true],
   repack:      ['user', whOnly_(repack_), true],
+  palletsLoad: ['viewer', palletsLoad_, false],
+  savePallet:  ['user', whOnly_(savePallet_), true],
   getInvoice:  ['user', getInvoice_],
   saveInvoice: ['user', saveInvoice_, true],
   saveCustomer:['user', saveCustomer_, true],
@@ -1028,18 +1032,19 @@ function getPacking_(u, p) {
  *  1. 已存在其他 Packing List 的勾選（picks）先扣掉 → 那一批下次就選不到
  *  2. 再用目前庫存當上限（扣掉其他單已勾選、但倉庫還沒登記出庫的數量），由最新的入庫往回分配；分不到的舊批視為已出庫
  *  這張單自己勾過的批號一定列出來，並帶回當時勾的數量（own） */
-function lotUse_(sc) {
+function lotUse_(sc, inclReserved) {
   const outRefs = {}; readAll_('txns').forEach(t => { if (t.typeLabel === '出庫' && t.ref) outRefs[t.ref] = 1; });
   const used = {}, reserved = {}, own = {}, ownK = {};
   readAll_('packings').forEach(pk => { let d; try { d = JSON.parse(pk.json || '{}'); } catch (e) { return; }
     (d.picks || []).forEach(p => { const q = Number(p.qty) || 0; if (!(q > 0) || !p.lotId) return; const k = p.itemCode + '__' + p.whId;
+      if (inclReserved && pk.sc !== sc && !outRefs[pk.sc]) return;   // 棧板調整：還沒出貨的 Packing List 勾的貨也列出來
       if (pk.sc === sc) { own[p.lotId] = (own[p.lotId] || 0) + q; ownK[k] = (ownK[k] || 0) + q; }
       else { used[p.lotId] = (used[p.lotId] || 0) + q; if (!outRefs[pk.sc]) reserved[k] = (reserved[k] || 0) + q; } }); });
   return { used, reserved, own, ownK, scOut: !!outRefs[sc] };
 }
-function stockLots_(codes, sc) {
+function stockLots_(codes, sc, opt) {
   fillLotNos_();
-  const U = lotUse_(sc);
+  const U = lotUse_(sc, !!(opt && opt.inclReserved));
   const skip = {}; readAll_('whs').forEach(w => { if (w.type === '委外') skip[w.code] = 1; });
   const cap = {}; const want = k => { const c = k.split('__')[0], w = k.split('__')[1]; return !skip[w] && (!codes || codes[c]); };
   readAll_('stock').forEach(s => { const k = s.itemId + '__' + s.whId; if (want(k)) cap[k] = Number(s.qty) || 0; });
@@ -1055,14 +1060,21 @@ function stockLots_(codes, sc) {
     const q = round_(Math.min(rest, avail)); cap[k] = round_(rest - q);
     out.push({ lotId: t.id || '', lotNo: t.lotNo || '', date: String(t.date || '').slice(0, 10), itemCode: t.itemCode, itemName: t.itemName || names[t.itemCode] || '', whId: wh,
       qty: q, qtyIn: q0, partial: q < q0, own: U.own[t.id] || 0, packLines: t.packLines || '', boxes: t.boxes || '', spb: t.spb || '', mb: t.mb || '', m: t.m || '',
-      pack: t.pack || '', palletWt: Number(t.palletWt) || 0, ref: t.ref || '', woNo: t.woNo || '', xfer: t.type === 'xfer', ts: Number(t.ts) || 0, pltNo: t.pltNo || '' });
+      pack: t.pack || '', palletWt: Number(t.palletWt) || 0, ref: t.ref || '', woNo: t.woNo || '', xfer: t.type === 'xfer', ts: Number(t.ts) || 0, pltNo: t.pltNo || '',
+      pltHead: !!t.pltNo && t.pltNo === t.lotNo });
   });
+  // 棧板調整（併板／改包裝）：入庫紀錄不動，用最新的棧板資料蓋過包裝資訊
+  const PO = palletOverlay_();
+  out.forEach(o => { const x = o.lotNo && PO[o.lotNo]; if (!x) return;
+    o.pltNo = x.id; o.pltHead = x.head; o.adjusted = x.id; if (x.packLines) o.packLines = x.packLines;
+    if (x.head) { o.pack = x.pack || ''; o.palletWt = Number(x.palletWt) || 0; } else { o.pack = '併板'; o.palletWt = 0; } });
   Object.keys(cap).forEach(k => { if (cap[k] > 0) { const c = k.split('__')[0], w = k.split('__')[1];
     out.push({ lotId: '', lotNo: '', date: '', itemCode: c, itemName: names[c] || '', whId: w, qty: round_(cap[k]), qtyIn: 0, noLot: true, packLines: '', pack: '', palletWt: 0, ref: '', ts: 0 }); } });
   // 混裝板的幾個品項排在一起（排在該板第一個品項的位置），Packing List 才會算成同一板
-  const head = {}; out.forEach(o => { if (o.pltNo && (!head[o.pltNo] || o.lotNo === o.pltNo)) head[o.pltNo] = o; });
+  const head = {}; out.forEach(o => { if (o.pltNo && (!head[o.pltNo] || o.pltHead)) head[o.pltNo] = o; });
   const gk = o => { const h = o.pltNo && head[o.pltNo] || o; return [h.itemCode, String(h.date || '9'), h.ts]; };
-  return out.sort((a, b) => { const x = gk(a), y = gk(b); return x[0].localeCompare(y[0]) || x[1].localeCompare(y[1]) || x[2] - y[2] || (a.pltNo && a.pltNo === b.pltNo ? a.ts - b.ts : 0); }).slice(0, 1500);
+  return out.sort((a, b) => { const x = gk(a), y = gk(b); return x[0].localeCompare(y[0]) || x[1].localeCompare(y[1]) || x[2] - y[2] ||
+    (a.pltNo && a.pltNo === b.pltNo ? ((b.pltHead ? 1 : 0) - (a.pltHead ? 1 : 0)) || a.ts - b.ts : 0); }).slice(0, 1500);
 }
 /** Packing List 上修正品號的單位淨重／毛重，存回品號主檔 */
 function setItemWeights_(u, p) {
@@ -1958,6 +1970,46 @@ function repack_(u, p) {
   append_('repacks', [{ date, itemCode: item.code, itemName: item.name, whId: p.whId, qty: r.qty, before, after: pk.text, packSize: r.packSize,
     note: String(p.note || '').trim(), filler: String(p.filler || u.name).trim(), byId: u.id, ts: Date.now() }]);
   return { mismatch, total };
+}
+
+// ======================= 棧板調整：併板／改包裝 =======================
+// 入庫紀錄（批號、品管出廠檢驗都跟著它）完全不動；另外記一筆「棧板」資料，Packing List 帶出時用最新的棧板資料。
+const plLots_ = t => { try { return JSON.parse(t.lots || '[]') || []; } catch (e) { return []; } };
+function palletOverlay_() {
+  const m = {};
+  readAll_('pallets').filter(t => t.status === '有效').sort((a, b) => (Number(a.ts) || 0) - (Number(b.ts) || 0)).forEach(t => {
+    plLots_(t).forEach((x, i) => { m[x.lotNo] = { id: t.id, head: i === 0, packLines: x.packLines || '', pack: t.pack, palletWt: t.palletWt }; });
+  });
+  return m;
+}
+function palletsLoad_(u, p) {
+  const lots = stockLots_(null, '', { inclReserved: true }).filter(l => l.lotNo);
+  const pallets = readAll_('pallets', { tail: 300 }).map(t => { delete t._row; t.lotList = plLots_(t); return t; }).sort((a, b) => b.ts - a.ts);
+  return { lots, pallets };
+}
+function savePallet_(u, p) {
+  const sel = (p.lots || []).filter(x => x && x.lotNo); if (!sel.length) throw new Error('請至少勾一個批號。');
+  if (new Set(sel.map(x => x.lotNo)).size !== sel.length) throw new Error('同一個批號勾了兩次。');
+  const avail = {}; stockLots_(null, '', { inclReserved: true }).forEach(l => { if (l.lotNo) avail[l.lotNo] = l; });
+  sel.forEach(x => { if (!avail[x.lotNo]) throw new Error('批號 ' + x.lotNo + ' 已經沒有庫存（可能已出貨），不能調整。'); });
+  const wh = avail[sel[0].lotNo].whId;
+  if (sel.some(x => avail[x.lotNo].whId !== wh)) throw new Error('放在同一板的貨要在同一個庫別；不同庫別請先用「調撥」移過來。');
+  const date = p.date || today_(), now = nowStr_(), who = String(p.filler || u.name).trim(), codes = new Set(sel.map(x => x.lotNo));
+  const all = readAll_('pallets');
+  // 這些批號原本在別的棧板：從那一板移出（那一板剩下的貨照舊）
+  all.filter(t => t.status === '有效').forEach(t => {
+    const L = plLots_(t), keep = L.filter(x => !codes.has(x.lotNo)); if (keep.length === L.length) return;
+    t.lots = JSON.stringify(keep); if (!keep.length) t.status = '已調整';
+    t.history = (t.history ? t.history + '\n' : '') + now + ' ' + who + ' 移出 ' + L.filter(x => codes.has(x.lotNo)).map(x => x.lotNo).join('、');
+    update_('pallets', t);
+  });
+  const id = nextNo_('PLT', date, all.map(x => x.id));
+  const lots = sel.map(x => { const l = avail[x.lotNo]; const pk = packNorm_(x.packLines).text;
+    return { lotNo: x.lotNo, itemCode: l.itemCode, qty: l.qty, packLines: pk || l.packLines || '', before: l.packLines || '' }; });
+  append_('pallets', [{ id, date, whId: wh, lots: JSON.stringify(lots), pack: String(p.pack || '').trim(), palletWt: Number(p.palletWt) || '',
+    status: '有效', note: String(p.note || '').trim(), history: now + ' ' + who + ' 建立（' + (lots.length > 1 ? '併板 ' + lots.length + ' 批' : '改包裝') + '）',
+    filler: who, byId: u.id, ts: Date.now() }]);
+  return { id };
 }
 
 // ======================= Commercial Invoice（只有業務） =======================
