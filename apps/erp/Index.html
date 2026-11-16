@@ -340,6 +340,7 @@ nav.tabs [data-tab].g-off{display:none}
           <label class="f" id="mvPartyWrap"><span id="mvPartyText">供應商</span><input id="mvParty" placeholder="選填"></label>
           <label class="f" id="mvWoWrap" hidden>工單單號<input id="mvWo" list="woOptions" placeholder="選填，會算進工單進度"></label>
           <label class="f" id="mvOrderWrap" hidden>訂單單號<input id="mvOrder" list="orderOptions" placeholder="選填，出貨會算進訂單進度"></label>
+          <label class="f" id="mvLocWrap">庫位<input id="mvLoc" list="locOptions" placeholder="例：WO-A-0001" autocapitalize="characters"><span class="sub" id="mvLocHint"></span></label>
           <label class="f span2">備註<input id="mvNote" placeholder="選填，例：送貨單號、領料人"></label>
         </div>
         <datalist id="orderOptions"></datalist><datalist id="woOptions"></datalist>
@@ -383,7 +384,7 @@ nav.tabs [data-tab].g-off{display:none}
           </div>
           <datalist id="packOptions"><option value="未包裝"></option><option value="並板"></option><option value="併箱"></option><option value="未確認包裝方式"></option></datalist>
         </details>
-        <datalist id="itemOptions"></datalist>
+        <datalist id="itemOptions"></datalist><datalist id="locOptions"></datalist>
         <datalist id="deptOptions"></datalist>
         <div id="mvHint"></div>
         <div class="row" style="margin-top:14px" data-single><button class="btn primary" type="submit" id="mvSubmit" data-write>確認入庫</button></div>
@@ -657,7 +658,7 @@ nav.tabs [data-tab].g-off{display:none}
       <div class="row" style="gap:8px;margin-bottom:8px"><input id="paSearch" type="search" placeholder="搜尋品號、品名、批號" style="width:240px"><select id="paWh" style="width:auto" aria-label="庫別"></select>
         <button type="button" class="btn sm" id="paReload">重新整理</button><span class="muted" id="paCount" style="font-size:13px"></span></div>
       <div class="tbl-wrap" style="max-height:380px;overflow:auto"><table>
-        <thead><tr><th style="width:34px"></th><th>批號</th><th>入庫日</th><th>品號 / 品名</th><th class="r">在庫</th><th>目前包裝</th><th>尺寸 / 棧板重</th><th>目前同板</th></tr></thead>
+        <thead><tr><th style="width:34px"></th><th>批號</th><th>入庫日</th><th>品號 / 品名</th><th class="r">在庫</th><th>目前包裝</th><th>尺寸 / 棧板重</th><th>庫位</th><th>目前同板</th></tr></thead>
         <tbody id="paRows"></tbody></table></div>
       <div id="paEdit" hidden style="margin-top:14px">
         <h4 style="margin:0 0 6px" id="paEditTitle">調整後</h4>
@@ -665,6 +666,7 @@ nav.tabs [data-tab].g-off{display:none}
         <div class="form-grid" style="margin-top:10px">
           <label class="f">整板尺寸<input id="paPack" list="packOptions" placeholder="例：120*100*130"></label>
           <label class="f">棧板重量（kg）<input id="paWt" type="number" min="0" step="any"></label>
+          <label class="f">庫位<input id="paLoc" list="locOptions" placeholder="例：WO-A-0001（留空沿用原庫位）"><span class="sub" id="paLocHint"></span></label>
           <label class="f">日期<input id="paDate" type="date"></label>
           <label class="f span2">原因 / 備註<input id="paNote" placeholder="例：客戶要求併板、外箱破損重新打包"></label>
         </div>
@@ -1263,6 +1265,7 @@ nav.tabs [data-tab].g-off{display:none}
       <label class="f span2">舊料號 / 別名<input id="itAlias" placeholder="例：CS1F006；多個用逗號分隔"><span class="muted" style="font-size:12px">輸入、搜尋、刷條碼時，這些料號都會找到這個品號</span></label>
       <label class="f">庫存單位<input id="itUnit" required></label>
       <label class="f">主要庫別<select id="itWh"></select></label>
+      <label class="f">鼎新庫別<select id="itErpWh"></select><span class="sub" id="itErpHint"></span></label>
       <label class="f">安全存量<input id="itSafety" type="number" min="0" step="any" value="0"></label>
       <label class="f">淨重 / 毛重（kg）<span class="row" style="flex-wrap:nowrap"><input id="itNet" type="number" min="0" step="any" aria-label="淨重"><input id="itGross" type="number" min="0" step="any" aria-label="毛重"></span></label>
       <label class="f" id="itInitWrap">期初數量（入主要庫別）<input id="itInit" type="number" min="0" step="any" value="0"></label>
@@ -1920,7 +1923,7 @@ function findItemFromInput(v){ v = String(v||"").trim(); if(!v) return null; ret
 /* ---------- 異動明細 ---------- */
 const packCell = t => { const p = [];
   const pl = packOf(t); if (pl.length) p.push(pl.map(l => `${fmt(l[0])}箱×${fmt(l[1],2)}`).join(" + "));
-  if (t.pack) p.push(esc(t.pack)); if (t.palletWt) p.push(`${fmt(t.palletWt,2)} kg`); if (t.lotNo) p.unshift(`批號 ${esc(t.lotNo)}`); if (t.pltNo && t.pltNo !== t.lotNo) p.push(`與 ${esc(t.pltNo)} 同板`);
+  if (t.pack) p.push(esc(t.pack)); if (t.palletWt) p.push(`${fmt(t.palletWt,2)} kg`); if (t.lotNo) p.unshift(`批號 ${esc(t.lotNo)}`); if (t.pltNo && t.pltNo !== t.lotNo) p.push(`與 ${esc(t.pltNo)} 同板`); if (t.loc) p.push(`庫位 ${esc(t.loc)}`);
   return (p.length ? `<span class="mono" style="font-size:12px">${p.join(" · ")}</span>` : "") + (t.report ? `<span class="sub">報告：${esc(t.report)}</span>` : ""); };
 function renderMoves(){
   const f = $("mvFilter").value, wh = $("mvWhFilter").value, q = $("mvSearch").value.trim().toLowerCase();
@@ -2006,6 +2009,7 @@ function setMoveType(t){
   $("mvWhText").textContent = { in:"入庫庫別", out:"出庫庫別", xfer:"轉出庫別" }[t];
   $("mvToWrap").hidden = t!=="xfer";
   if ($("mxWrap")) $("mxWrap").hidden = t!=="in";
+  if ($("mvLocWrap")) $("mvLocWrap").hidden = t==="out";
   onPurpose();
   if (typeof SCAN !== "undefined" && SCAN.mode==="scan") renderScan();
 }
@@ -2088,6 +2092,23 @@ function onPack(){
 PK.forEach(id => $(id).addEventListener("input", onPack));
 packEditor($("pkLines"), onPack);
 $("mvQty").addEventListener("input", () => { qtyAuto = false; onPack(); });
+/* ---------- 庫位：倉庫代號-區-4位數編號（例 WO-A-0001），格式不對只提醒 ---------- */
+const locNorm = v => String(v||"").trim().toUpperCase().replace(/\s+/g,"").replace(/[－—–]/g,"-");
+const LOC_RE = /^[A-Z0-9]{1,4}-[A-Z0-9]{1,3}-\d{4}$/;
+function locHint(el, hint){ el = el || $("mvLoc"); hint = hint || $("mvLocHint"); const v = locNorm(el.value);
+  hint.textContent = v && !LOC_RE.test(v) ? "格式建議：倉庫代號-區-4位數，例 WO-A-0001" : ""; hint.style.color = v && !LOC_RE.test(v) ? "var(--warn)" : ""; }
+function locOptions(){ const set = new Set(); (S.txns||[]).forEach(t => { if (t.loc) set.add(t.loc); }); (PA.pallets||[]).forEach(t => { if (t.loc) set.add(t.loc); });
+  $("locOptions").innerHTML = [...set].sort().map(v => `<option value="${esc(v)}">`).join(""); }
+$("mvLoc").addEventListener("input", () => locHint());
+$("mvLoc").addEventListener("blur", () => { $("mvLoc").value = locNorm($("mvLoc").value); locHint(); });
+$("mvLoc").addEventListener("focus", locOptions);
+// 傳回鼎新時用的庫別（品號第一碼：1 原料、2 物料、3 半成品、4 成品、5 商品、6 物料；品號可單獨指定）
+const ERP_WH_BY_PREFIX = { "1":"1111", "2":"1112", "3":"1113", "4":"1114", "5":"1115", "6":"1112" };
+const ERP_WH_NAME = { "1111":"原料倉", "1112":"物料倉", "1113":"半成品倉", "1114":"成品倉", "1115":"商品存貨倉", "1121":"不良品倉", "1122":"待報廢倉", "1211":"寄庫倉",
+  "1311":"暫出倉", "1312":"暫入倉", "1330":"暫入轉出倉", "2111":"耗材倉", "2112":"客供倉", "2113":"費用倉", "2114":"收入倉", "2121":"已報廢倉" };
+function erpWhOf(it, purpose){ if (purpose === "客戶退回") return "1121"; if (it && it.erpWh) return String(it.erpWh).trim(); return ERP_WH_BY_PREFIX[String(it && (it.code || it.id) || "").charAt(0)] || ""; }
+const erpWhLabel = c => c ? `${c} ${ERP_WH_NAME[c] || ""}`.trim() : "（品號開頭不是 1～6，請指定）";
+
 /* ---------- 混裝板：同一板的其他品項 ---------- */
 const MX = [];
 function renderMx(){
@@ -2123,6 +2144,7 @@ $("moveForm").addEventListener("submit", async e => {
   if (p.woNo && !p.ref) p.ref = p.woNo;
   if (MV_PERSON && MV_PERSON.name === filler) p.fillerId = MV_PERSON.id;
   Object.entries(packData().d).forEach(([k,v]) => { if (v!==null && v!=="") p[k] = v; });
+  if (S.mvType!=="out" && $("mvLoc").value.trim()) p.loc = locNorm($("mvLoc").value);
   const mx = S.mvType==="in" ? MX.filter(x => String(x.item).trim() || Number(x.qty)) : [];
   const extra = [];
   for (const [i,x] of mx.entries()){
@@ -2137,7 +2159,7 @@ $("moveForm").addEventListener("submit", async e => {
   try{
     if (extra.length){
       const r = await busy(() => call("moveBatch", { samePallet:true, moves:[p, ...extra] }));
-      $("mvQty").value=""; $("mvRef").value=""; $("mvNote").value=""; $("mvParty").value=""; PK.forEach(id => $(id).value=""); setPack($("pkLines"), []); qtyAuto=false; $("pkHint").textContent="";
+      $("mvQty").value=""; $("mvRef").value=""; $("mvNote").value=""; $("mvParty").value=""; $("mvLoc").value=""; locHint(); PK.forEach(id => $(id).value=""); setPack($("pkLines"), []); qtyAuto=false; $("pkHint").textContent="";
       MX.length = 0; renderMx(); await refresh();
       msg("mvMsg", `已入庫混裝板 ${r.count} 個品項（同一板）：` + [it.code, ...extra.map(x => (itemById(x.itemId)||{}).code || x.itemId)].join("、") + "。", "ok");
       return;
@@ -2145,7 +2167,7 @@ $("moveForm").addEventListener("submit", async e => {
     const r = await busy(() => call("move", p));
     let t = S.mvType==="xfer" ? `已調撥 ${it.code} ${fmt(qty,2)} ${it.unit}：${whLabel(whId)} 結存 ${fmt(r.after,2)}，${whLabel(toWhId)} 結存 ${fmt(r.toAfter,2)}。`
       : `已${TYPE_LABEL[S.mvType]} ${it.code} ${fmt(qty,2)} ${it.unit}，${whLabel(whId)} 結存 ${fmt(r.after,2)}。`;
-    $("mvQty").value=""; $("mvRef").value=""; $("mvNote").value=""; $("mvParty").value=""; PK.forEach(id => $(id).value=""); setPack($("pkLines"), []); qtyAuto=false; $("pkHint").textContent="";
+    $("mvQty").value=""; $("mvRef").value=""; $("mvNote").value=""; $("mvParty").value=""; $("mvLoc").value=""; locHint(); PK.forEach(id => $(id).value=""); setPack($("pkLines"), []); qtyAuto=false; $("pkHint").textContent="";
     await refresh();
     const total = qtyOf(it.id); const low = it.safety>0 && total<it.safety;
     if (low) t += `\n注意：合計庫存 ${fmt(total,2)} 已低於安全存量 ${fmt(it.safety,2)}。`;
@@ -2335,6 +2357,8 @@ function openItem(id){
   $("itName").value = it?.name || ""; $("itSpec").value = it?.spec || ""; $("itSpecEn").value = it?.specEn || ""; $("itCat").value = it?.cat || (S.cat||CATS[1]);
   $("itNameEn").value = it?.nameEn || ""; $("itAlias").value = it?.alias || ""; $("itMergeConfirm").hidden = true; $("itUnit").value = it?.unit || ""; $("itSafety").value = it?.safety ?? 0;
   $("itNet").value = it?.netWt ?? ""; $("itGross").value = it?.grossWt ?? ""; $("itWh").value = it?.mainWh || "";
+  $("itErpWh").innerHTML = `<option value="">依品號開頭自動</option>` + Object.keys(ERP_WH_NAME).map(c => `<option value="${c}">${c} ${ERP_WH_NAME[c]}</option>`).join("");
+  $("itErpWh").value = it?.erpWh || ""; itErpHint();
   $("itInit").value = 0; $("itInitWrap").hidden = !!it;
   $("itFields").disabled = !admin; $("itSave").hidden = !admin;
   $("itDel").hidden = !it || !admin; $("itDelConfirm").hidden = true;
@@ -2358,7 +2382,7 @@ $("itCancel").addEventListener("click", () => $("itemDlg").close());
 $("itemForm").addEventListener("submit", async e => {
   e.preventDefault(); if (!can("admin")) return;
   const item = { code:$("itCode").value.trim(), name:$("itName").value.trim(), spec:$("itSpec").value.trim(), specEn:$("itSpecEn").value.trim(), nameEn:$("itNameEn").value.trim(), cat:$("itCat").value,
-    unit:$("itUnit").value.trim(), mainWh:$("itWh").value, safety:$("itSafety").value, netWt:$("itNet").value, grossWt:$("itGross").value,
+    unit:$("itUnit").value.trim(), mainWh:$("itWh").value, erpWh:$("itErpWh").value, safety:$("itSafety").value, netWt:$("itNet").value, grossWt:$("itGross").value,
     cost: itemById(editingId)?.cost || 0, note: itemById(editingId)?.note || "", alias:$("itAlias").value.trim() };
   const self = editingId ? itemById(editingId) : null;
   // 舊料號如果目前是另一個獨立品號 → 先確認要不要合併
@@ -2532,8 +2556,8 @@ $("exTxn").addEventListener("click", async () => {
   let ts; try{ ts = await busy(() => call("txnsQuery", { from, to })); }catch(e){ return msg("exMsg", e.message, "err"); }
   if (wh) ts = ts.filter(t => t.whId===wh || t.toWhId===wh);
   if (!ts.length) return msg("exMsg","這段期間沒有異動。","err");
-  download(`庫存異動_${ymd(from)}-${ymd(to)}.csv`, csv([["日期","類型","類別","品號","品名","規格","單位","數量","庫別","轉入庫別","結存","單號","供應商/客戶","總箱數","包裝明細(箱數×每箱數量)","包裝/棧板尺寸","棧板重量","測試報告","填寫人","單位","備註"],
-    ...ts.map(t => [t.date, TYPE_LABEL[t.type], t.purpose, t.itemCode, t.itemName, t.spec, t.unit, t.type==="out"?-t.qty:t.qty, t.whCode, t.toWhCode, t.balance, t.ref, t.party, packBoxes(packOf(t))||"", packText(packOf(t)), t.pack, t.palletWt, t.report, t.filler, t.dept, t.note])]), "text/csv");
+  download(`庫存異動_${ymd(from)}-${ymd(to)}.csv`, csv([["日期","類型","類別","品號","品名","規格","單位","數量","庫別","轉入庫別","結存","單號","供應商/客戶","總箱數","包裝明細(箱數×每箱數量)","包裝/棧板尺寸","棧板重量","測試報告","填寫人","單位","備註","庫位","鼎新庫別"],
+    ...ts.map(t => [t.date, TYPE_LABEL[t.type], t.purpose, t.itemCode, t.itemName, t.spec, t.unit, t.type==="out"?-t.qty:t.qty, t.whCode, t.toWhCode, t.balance, t.ref, t.party, packBoxes(packOf(t))||"", packText(packOf(t)), t.pack, t.palletWt, t.report, t.filler, t.dept, t.note, t.loc||"", erpWhOf(itemById(t.itemId) || { code:t.itemCode }, t.purpose)])]), "text/csv");
   msg("exMsg", `已匯出 ${ts.length} 筆。`);
 });
 $("exStock").addEventListener("click", () => {
@@ -2571,6 +2595,8 @@ function buildLines(txns){
 /* ---------- Packing List：選擇要出的貨物 ---------- */
 function pickPack(t, q){ const pk = packParse(t.packLines); const spb = pk.length ? pk[0][1] : 0; if (!spb || !(q > 0)) return t.packLines || "";
   const f = Math.floor(q / spb), r = round(q - f * spb); return [f ? `${f}×${spb}` : "", r ? `1×${r}` : ""].filter(Boolean).join(" + "); }
+function itErpHint(){ const code = $("itCode").value.trim(); $("itErpHint").textContent = $("itErpWh").value ? "已指定" : "自動：" + erpWhLabel(ERP_WH_BY_PREFIX[code.charAt(0)] || ""); }
+$("itErpWh").addEventListener("change", itErpHint); $("itCode").addEventListener("input", itErpHint);
 function renderPick(){
   const L = PL.src || []; const lots = PL.mode === "lots"; $("plPickBox").hidden = !L.length && !(lots && Object.keys(PL.need||{}).length);
   $("plPickQ0").textContent = lots ? "可出數量" : "銷貨數量"; $("plAllWrap").hidden = !lots;
@@ -2578,7 +2604,7 @@ function renderPick(){
     ? "這張單還沒有出庫紀錄，下面列出這些品號已入庫、還沒出庫的貨（每筆入庫一列，含入庫時登記的尺寸和棧板重）。已依先進先出幫你勾到銷貨數量，可以改勾選、數量、包裝、尺寸和棧板重，再按「依勾選產生」。毛重 = 數量×單位毛重 + 棧板重。"
     : "勾選這次要出的品項，可以改出貨數量、包裝、尺寸和棧板重，再按「依勾選產生」，下方的 Packing List 會重新排。毛重 = 數量×單位毛重 + 棧板重。";
   const row = (t,i) => `<tr${t.on ? "" : ' style="opacity:.55"'}><td><input type="checkbox" data-pk="${i}" ${t.on ? "checked" : ""} style="width:auto" aria-label="出貨"></td>
-    <td>${lots ? `<span class="sub">${t.lotNo ? `<b class="mono">${esc(t.lotNo)}</b>｜` : ""}${t.fromSlip ? "沒有庫存資料，依銷貨單數量" : t.noLot ? "庫存（找不到入庫紀錄）" : (t.xfer ? "調入 " : "入庫 ") + esc(t.date||"")}${t.ref ? "｜" + esc(t.ref) : ""}${t.woNo ? "｜工單 " + esc(t.woNo) : ""}｜${esc(t.whId||"")}${t.partial ? `｜原入庫 ${esc(String(t.qtyIn))}，已出一部分` : ""}</span>` : `<span class="mono">${esc(t.itemCode||"")}</span><span class="sub">${esc(t.itemName || (itemById(t.itemId)||{}).name || "")}</span>`}</td>
+    <td>${lots ? `<span class="sub">${t.lotNo ? `<b class="mono">${esc(t.lotNo)}</b>｜` : ""}${t.loc ? `📍<b class="mono">${esc(t.loc)}</b>｜` : ""}${t.fromSlip ? "沒有庫存資料，依銷貨單數量" : t.noLot ? "庫存（找不到入庫紀錄）" : (t.xfer ? "調入 " : "入庫 ") + esc(t.date||"")}${t.ref ? "｜" + esc(t.ref) : ""}${t.woNo ? "｜工單 " + esc(t.woNo) : ""}｜${esc(t.whId||"")}${t.partial ? `｜原入庫 ${esc(String(t.qtyIn))}，已出一部分` : ""}</span>` : `<span class="mono">${esc(t.itemCode||"")}</span><span class="sub">${esc(t.itemName || (itemById(t.itemId)||{}).name || "")}</span>`}</td>
     <td class="r">${esc(String(t.qty0))}</td>
     <td class="r"><input data-pq="${i}" type="number" min="0" step="any" value="${esc(String(t.qty))}" style="width:96px;text-align:right" ${t.on ? "" : "disabled"}>${Number(t.qty) > t.qty0 ? `<span class="sub" style="color:var(--bad)">超過${lots ? "可出" : "銷貨"}數量</span>` : ""}</td>
     <td><input data-pp="${i}" value="${esc(t.packLines||"")}" placeholder="例：10×36 + 1×20" style="min-width:150px" ${t.on ? "" : "disabled"}></td>
@@ -3956,13 +3982,13 @@ const paPk = l => l.packLines || packText(packOf(l));   // 舊資料用箱數／
 const paGroup = l => !l.pltNo ? "" : (String(l.pltNo).startsWith("PLT") ? `棧板 ${l.pltNo}` : `混裝板 ${l.pltNo}`);
 function paRender(){
   const q = $("paSearch").value.trim().toLowerCase(), wh = $("paWh").value;
-  const L = PA.lots.filter(l => (!wh || l.whId === wh) && (!q || [l.lotNo, l.itemCode, l.itemName, l.pltNo].some(v => String(v||"").toLowerCase().includes(q))));
+  const L = PA.lots.filter(l => (!wh || l.whId === wh) && (!q || [l.lotNo, l.itemCode, l.itemName, l.pltNo, l.loc].some(v => String(v||"").toLowerCase().includes(q))));
   $("paCount").textContent = `${L.length} 批在庫`;
   $("paRows").innerHTML = L.slice(0, 400).map(l => `<tr${PA.sel[l.lotNo] ? ' class="sel"' : ""}><td><input type="checkbox" data-pa="${esc(l.lotNo)}" ${PA.sel[l.lotNo] ? "checked" : ""} style="width:auto"></td>
     <td class="mono">${esc(l.lotNo)}</td><td class="mono">${esc(l.date||"")}</td><td><span class="mono">${esc(l.itemCode)}</span><span class="sub">${esc(l.itemName||"")}</span></td>
     <td class="r num">${fmt(l.qty,2)}${l.partial ? `<span class="sub">入庫 ${fmt(l.qtyIn,2)}</span>` : ""}</td><td>${esc(paPk(l) || "—")}</td>
-    <td>${esc(l.pack || "")}${Number(l.palletWt) ? `<span class="sub">${fmt(l.palletWt,2)} kg</span>` : ""}</td><td>${esc(paGroup(l))}${l.adjusted ? ' <span class="chip">已調整</span>' : ""}</td></tr>`).join("")
-    || `<tr><td colspan="8"><div class="empty">沒有符合的在庫批號。</div></td></tr>`;
+    <td>${esc(l.pack || "")}${Number(l.palletWt) ? `<span class="sub">${fmt(l.palletWt,2)} kg</span>` : ""}</td><td class="mono">${esc(l.loc || "")}</td><td>${esc(paGroup(l))}${l.adjusted ? ' <span class="chip">已調整</span>' : ""}</td></tr>`).join("")
+    || `<tr><td colspan="9"><div class="empty">沒有符合的在庫批號。</div></td></tr>`;
   $("paRows").querySelectorAll("[data-pa]").forEach(cb => cb.addEventListener("change", () => {
     const l = PA.lots.find(x => x.lotNo === cb.dataset.pa); if (!l) return;
     if (cb.checked){ PA.sel[l.lotNo] = { lotNo:l.lotNo, packLines:paPk(l) || "" };
@@ -3981,11 +4007,13 @@ function paRender(){
   $("paSelRows").querySelectorAll("[data-pad]").forEach(b => b.addEventListener("click", () => { delete PA.sel[b.dataset.pad]; paRender(); }));
   $("paHist").innerHTML = PA.pallets.slice(0, 50).map(t => `<tr><td class="mono">${esc(t.id)}</td><td class="mono">${esc(t.date||"")}</td><td>${esc(whLabel(t.whId))}</td>
     <td>${(t.lotList||[]).map(x => `<div><span class="mono">${esc(x.lotNo)}</span> ${esc(x.itemCode)} · ${esc(x.before && x.before !== x.packLines ? x.before + " → " : "")}<b>${esc(x.packLines||"—")}</b></div>`).join("") || '<span class="muted">（已全部移到其他棧板）</span>'}</td>
-    <td>${esc(t.pack||"")}${Number(t.palletWt) ? `<span class="sub">${fmt(t.palletWt,2)} kg</span>` : ""}</td><td>${esc(t.status||"")}</td>
+    <td>${esc(t.pack||"")}${Number(t.palletWt) ? `<span class="sub">${fmt(t.palletWt,2)} kg</span>` : ""}${t.loc ? `<span class="sub">📍${esc(t.loc)}</span>` : ""}</td><td>${esc(t.status||"")}</td>
     <td class="wrap-cell">${esc(t.note||"")}<span class="sub" style="white-space:pre-line">${esc(t.history||"")}</span></td></tr>`).join("")
     || `<tr><td colspan="7"><div class="empty">還沒有棧板調整紀錄。</div></td></tr>`;
 }
-$("paSearch").addEventListener("input", paRender); $("paWh").addEventListener("change", paRender);
+$("paSearch").addEventListener("input", paRender);
+$("paLoc").addEventListener("input", () => locHint($("paLoc"), $("paLocHint"))); $("paLoc").addEventListener("focus", locOptions);
+$("paLoc").addEventListener("blur", () => { $("paLoc").value = locNorm($("paLoc").value); locHint($("paLoc"), $("paLocHint")); }); $("paWh").addEventListener("change", paRender);
 $("paReload").addEventListener("click", paLoad);
 $("paClear").addEventListener("click", () => { PA.sel = {}; paRender(); });
 $("paSave").addEventListener("click", async () => {
@@ -3994,8 +4022,8 @@ $("paSave").addEventListener("click", async () => {
   if (bad && !confirm(`批號 ${bad.lotNo} 的新包裝數量和在庫數量不一致，仍要儲存？`)) return;
   if (lots.length > 1 && !$("paPack").value.trim() && !confirm("還沒填整板尺寸，Packing List 會少這一板的尺寸。仍要儲存？")) return;
   $("paSave").disabled = true;
-  try{ const r = await busy(() => call("savePallet", { lots, pack:$("paPack").value.trim(), palletWt:$("paWt").value, note:$("paNote").value.trim(), date:$("paDate").value || today() }));
-    PA.sel = {}; $("paPack").value = ""; $("paWt").value = ""; $("paNote").value = ""; await paLoad();
+  try{ const r = await busy(() => call("savePallet", { lots, pack:$("paPack").value.trim(), palletWt:$("paWt").value, loc:locNorm($("paLoc").value), note:$("paNote").value.trim(), date:$("paDate").value || today() }));
+    PA.sel = {}; $("paPack").value = ""; $("paWt").value = ""; $("paNote").value = ""; $("paLoc").value = ""; locHint($("paLoc"), $("paLocHint")); await paLoad();
     msg("paMsg", `已建立 ${r.id}（${lots.length > 1 ? "併板 " + lots.length + " 批" : "改包裝"}）。入庫紀錄沒有變動，Packing List 會帶出新的包裝。`, "ok"); }
   catch(err){ msg("paMsg", err.message, "err"); }
   finally{ $("paSave").disabled = !can("user"); }

@@ -11,7 +11,7 @@ const F = {
   whs:   [['code','庫別代號','s'],['name','庫別名稱','s'],['type','類型','s']],  // 類型：倉庫 / 生產（生產地點）/ 委外（委外廠商）
   items: [['code','品號','s'],['name','品名','s'],['nameEn','英文品名','s'],['spec','規格','s'],['unit','庫存單位','s'],
           ['cat','類別','s'],['mainWh','主要庫別','s'],['safety','安全存量','n'],['cost','單位成本','n'],
-          ['netWt','淨重','n'],['grossWt','毛重','n'],['note','備註','s'],['alias','舊料號/別名','s'],['specEn','英文規格','s']],
+          ['netWt','淨重','n'],['grossWt','毛重','n'],['note','備註','s'],['alias','舊料號/別名','s'],['specEn','英文規格','s'],['erpWh','鼎新庫別(指定)','s']],
   stock: [['itemId','品號','s'],['whId','庫別代號','s'],['qty','數量','n'],['loc','儲位','s'],['lastInAt','最後入庫','d'],['lastOutAt','最後出庫','d'],
           ['packLines','包裝明細(箱數×每箱數量)','s'],['packAt','包裝登記日','d'],['packSize','包裝/棧板尺寸','s']],
   // ---- 客戶主檔（客戶代號與鼎新 COPMA 一致，例如 A20007）----
@@ -39,7 +39,7 @@ const F = {
           ['payTerms','付款條件','s'],['tradeTerms','貿易條件','s'],['salesName','負責業務','s'],['note','備註','s'],['active','啟用','s'],['updatedAt','更新時間','s']],
   invoices:[['sc','銷貨單號','s'],['json','內容JSON','s'],['updatedAt','更新時間','s'],['byName','更新人','s']],
   pallets:[['id','棧板編號','s'],['date','日期','d'],['whId','庫別','s'],['lots','批號明細','s'],['pack','棧板尺寸','s'],['palletWt','棧板重量','n'],
-          ['status','狀態','s'],['note','備註','s'],['history','調整紀錄','s'],['filler','填寫人','s'],['byId','登記帳號','s'],['ts','建立時間','n']],
+          ['status','狀態','s'],['note','備註','s'],['history','調整紀錄','s'],['filler','填寫人','s'],['byId','登記帳號','s'],['ts','建立時間','n'],['loc','庫位','s']],
   repacks:[['date','日期','d'],['itemCode','品號','s'],['itemName','品名','s'],['whId','庫別','s'],['qty','當時庫存','n'],['before','原包裝','s'],
           ['after','新包裝','s'],['packSize','包裝/棧板尺寸','s'],['note','備註','s'],['filler','填寫人','s'],['byId','登記帳號','s'],['ts','建立時間','n']],
   txns:  [['id','編號','s'],['date','日期','d'],['typeLabel','類型','s'],['purpose','類別','s'],['itemCode','品號','s'],['itemName','品名','s'],
@@ -47,7 +47,7 @@ const F = {
           ['qty','數量','n'],['balance','結存','n'],['toBalance','轉入結存','n'],['ref','單號','s'],['party','供應商/客戶','s'],
           ['boxes','箱數','n'],['spb','每箱數量','n'],['mb','尾箱數','n'],['m','尾箱數量','n'],['pack','包裝/棧板尺寸','s'],
           ['palletWt','棧板重量','n'],['report','測試報告','s'],['fillerId','填寫人ID','s'],['filler','填寫人','s'],['dept','填寫單位','s'],
-          ['note','備註','s'],['cost','單位成本','n'],['ts','建立時間','n'],['synced','已同步鼎新','s'],['byId','登記帳號','s'],['edited','修改紀錄','s'],['packLines','包裝明細(箱數×每箱數量)','s'],['orderNo','訂單單號','s'],['woNo','工單單號','s'],['lotNo','入庫批號','s'],['pltNo','同板批號','s']],
+          ['note','備註','s'],['cost','單位成本','n'],['ts','建立時間','n'],['synced','已同步鼎新','s'],['byId','登記帳號','s'],['edited','修改紀錄','s'],['packLines','包裝明細(箱數×每箱數量)','s'],['orderNo','訂單單號','s'],['woNo','工單單號','s'],['lotNo','入庫批號','s'],['pltNo','同板批號','s'],['loc','庫位','s']],
   counts:[['date','盤點日','d'],['whCode','庫別','s'],['cat','類別','s'],['total','盤點品號數','n'],['diffCount','差異品號數','n'],
           ['diffAmt','差異金額','n'],['filler','盤點人','s'],['lines','明細JSON','s'],['ts','建立時間','n']],
   packings:[['sc','銷貨單號','s'],['json','內容JSON','s'],['updatedAt','更新時間','s'],['byName','更新人','s']],
@@ -594,6 +594,7 @@ function moveOne_(u, p, ctx, rec, items, whs) {
   ['boxes', 'spb', 'mb', 'm', 'pack', 'palletWt', 'report'].forEach(k => { if (p[k] !== undefined && p[k] !== null && p[k] !== '') f[k] = p[k]; });
   if (p.orderNo) f.orderNo = String(p.orderNo).trim();
   if (p.woNo) f.woNo = String(p.woNo).trim();
+  if (p.loc) f.loc = locNorm_(p.loc);
   if (p.packLines) { const pk = packNorm_(p.packLines); if (pk.text) { f.packLines = pk.text; f.boxes = pk.boxes; delete f.spb; delete f.mb; delete f.m; } }
   if (p.filler) f.filler = String(p.filler).trim();
   if (p.dept) f.dept = String(p.dept).trim();
@@ -623,7 +624,7 @@ function packNorm_(v) {
 }
 
 // ---------- 管理員修改 / 刪除異動紀錄 ----------
-const TXN_EDITABLE = ['itemCode', 'whCode', 'toWhCode', 'date', 'purpose', 'qty', 'ref', 'party', 'orderNo', 'woNo', 'packLines', 'pack', 'palletWt', 'report', 'filler', 'dept', 'note', 'pltNo'];
+const TXN_EDITABLE = ['itemCode', 'whCode', 'toWhCode', 'date', 'purpose', 'qty', 'ref', 'party', 'orderNo', 'woNo', 'packLines', 'pack', 'palletWt', 'report', 'filler', 'dept', 'note', 'pltNo', 'loc'];
 function txnById_(id) { const t = readAll_('txns').find(x => x.id === id); if (!t) throw new Error('找不到這筆異動紀錄（可能已被刪除），請重新整理。'); return t; }
 /** 依類型把「數量變化 d」套到庫存；d>0 代表這筆的數量變多 */
 function applyTxnDelta_(ctx, item, t, d, date) {
@@ -783,7 +784,8 @@ function saveItem_(u, p) {
     code, name: String(it.name).trim(), nameEn: it.nameEn || '', spec: it.spec || '', unit: it.unit || 'PCS', cat: it.cat || '成品/半成品',
     mainWh: it.mainWh || '', safety: Number(it.safety) || 0, cost: ex ? (Number(ex.cost) || 0) : (Number(it.cost) || 0),  // 單價只能由採購在「材料單價」修改（留紀錄）
     netWt: it.netWt === '' || it.netWt == null ? '' : Number(it.netWt), grossWt: it.grossWt === '' || it.grossWt == null ? '' : Number(it.grossWt), note: it.note || '',
-    alias: aliases.join(', '), specEn: it.specEn !== undefined ? String(it.specEn || '').trim() : (ex ? ex.specEn || '' : '')
+    alias: aliases.join(', '), specEn: it.specEn !== undefined ? String(it.specEn || '').trim() : (ex ? ex.specEn || '' : ''),
+    erpWh: it.erpWh !== undefined ? String(it.erpWh || '').trim() : (ex ? ex.erpWh || '' : '')
   });
   if (ex) update_('items', rec); else append_('items', [rec]);
   if (before && (before.code !== rec.code || before.name !== rec.name || before.spec !== rec.spec || before.unit !== rec.unit)) syncItemRefs_(before.code, rec);
@@ -1061,12 +1063,12 @@ function stockLots_(codes, sc, opt) {
     out.push({ lotId: t.id || '', lotNo: t.lotNo || '', date: String(t.date || '').slice(0, 10), itemCode: t.itemCode, itemName: t.itemName || names[t.itemCode] || '', whId: wh,
       qty: q, qtyIn: q0, partial: q < q0, own: U.own[t.id] || 0, packLines: t.packLines || '', boxes: t.boxes || '', spb: t.spb || '', mb: t.mb || '', m: t.m || '',
       pack: t.pack || '', palletWt: Number(t.palletWt) || 0, ref: t.ref || '', woNo: t.woNo || '', xfer: t.type === 'xfer', ts: Number(t.ts) || 0, pltNo: t.pltNo || '',
-      pltHead: !!t.pltNo && t.pltNo === t.lotNo });
+      pltHead: !!t.pltNo && t.pltNo === t.lotNo, loc: t.loc || '' });
   });
   // 棧板調整（併板／改包裝）：入庫紀錄不動，用最新的棧板資料蓋過包裝資訊
   const PO = palletOverlay_();
   out.forEach(o => { const x = o.lotNo && PO[o.lotNo]; if (!x) return;
-    o.pltNo = x.id; o.pltHead = x.head; o.adjusted = x.id; if (x.packLines) o.packLines = x.packLines;
+    o.pltNo = x.id; o.pltHead = x.head; o.adjusted = x.id; if (x.packLines) o.packLines = x.packLines; if (x.loc) o.loc = x.loc;
     if (x.head) { o.pack = x.pack || ''; o.palletWt = Number(x.palletWt) || 0; } else { o.pack = '併板'; o.palletWt = 0; } });
   Object.keys(cap).forEach(k => { if (cap[k] > 0) { const c = k.split('__')[0], w = k.split('__')[1];
     out.push({ lotId: '', lotNo: '', date: '', itemCode: c, itemName: names[c] || '', whId: w, qty: round_(cap[k]), qtyIn: 0, noLot: true, packLines: '', pack: '', palletWt: 0, ref: '', ts: 0 }); } });
@@ -1989,13 +1991,27 @@ function repack_(u, p) {
   return { mismatch, total };
 }
 
+// ======================= 庫位與鼎新庫別 =======================
+// 庫位只記實際位置：倉庫代號-區-4位數編號，例如 WO-A-0001（大寫、去空白）
+function locNorm_(v) { return String(v || '').trim().toUpperCase().replace(/\s+/g, '').replace(/[－—–]/g, '-'); }
+// 資料傳回鼎新時用的庫別：品號第一碼決定（1 原料、2 物料、3 半成品、4 成品、5 商品、6 物料）；品號可單獨指定
+const ERP_WH_BY_PREFIX = { '1': '1111', '2': '1112', '3': '1113', '4': '1114', '5': '1115', '6': '1112' };
+const ERP_WH_NAME = { '1111': '原料倉', '1112': '物料倉', '1113': '半成品倉', '1114': '成品倉', '1115': '商品存貨倉', '1121': '不良品倉', '1122': '待報廢倉',
+  '1211': '寄庫倉', '1311': '暫出倉', '1312': '暫入倉', '1330': '暫入轉出倉', '2111': '耗材倉', '2112': '客供倉', '2113': '費用倉', '2114': '收入倉', '2121': '已報廢倉' };
+function erpWhOf_(item, purpose) {
+  if (purpose === '客戶退回') return '1121';
+  if (item && item.erpWh) return String(item.erpWh).trim();
+  const c = String(item && item.code || '').charAt(0);
+  return ERP_WH_BY_PREFIX[c] || '';
+}
+
 // ======================= 棧板調整：併板／改包裝 =======================
 // 入庫紀錄（批號、品管出廠檢驗都跟著它）完全不動；另外記一筆「棧板」資料，Packing List 帶出時用最新的棧板資料。
 const plLots_ = t => { try { return JSON.parse(t.lots || '[]') || []; } catch (e) { return []; } };
 function palletOverlay_() {
   const m = {};
   readAll_('pallets').filter(t => t.status === '有效').sort((a, b) => (Number(a.ts) || 0) - (Number(b.ts) || 0)).forEach(t => {
-    plLots_(t).forEach((x, i) => { m[x.lotNo] = { id: t.id, head: i === 0, packLines: x.packLines || '', pack: t.pack, palletWt: t.palletWt }; });
+    plLots_(t).forEach((x, i) => { m[x.lotNo] = { id: t.id, head: i === 0, packLines: x.packLines || '', pack: t.pack, palletWt: t.palletWt, loc: t.loc || '' }; });
   });
   return m;
 }
@@ -2023,7 +2039,8 @@ function savePallet_(u, p) {
   const id = nextNo_('PLT', date, all.map(x => x.id));
   const lots = sel.map(x => { const l = avail[x.lotNo]; const pk = packNorm_(x.packLines).text;
     return { lotNo: x.lotNo, itemCode: l.itemCode, qty: l.qty, packLines: pk || l.packLines || '', before: l.packLines || '' }; });
-  append_('pallets', [{ id, date, whId: wh, lots: JSON.stringify(lots), pack: String(p.pack || '').trim(), palletWt: Number(p.palletWt) || '',
+  const loc = p.loc ? locNorm_(p.loc) : (sel.map(x => avail[x.lotNo].loc).find(Boolean) || '');
+  append_('pallets', [{ id, date, whId: wh, loc, lots: JSON.stringify(lots), pack: String(p.pack || '').trim(), palletWt: Number(p.palletWt) || '',
     status: '有效', note: String(p.note || '').trim(), history: now + ' ' + who + ' 建立（' + (lots.length > 1 ? '併板 ' + lots.length + ' 批' : '改包裝') + '）',
     filler: who, byId: u.id, ts: Date.now() }]);
   return { id };
