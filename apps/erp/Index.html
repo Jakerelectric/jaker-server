@@ -5576,7 +5576,7 @@ function packingCells(d, extra){
   const L = pkSorted(d); const last = PK_FIRST + PK_CAP - 1 + extra, k = n => n + extra;
   const cons = lines3(d.consignee, 3), marks = lines3(d.marks, 3);
   const cells = [["C4", d.no || d.sc], ["P5", xlSerial(d.date)], ["I7", d.company], ["B11", cons[0]], ["B12", cons[1]], ["B13", cons[2]],
-    ["O11", marks[0]], ["O12", marks[1]], ["O13", marks[2]], ["F17", d.vessel], ["G19", d.sailing], ["D21", d.from || "Taiwan"], ["J21", d.to]];
+    ["O11", marks[0]], ["O12", marks[1]], ["O13", marks[2]], ["F17", d.vessel], ["G19", d.sailing], ["D21", d.from || "Taiwan"], ["J21", d.to], ...(d.noHead ? [["B23", d.noHead]] : [])];
   for (let r = PK_FIRST, i = 0; r <= last; r++, i++){
     const l = L[i];
     const v = l ? [String(l.plt||""), ` ${l.desc} /\n${l.code}`, l.ctn === "" ? null : Number(l.ctn), l.ctn === "" ? "" : pkUnit(l), Number(l.qty)||0, Number(l.nw)||0, Number(l.gw)||0, l.meas || ""] : [null,null,null,null,null,null,null,null];
@@ -5593,7 +5593,7 @@ function invoiceCells(d, variant, extra){
   const cells = [["F2", `DATE: ${slashDate(d.date)}`], ["F6", `INVOICE NO.: ${d.no}`], ["D12", d.awb || ""], ["B15", d.exportDate ? slashDate(d.exportDate) : ""],
     ["F15", d.refs || ""], ["B24", d.countryExport || "Taiwan"], ["B27", d.origin || "Taiwan"], ["B30", d.destCountry || d.to || ""],
     ...cons.map((t, i) => ["F" + (17 + i), t]), ...imp.map((t, i) => ["F" + (25 + i), t]), ["B" + k(54), d.hs || ""], ["J" + k(61), d.currency],
-    ["L" + k(63), variant === "EXW" ? "V" : ""], ["L" + k(64), variant === "FOB" ? "V" : ""], ["L" + k(65), variant === "CIF" ? "V" : ""]];
+    ["L" + k(63), variant === "EXW" ? "V" : ""], ["L" + k(64), variant === "FOB" ? "V" : ""], ["L" + k(65), variant === "CIF" ? "V" : ""], ...(d.noHead ? [["B32", d.noHead]] : [])];
   for (let r = INV_FIRST, i = 0; r <= last; r++, i++){
     const l = d.lines[i];
     const v = l ? [l.plt === "" || l.plt == null ? String(i + 1) : String(l.plt), l.desc, l.itemCode, Number(l.qty)||0, l.unit || "", l.weight === "" || l.weight == null ? null : Number(l.weight),
