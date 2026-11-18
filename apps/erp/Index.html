@@ -5547,6 +5547,22 @@ function xlTwoPages(doc, wbDoc, sheetName, brk, titleRow){
   }
 }
 /** 幣別不是美金時，單價與金額改成不帶 $ 的數字格式 */
+/** 套用範本列的格式時，保留這一格原本就有的框線（例如最後一列的底線），只補不刪 */
+function xlKeepBorders(stylesDoc, st, own, memo){
+  const key = st + "_" + own; if (memo[key] != null) return memo[key];
+  const xfs = els(stylesDoc, "cellXfs")[0], bds = els(stylesDoc, "borders")[0];
+  const xfL = xfs.getElementsByTagNameNS(XNS, "xf"), bdL = bds.getElementsByTagNameNS(XNS, "border");
+  const bs = bdL[Number(xfL[Number(st)].getAttribute("borderId") || 0)], bo = bdL[Number(xfL[Number(own)].getAttribute("borderId") || 0)];
+  const side = (b, n) => b && Array.from(b.childNodes).find(x => x.localName === n);
+  const nb = bs.cloneNode(true); let added = false;
+  ["left", "right", "top", "bottom"].forEach(n => { const a = side(nb, n), o = side(bo, n);
+    if (o && o.getAttribute("style") && !(a && a.getAttribute("style"))){ const cl = o.cloneNode(true); if (a) nb.replaceChild(cl, a); else nb.appendChild(cl); added = true; } });
+  if (!added) return memo[key] = st;
+  ["left", "right", "top", "bottom", "diagonal"].forEach(n => { const x = side(nb, n); if (x) nb.appendChild(x); });   // 子元素順序要照規格
+  bds.appendChild(nb); bds.setAttribute("count", bdL.length);
+  const nx = xfL[Number(st)].cloneNode(true); nx.setAttribute("borderId", bdL.length - 1); nx.setAttribute("applyBorder", "1"); xfs.appendChild(nx); xfs.setAttribute("count", xfL.length);
+  return memo[key] = String(xfL.length - 1);
+}
 function xlPlainNumber(stylesDoc, sheetDoc, addrs){
   const xfs = els(stylesDoc, "cellXfs")[0]; const memo = {};
   addrs.forEach(a => { const c = els(sheetDoc, "c").find(x => x.getAttribute("r") === a); if (!c) return; const s = c.getAttribute("s") || "0";
@@ -5612,7 +5628,9 @@ async function exportForwarder(kind, inv, pk){
   zip.file("xl/drawings/drawing3.xml", S.serializeToString(pdd));
   sheets.push(["sheet3", pdoc, packingCells(pk, pkExtra)]);
   for (const [file, doc, cells, money] of sheets){
-    cells.forEach(([addr, val, styleFrom, force]) => { const st = styleFrom ? xlStyleOf(doc, styleFrom) : null; const c = xlSet(doc, addr, val, st); if (force && st != null) c.setAttribute("s", st); });
+    const bm = {};
+    cells.forEach(([addr, val, styleFrom, force]) => { const st = styleFrom ? xlStyleOf(doc, styleFrom) : null; const own = xlStyleOf(doc, addr); const c = xlSet(doc, addr, val, st);
+      if (force && st != null) c.setAttribute("s", own != null && own !== st ? xlKeepBorders(styles, st, own, bm) : st); });
     if (money) xlPlainNumber(styles, doc, money);
     zip.file(`xl/worksheets/${file}.xml`, S.serializeToString(doc));
   }
