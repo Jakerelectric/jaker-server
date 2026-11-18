@@ -374,6 +374,14 @@ nav.tabs [data-tab].g-off{display:none}
             <label class="f span2">測試報告<input id="pkReport" placeholder="例：報告編號或批次"></label>
           </div>
           <div id="pkHint" class="notice"></div>
+          <div id="mgWrap" hidden style="margin-top:14px;border-top:1px dashed var(--line);padding-top:12px">
+            <div style="font-weight:500">一起包裝的原有庫存（例如廠務組手上原本就有的）</div>
+            <p class="muted" style="font-size:13px;margin:4px 0 8px">新完成的貨跟放在其他庫別的同品號一起包裝入庫時，在這裡加入來源。上面的「數量」只填<b>新完成</b>的；包裝明細、尺寸、重量填<b>整批</b>（新完成＋原有）。系統會把整批記成一個批號入庫（品管檢驗對這個批號），並從來源庫別扣掉原有的數量；工單完工量只算新完成的。</p>
+            <div class="tbl-wrap" id="mgTbl" hidden><table>
+              <thead><tr><th>來源庫別</th><th class="r">目前庫存</th><th class="r" style="width:130px">併入數量</th><th></th></tr></thead>
+              <tbody id="mgRows"></tbody></table></div>
+            <button type="button" class="btn sm" id="mgAdd" style="margin-top:8px">＋ 加入原有庫存</button>
+          </div>
           <div id="mxWrap" style="margin-top:14px;border-top:1px dashed var(--line);padding-top:12px">
             <div style="font-weight:500">混裝板：同一個棧板上的其他品項</div>
             <p class="muted" style="font-size:13px;margin:4px 0 8px">同一板放了好幾種貨時，在這裡加入其他品項，按「確認入庫」會一起入庫並記成同一板。上面的棧板尺寸、棧板重量是整板的，只填一次；每個品項各填自己的包裝明細和數量。</p>
@@ -2028,6 +2036,7 @@ function onPurpose(){
   $("mvPartyWrap").hidden = !PARTY_LABEL[p]; $("mvPartyText").textContent = PARTY_LABEL[p] || "";
   $("mvOrderWrap").hidden = !(p==="銷貨出庫" || p==="客戶退回"); if ($("mvOrderWrap").hidden){ $("mvOrder").value = ""; }
   $("mvWoWrap").hidden = !["生產入庫","生產領料","生產退料"].includes(p); if ($("mvWoWrap").hidden) $("mvWo").value = "";
+  $("mgWrap").hidden = !(S.mvType === "in" && p === "生產入庫"); if ($("mgWrap").hidden && typeof MG !== "undefined" && MG.length){ MG.length = 0; renderMg(); }
   if (typeof renderOrderHint === "function") renderOrderHint();
   updateMoveHint();
 }
@@ -2093,10 +2102,11 @@ function packData(){
   return { d, calc: calc ? calc : null, boxes: packBoxes(L) };
 }
 function onPack(){
-  const { calc, boxes } = packData();
-  if (calc!=null && ($("mvQty").value==="" || qtyAuto)){ $("mvQty").value = calc; qtyAuto = true; }
+  const { calc, boxes } = packData(); const mg = typeof mgSum === "function" ? mgSum() : 0, want = calc!=null ? round(calc - mg) : null;
+  if (want!=null && want > 0 && ($("mvQty").value==="" || qtyAuto)){ $("mvQty").value = want; qtyAuto = true; }
   const q = Number($("mvQty").value);
-  $("pkHint").textContent = calc!=null ? `依包裝計算：${fmt(boxes)} 箱、${fmt(calc,2)} 個` + (q && q!==calc ? `　與數量 ${fmt(q,2)} 不一致，請確認` : "") : "";
+  $("pkHint").textContent = calc!=null ? `依包裝計算：${fmt(boxes)} 箱、${fmt(calc,2)} 個` + (mg ? `（原有 ${fmt(mg,2)}＋新完成 ${fmt(want,2)}）` : "") + (q && q!==want ? `　與${mg ? "新完成" : ""}數量 ${fmt(q,2)} 不一致，請確認` : "")
+    : (mg ? `整批 = 新完成 ${fmt(q||0,2)}＋原有 ${fmt(mg,2)} = ${fmt(round((q||0)+mg),2)}` : "");
 }
 PK.forEach(id => $(id).addEventListener("input", onPack));
 packEditor($("pkLines"), onPack);
@@ -2125,6 +2135,31 @@ const ERP_WH_NAME = { "1111":"原料倉", "1112":"物料倉", "1113":"半成品�
   "1311":"暫出倉", "1312":"暫入倉", "1330":"暫入轉出倉", "2111":"耗材倉", "2112":"客供倉", "2113":"費用倉", "2114":"收入倉", "2121":"已報廢倉" };
 function erpWhOf(it, purpose){ if (purpose === "客戶退回") return "1121"; if (it && it.erpWh) return String(it.erpWh).trim(); return ERP_WH_BY_PREFIX[String(it && (it.code || it.id) || "").charAt(0)] || ""; }
 const erpWhLabel = c => c ? `${c} ${ERP_WH_NAME[c] || ""}`.trim() : "（品號開頭不是 1～6，請指定）";
+
+/* ---------- 生產入庫：一起包裝的原有庫存（其他庫別的同品號） ---------- */
+const MG = [];
+const mgSum = () => round(MG.reduce((s,x) => s + (Number(x.qty)||0), 0));
+function renderMg(){
+  const it = findItemFromInput($("mvItem").value), wh = $("mvWh").value;
+  $("mgTbl").hidden = !MG.length;
+  const opts = sel => S.whs.filter(w => w.id !== wh).map(w => `<option value="${esc(w.id)}"${w.id===sel?" selected":""}>${esc(whLabel(w.id))}</option>`).join("");
+  $("mgRows").innerHTML = MG.map((x,i) => { const have = it && x.whId ? qtyOf(it.id, x.whId) : null; const over = have!=null && Number(x.qty) > have;
+    return `<tr><td><select data-mgw="${i}"><option value="">選擇庫別</option>${opts(x.whId)}</select></td>
+    <td class="r num">${have==null ? "—" : fmt(have,2)}</td>
+    <td class="r"><input data-mgq="${i}" type="number" min="0.0001" step="any" value="${esc(x.qty)}" style="text-align:right">${over ? `<span class="sub" style="color:var(--bad)">超過目前庫存</span>` : ""}</td>
+    <td><button type="button" class="btn sm" data-mgd="${i}">移除</button></td></tr>`; }).join("");
+  $("mgRows").querySelectorAll("[data-mgw]").forEach(el => el.addEventListener("change", () => { const x = MG[el.dataset.mgw]; x.whId = el.value;
+    if (it && x.whId && (x.qty === "" || x.auto)){ x.qty = qtyOf(it.id, x.whId) || ""; x.auto = true; } renderMg(); onPack(); }));
+  $("mgRows").querySelectorAll("[data-mgq]").forEach(el => el.addEventListener("change", () => { MG[el.dataset.mgq].qty = el.value; MG[el.dataset.mgq].auto = false; renderMg(); onPack(); }));
+  $("mgRows").querySelectorAll("[data-mgd]").forEach(b => b.addEventListener("click", () => { MG.splice(Number(b.dataset.mgd),1); renderMg(); onPack(); }));
+}
+$("mgAdd").addEventListener("click", () => {
+  const it = findItemFromInput($("mvItem").value); if (!it) return msg("mvMsg","請先選品號，再加入原有庫存。","err");
+  const wh = $("mvWh").value, used = MG.map(x => x.whId);
+  const cand = S.whs.filter(w => w.id !== wh && !used.includes(w.id) && qtyOf(it.id, w.id) > 0).sort((a,b) => qtyOf(it.id, b.id) - qtyOf(it.id, a.id))[0];
+  MG.push({ whId: cand ? cand.id : "", qty: cand ? qtyOf(it.id, cand.id) : "", auto:true }); $("mvPack").open = true; renderMg(); onPack();
+});
+["mvItem","mvWh"].forEach(id => $(id).addEventListener("change", () => { if (MG.length) renderMg(); }));
 
 /* ---------- 混裝板：同一板的其他品項 ---------- */
 const MX = [];
@@ -2170,6 +2205,27 @@ $("moveForm").addEventListener("submit", async e => {
     if (!(q2>0)) return msg("mvMsg",`同板第 ${i+2} 個品項（${it2.code}）請填數量。`,"err");
     const pk2 = packText(packParse(x.pack));
     extra.push(Object.assign({}, p, { itemId:it2.id, qty:q2, packLines:pk2, pack:"", palletWt:"", report:p.report||"" }));
+  }
+  const mg = $("mgWrap").hidden ? [] : MG.filter(x => x.whId || Number(x.qty));
+  if (mg.length){
+    if (extra.length) return msg("mvMsg","「一起包裝的原有庫存」跟混裝板不能同時使用。","err");
+    for (const x of mg){
+      if (!x.whId) return msg("mvMsg","請選擇原有庫存的來源庫別。","err");
+      if (x.whId === whId) return msg("mvMsg","原有庫存的來源庫別不能跟入庫庫別相同。","err");
+      if (!(Number(x.qty) > 0)) return msg("mvMsg",`請填 ${whLabel(x.whId)} 要併入的數量。`,"err");
+      if (Number(x.qty) > qtyOf(it.id, x.whId)) return msg("mvMsg",`${whLabel(x.whId)} 目前只有 ${fmt(qtyOf(it.id, x.whId),2)}，不能併入 ${x.qty}。`,"err");
+    }
+    const add = round(mg.reduce((s,x) => s + Number(x.qty), 0));
+    if (!(await ask(`確認入庫 ${it.code}：新完成 ${fmt(qty,2)}＋原有 ${fmt(add,2)}（${mg.map(x => whLabel(x.whId) + " " + x.qty).join("、")}）＝整批 ${fmt(round(qty+add),2)} ${it.unit}，入到 ${whLabel(whId)}？`))) return;
+    $("mvSubmit").disabled = true;
+    try{
+      const r = await busy(() => call("moveBatch", { moves:[p], merge: mg.map(x => ({ whId:x.whId, qty:Number(x.qty) })) }));
+      $("mvQty").value=""; $("mvRef").value=""; $("mvNote").value=""; $("mvParty").value=""; $("mvLoc").value=""; locHint(); PK.forEach(id => $(id).value=""); setPack($("pkLines"), []); qtyAuto=false; $("pkHint").textContent="";
+      MG.length = 0; renderMg(); await refresh();
+      msg("mvMsg", `已入庫 ${it.code} 整批 ${fmt(round(qty+add),2)} ${it.unit}（新完成 ${fmt(qty,2)}＋原有 ${fmt(add,2)}），${whLabel(whId)} 結存 ${fmt((r.results[0]||{}).after,2)}。`, "ok");
+    }catch(err){ msg("mvMsg", err.message, "err"); }
+    finally{ $("mvSubmit").disabled = !can("user"); }
+    return;
   }
   if (extra.length && !p.pack && !p.palletWt && !(await ask("混裝板還沒填棧板尺寸或棧板重量，Packing List 會少這一板的尺寸和重量。仍要入庫？"))) return;
   $("mvSubmit").disabled = true;

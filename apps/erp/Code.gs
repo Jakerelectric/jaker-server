@@ -47,7 +47,7 @@ const F = {
           ['qty','數量','n'],['balance','結存','n'],['toBalance','轉入結存','n'],['ref','單號','s'],['party','供應商/客戶','s'],
           ['boxes','箱數','n'],['spb','每箱數量','n'],['mb','尾箱數','n'],['m','尾箱數量','n'],['pack','包裝/棧板尺寸','s'],
           ['palletWt','棧板重量','n'],['report','測試報告','s'],['fillerId','填寫人ID','s'],['filler','填寫人','s'],['dept','填寫單位','s'],
-          ['note','備註','s'],['cost','單位成本','n'],['ts','建立時間','n'],['synced','已同步鼎新','s'],['byId','登記帳號','s'],['edited','修改紀錄','s'],['packLines','包裝明細(箱數×每箱數量)','s'],['orderNo','訂單單號','s'],['woNo','工單單號','s'],['lotNo','入庫批號','s'],['pltNo','同板批號','s'],['loc','庫位','s']],
+          ['note','備註','s'],['cost','單位成本','n'],['ts','建立時間','n'],['synced','已同步鼎新','s'],['byId','登記帳號','s'],['edited','修改紀錄','s'],['packLines','包裝明細(箱數×每箱數量)','s'],['orderNo','訂單單號','s'],['woNo','工單單號','s'],['lotNo','入庫批號','s'],['pltNo','同板批號','s'],['loc','庫位','s'],['merged','併入原有庫存','n']],
   counts:[['date','盤點日','d'],['whCode','庫別','s'],['cat','類別','s'],['total','盤點品號數','n'],['diffCount','差異品號數','n'],
           ['diffAmt','差異金額','n'],['filler','盤點人','s'],['lines','明細JSON','s'],['ts','建立時間','n']],
   packings:[['sc','銷貨單號','s'],['json','內容JSON','s'],['updatedAt','更新時間','s'],['byName','更新人','s']],
@@ -564,12 +564,32 @@ function move_(u, p) {
 }
 /** 刷條碼批次登記：全部檢查通過才寫入，任何一筆庫存不足就整批不寫 */
 function moveBatch_(u, p) {
-  const list = p.moves || []; if (!list.length) throw new Error('沒有要登記的品項。');
+  const list = (p.moves || []).slice(); if (!list.length) throw new Error('沒有要登記的品項。');
   const ctx = stockCtx_(); const rec = []; const items = readAll_('items'), whs = readAll_('whs');
+  const mg = mergeList_(p, list); let newQty = 0;
+  if (mg) { newQty = Number(list[0].qty); list[0] = Object.assign({}, list[0], { qty: round_(newQty + mg.add) }); }
   const results = list.map(m => moveOne_(u, m, ctx, rec, items, whs));
+  if (mg) mergeApply_(u, list[0], rec[0], mg, newQty, ctx, rec, items, whs);
   if (p.samePallet) samePallet_(rec);
   flushStock_(ctx); append_('txns', rec);
   return { count: results.length, results };
+}
+/** 生產入庫時，把其他庫別（例如廠務區）原本就有的同品號庫存跟新完成的一起包裝入庫：
+ *  整批記成一筆生產入庫（一個批號、一份包裝資料，品管檢驗對這個批號），另外從來源庫別各記一筆「併入包裝」出庫；
+ *  merged 欄記原有庫存的數量，工單完工量只算新完成的（qty − merged）。 */
+function mergeList_(p, list) {
+  const L = (p.merge || []).map(x => ({ whId: String(x.whId || '').trim(), qty: round_(Number(x.qty)) })).filter(x => x.whId && x.qty > 0);
+  if (!L.length) return null;
+  if (list.length !== 1 || list[0].type !== 'in') throw new Error('併入原有庫存只能用在單一品項的入庫（不能跟混裝板一起用）。');
+  if (!(Number(list[0].qty) > 0)) throw new Error('新完成的數量要大於 0。');
+  L.forEach(x => { if (x.whId === list[0].whId) throw new Error('原有庫存的來源庫別不能跟入庫庫別相同。'); });
+  return { list: L, add: round_(L.reduce((s, x) => s + x.qty, 0)) };
+}
+function mergeApply_(u, m, r, mg, newQty, ctx, rec, items, whs) {
+  r.merged = mg.add; if (!r.lotNo) r.lotNo = nextLot_(lotSeq_(), r.date);
+  r.note = (r.note ? r.note + '；' : '') + '新完成 ' + newQty + '，併入原有庫存 ' + mg.list.map(x => x.whId + ' ' + x.qty).join('、') + '，一起包裝';
+  mg.list.forEach(x => moveOne_(u, { type: 'out', purpose: '併入包裝', itemId: m.itemId, whId: x.whId, qty: x.qty, date: r.date, filler: m.filler, dept: m.dept, fillerId: m.fillerId,
+    ref: r.lotNo, woNo: m.woNo || '', note: '跟新完成的一起包裝，併入批號 ' + r.lotNo + ' 入庫' }, ctx, rec, items, whs));
 }
 /** 混裝板：同一個棧板上的多個品項一起入庫。每個品項還是各自一筆入庫、各自一個批號（先進先出照算），
  *  用「同板批號」記住它們在同一板（= 第一筆的批號）；棧板尺寸、棧板重只記在第一筆，Packing List 才不會重複算棧板和毛重。 */
@@ -1177,7 +1197,7 @@ function salesLoad_(u) {
   const woDone = {}, woIssued = {}, woUsed = {};
   readAll_('txns').forEach(t => {
     if (!t.woNo) return;
-    if (t.typeLabel === '入庫' && t.purpose === '生產入庫') woDone[t.woNo] = round_((woDone[t.woNo] || 0) + Number(t.qty || 0));
+    if (t.typeLabel === '入庫' && t.purpose === '生產入庫') woDone[t.woNo] = round_((woDone[t.woNo] || 0) + Number(t.qty || 0) - Number(t.merged || 0));
     const k = t.woNo + '__' + t.itemCode;
     if (t.purpose === '生產領料') woIssued[k] = round_((woIssued[k] || 0) + Number(t.qty || 0));   // 直接出庫或轉到產線都算已領
     if (t.purpose === '生產退料') woIssued[k] = round_((woIssued[k] || 0) - Number(t.qty || 0));
@@ -1434,7 +1454,7 @@ function woMove_(u, p) {
   // 狀態：有動作就是生產中；完工量達預計產量 → 已完工
   if (w.status === '未開工') w.status = '生產中';
   if (kind === 'receive') {
-    const done = readAll_('txns').filter(t => t.woNo === w.no && t.typeLabel === '入庫' && t.purpose === '生產入庫').reduce((s, t) => s + Number(t.qty || 0), 0);
+    const done = readAll_('txns').filter(t => t.woNo === w.no && t.typeLabel === '入庫' && t.purpose === '生產入庫').reduce((s, t) => s + Number(t.qty || 0) - Number(t.merged || 0), 0);
     if (done >= Number(w.qty)) w.status = '已完工';
   }
   w.updatedAt = nowStr_(); update_('wos', w);
