@@ -3009,7 +3009,7 @@ function renderSc(){
 $("scCust").addEventListener("keydown", e => { if (e.key === "Enter" && !e.isComposing){ e.preventDefault(); renderSc(); } });
 ["scDone","scClosed","scDate","scReady"].forEach(id => $(id).addEventListener("change", renderSc));
 $("scReady").addEventListener("change", () => { $("scShowStock").disabled = !$("scReady").checked; }); $("scShowStock").disabled = true;
-function scCols(d){ return [["Order No.",14],["Your PO",16],["Product No.",18],["Description",34],["Ordered",10],["Delivered",10],["Balance",10], ...(d.showStock ? [["In Stock",10]] : []), ...(d.useStock ? [["Ready to Ship",12]] : []),["Due Date",12],["Status",22]]; }
+function scCols(d){ return [["Order No.",18],["Your PO",14],["Product No.",17],["Description",32],["Ordered",10],["Delivered",10],["Balance",10], ...(d.showStock ? [["In Stock",10]] : []), ...(d.useStock ? [["Ready to Ship",12]] : []),["Due Date",12],["Status",22]]; }
 function scVals(d, r){ return [r.order, r.po, r.itemCode, r.en, r.qty, r.done, r.bal, ...(d.showStock ? [r.stock] : []), ...(d.useStock ? [r.ready] : []), r.due, SC_ST[r.st][1] + (r.late ? " (Overdue)" : "")]; }
 function scCheck(d){
   if (!d) return msg("scMsg","請先輸入客戶。","err"), false;
