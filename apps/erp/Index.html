@@ -249,6 +249,7 @@ nav.tabs [data-tab].g-off{display:none}
   <button role="tab" data-tab="cust" data-g="biz" data-vis="sales">客戶</button>
   <button role="tab" data-tab="sl" data-g="biz" data-vis="sales">客戶庫存表</button>
   <button role="tab" data-tab="stmt" data-g="biz" data-vis="sales">月結明細<span class="count" id="stmtCount" hidden>0</span></button>
+  <button role="tab" data-tab="bill" data-g="biz" data-vis="sales">結帳收款</button>
   <button role="tab" data-tab="matq" data-g="mat" data-vis="mat">報價回覆<span class="count" id="mqCount" hidden>0</span></button>
   <button role="tab" data-tab="cost" data-g="mat" data-vis="mat">材料單價</button>
   <button role="tab" data-tab="bomc" data-g="mat" data-vis="mat,sales">BOM 成本</button>
@@ -1052,6 +1053,50 @@ nav.tabs [data-tab].g-off{display:none}
   </section>
 
   <!-- 客戶庫存表（英文） -->
+  <section id="tab-bill" hidden>
+    <div class="sec-head"><h2>結帳收款</h2></div>
+    <p class="muted" style="margin-top:-8px">選客戶，勾要請款的已出貨銷貨單（可以先勾某個月，再加上之前還沒付的）建立結帳單，輸出中文或英文對帳單給客戶確認金額。客戶匯款後在「收款登記」記金額、上傳匯款憑證，並沖到哪幾張銷貨單（預設從最舊的未收款開始沖）。</p>
+    <div class="row" style="gap:10px;margin-bottom:12px;flex-wrap:wrap">
+      <label class="f" style="flex-direction:row;align-items:center;gap:6px">客戶<select id="bCust" style="width:auto;min-width:240px"></select></label>
+      <label class="f" style="flex-direction:row;align-items:center;gap:6px">幣別<select id="bCur" style="width:auto"></select></label>
+      <span style="flex:1"></span><span id="bSum" class="muted"></span>
+    </div>
+    <div id="bMsg"></div>
+    <div class="panel" style="margin-bottom:16px">
+      <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px"><h3 style="margin:0">未收款的銷貨單</h3><span style="flex:1"></span>
+        <input id="bMonth" type="month" style="width:auto" aria-label="月份"><button type="button" class="btn sm" id="bPickMonth">勾選這個月出貨的</button>
+        <button type="button" class="btn sm" id="bPickAll">勾選全部未收</button><button type="button" class="btn sm" id="bPickNone">全部取消</button>
+        <label class="row" style="font-size:13px;gap:4px"><input type="checkbox" id="bShowPaid" style="width:auto"> 顯示已收清的</label></div>
+      <div class="tbl-wrap" style="max-height:420px;overflow:auto"><table>
+        <thead><tr><th style="width:34px"></th><th>出貨日</th><th>銷貨單號</th><th>訂單 / 客戶 PO</th><th>出口報單</th><th class="r">金額</th><th class="r">已收</th><th class="r">未收</th><th>結帳單</th></tr></thead>
+        <tbody id="bRows"></tbody></table></div>
+      <div class="row" style="margin-top:10px;gap:10px;flex-wrap:wrap;align-items:center">
+        <span id="bSelStat" class="muted"></span><span style="flex:1"></span>
+        <label class="f" style="flex-direction:row;align-items:center;gap:6px">結帳日<input id="bDate" type="date" style="width:auto"></label>
+        <label class="f" style="flex-direction:row;align-items:center;gap:6px">對帳單語言<select id="bLang" style="width:auto"><option value="en">英文 Statement of Account</option><option value="zh">中文 對帳單</option></select></label>
+        <button type="button" class="btn" id="bMarkOld" title="系統開始管收款以前就收過錢的舊銷貨單，標記成已收（不用上傳憑證）">勾選的標記為已收（舊帳）</button>
+        <button type="button" class="btn primary" id="bMake">建立結帳單</button>
+      </div>
+    </div>
+    <div class="panel" style="margin-bottom:16px">
+      <h3 style="margin:0 0 8px">收款登記</h3>
+      <div class="form-grid">
+        <label class="f">收款日<input id="pDate" type="date"></label>
+        <label class="f">入帳金額<input id="pAmt" type="number" min="0" step="any" placeholder="實際入帳金額"></label>
+        <label class="f">手續費／匯差<input id="pFee" type="number" step="any" placeholder="銀行扣的手續費，可空白"><small class="muted">客戶付的金額 = 入帳金額＋手續費</small></label>
+        <label class="f">備註<input id="pNote" placeholder="例：T/T，台銀"></label>
+        <label class="f" style="grid-column:1/-1">匯款憑證（圖片或 PDF，可多個）<input id="pFiles" type="file" multiple accept="image/*,application/pdf"><small class="muted" id="pFileList"></small></label>
+      </div>
+      <div class="row" style="margin:10px 0 6px;gap:8px"><b>沖到哪幾張銷貨單</b><span class="muted" style="font-size:13px">（填好金額後自動從最舊的開始沖，可以手動改）</span><span style="flex:1"></span><button type="button" class="btn sm" id="pAuto">重新自動沖銷</button></div>
+      <div class="tbl-wrap" style="max-height:300px;overflow:auto"><table>
+        <thead><tr><th>出貨日</th><th>銷貨單號</th><th class="r">未收</th><th class="r" style="width:160px">本次沖銷</th></tr></thead><tbody id="pRows"></tbody></table></div>
+      <div class="row" style="margin-top:10px;gap:10px;align-items:center"><span id="pStat" class="muted"></span><span style="flex:1"></span><button type="button" class="btn primary" id="pSave">儲存收款</button></div>
+    </div>
+    <div class="panel" style="margin-bottom:16px"><h3 style="margin:0 0 8px">結帳單</h3><div class="tbl-wrap"><table>
+      <thead><tr><th>結帳單號</th><th>結帳日</th><th>銷貨單</th><th class="r">結帳金額</th><th class="r">未收</th><th>狀態</th><th>附件</th><th></th></tr></thead><tbody id="blRows"></tbody></table></div></div>
+    <div class="panel"><h3 style="margin:0 0 8px">收款紀錄</h3><div class="tbl-wrap"><table>
+      <thead><tr><th>收款日</th><th>收款編號</th><th class="r">入帳</th><th class="r">手續費</th><th>沖銷</th><th class="r">未沖銷</th><th>匯款憑證</th><th>備註</th><th></th></tr></thead><tbody id="pyRows"></tbody></table></div></div>
+  </section>
   <section id="tab-stmt" hidden>
     <div class="sec-head"><h2>月結明細</h2><div class="tools"><button class="btn primary" id="stExcel" type="button">匯出 Excel</button></div></div>
     <p class="muted" style="margin-top:-8px">依出貨日整理每個月已出貨的銷貨單：每張的金額（不含不計價的樣品、補料）、出口報單號碼，依客戶、幣別小計。出口報單號碼可以直接在表上補填；要改單價或計價，點銷貨單號打開修改，系統會留下修改紀錄。</p>
@@ -1825,12 +1870,12 @@ function showTab(t){
   S.tab = t; GRP_LAST[tabBtn(t)?.dataset.g || "mat"] = t;
   document.querySelectorAll("nav.tabs [data-tab]").forEach(b => b.setAttribute("aria-selected", b.dataset.tab===t));
   paintGroups();
-  ["dash","items","move","count","report","pack","sl","quote","order","matq","wo","wr","pov","ops","codes","mods","stmt","cost","bomc","sale","ship","repack","inv","cust","data","users"].forEach(x => $("tab-"+x).hidden = x!==t);
+  ["dash","items","move","count","report","pack","sl","quote","order","matq","wo","wr","pov","ops","codes","mods","stmt","bill","cost","bomc","sale","ship","repack","inv","cust","data","users"].forEach(x => $("tab-"+x).hidden = x!==t);
   if (t==="cust") renderCust();
   if (t==="inv") invPrep();
   if (t==="repack") renderRepack();
   if (t==="sale") renderSales(); if (t==="ship") renderShip();
-  if (t==="wo") renderWOs(); if (t==="wr") renderWR(); if (t==="ops") renderOps(); if (t==="pov") renderPov(); if (t==="stmt") renderStmt(); if (t==="cost") costInit(); if (t==="bomc") bcInit(); if (t==="codes"){ CRE = null; renderCodeRules(); } if (t==="mods") renderMods();
+  if (t==="wo") renderWOs(); if (t==="wr") renderWR(); if (t==="ops") renderOps(); if (t==="pov") renderPov(); if (t==="stmt") renderStmt(); if (t==="bill") renderBill(); if (t==="cost") costInit(); if (t==="bomc") bcInit(); if (t==="codes"){ CRE = null; renderCodeRules(); } if (t==="mods") renderMods();
   if (t==="quote") renderQuotes(); if (t==="order") renderOrders(); if (t==="matq") renderMatQ();
   if (t==="sl"){ renderSl(); renderSc(); }
   if (typeof PRES !== "undefined"){ renderPres(); ping(); }
@@ -3345,7 +3390,7 @@ $("usDelYes").addEventListener("click", async () => {
 });
 
 /* ---------- 線上狀態：誰在線上、在哪一頁、別人更新資料時自動刷新 ---------- */
-const TAB_NAME = { mods:"功能開關", cost:"材料單價", bomc:"BOM 成本", stmt:"月結明細", codes:"編碼原則", pov:"生產一覽", ops:"代碼設定", dash:"總覽", items:"品號", move:"出入庫登記", count:"盤點", report:"報表", pack:"Packing List", sl:"客戶庫存表", quote:"報價單", order:"訂單", matq:"報價回覆", wo:"工單", wr:"報工", sale:"銷貨單", ship:"待出貨", repack:"包裝", inv:"Invoice", cust:"客戶", data:"匯入匯出", users:"帳號管理" };
+const TAB_NAME = { mods:"功能開關", cost:"材料單價", bomc:"BOM 成本", stmt:"月結明細", bill:"結帳收款", codes:"編碼原則", pov:"生產一覽", ops:"代碼設定", dash:"總覽", items:"品號", move:"出入庫登記", count:"盤點", report:"報表", pack:"Packing List", sl:"客戶庫存表", quote:"報價單", order:"訂單", matq:"報價回覆", wo:"工單", wr:"報工", sale:"銷貨單", ship:"待出貨", repack:"包裝", inv:"Invoice", cust:"客戶", data:"匯入匯出", users:"帳號管理" };
 const PRES = { sid: Math.random().toString(36).slice(2), list:[], ctx:"", ver:"", lastInput:0, timer:null, busy:false };
 document.addEventListener("input", () => PRES.lastInput = Date.now(), true);
 function presCtx(ctx){ PRES.ctx = ctx || ""; renderPres(); if (ctx) ping(); }
@@ -5128,6 +5173,202 @@ function stmtData(){
     return { x, L, t, fr, ords, pos: ords.map(no => SD().orders.find(o => o.no === no)?.custPO).filter(Boolean) }; })
     .sort((a, b) => String(a.x.customer).localeCompare(String(b.x.customer)) || shipDay(a.x).localeCompare(shipDay(b.x)) || String(a.x.no).localeCompare(String(b.x.no)));
 }
+/* ====================== 結帳收款 ====================== */
+const BL = { sel:{}, alloc:{}, files:[], cust:"", cur:"" };
+const blKey = x => x.custCode || x.customer;
+const saleAmt = x => { const L = saLinesOf(x.no).map(l => ({ ...l, qty: l.shipQty !== "" && l.shipQty != null ? l.shipQty : l.qty })); return docTotals(L, x.currency, x.taxRate).total; };
+function blPaid(){ const m = {}; (SD().payments || []).forEach(p => { let a = {}; try{ a = JSON.parse(p.alloc || "{}"); }catch(e){} Object.entries(a).forEach(([k, v]) => m[k] = round((m[k] || 0) + Number(v || 0))); }); return m; }
+const blFiles = v => { try{ const a = JSON.parse(v || "[]"); return Array.isArray(a) ? a : []; }catch(e){ return []; } };
+const blFileLinks = v => blFiles(v).map(f => `<a href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.name)}</a>`).join("<br>");
+function blSales(cust, cur){
+  const paid = blPaid(), inBill = {};
+  (SD().bills || []).forEach(b => blFiles(b.sales).forEach(no => (inBill[no] ||= []).push(b.no)));
+  return (SD().sales || []).filter(x => x.status === "已出貨" && blKey(x) === cust && (x.currency || "") === cur)
+    .map(x => { const amt = saleAmt(x), pd = paid[x.no] || 0; const L = saLinesOf(x.no); const ords = [...new Set([x.orderNo, ...L.map(l => l.orderNo)].filter(Boolean))];
+      return { x, amt, paid: pd, bal: round(amt - pd), bills: inBill[x.no] || [], ords, pos: ords.map(no => SD().orders.find(o => o.no === no)?.custPO).filter(Boolean) }; })
+    .sort((a, b) => shipDay(a.x).localeCompare(shipDay(b.x)) || String(a.x.no).localeCompare(String(b.x.no)));
+}
+function renderBill(){
+  const cs = {}; (SD().sales || []).filter(x => x.status === "已出貨").forEach(x => cs[blKey(x)] = x.customer + (x.custCode ? `（${x.custCode}）` : ""));
+  if (!BL.cust || !cs[BL.cust]) BL.cust = cs["A20007"] ? "A20007" : Object.keys(cs)[0] || "";
+  $("bCust").innerHTML = Object.entries(cs).sort((a, b) => a[1].localeCompare(b[1], "zh-Hant")).map(([k, v]) => `<option value="${esc(k)}"${k === BL.cust ? " selected" : ""}>${esc(v)}</option>`).join("");
+  const curs = {}; (SD().sales || []).filter(x => x.status === "已出貨" && blKey(x) === BL.cust).forEach(x => curs[x.currency || ""] = (curs[x.currency || ""] || 0) + 1);
+  if (!(BL.cur in curs)) BL.cur = Object.entries(curs).sort((a, b) => b[1] - a[1])[0]?.[0] || "";
+  $("bCur").innerHTML = Object.keys(curs).map(c => `<option value="${esc(c)}"${c === BL.cur ? " selected" : ""}>${esc(c || "（未填）")}</option>`).join("");
+  if (!$("bMonth").value){ const d = new Date(); d.setMonth(d.getMonth() - (d.getDate() <= 10 ? 1 : 0)); $("bMonth").value = d.toISOString().slice(0, 7); }
+  if (!$("bDate").value) $("bDate").value = today(); if (!$("pDate").value) $("pDate").value = today();
+  const c = CUSTS().find(x => x.code === BL.cust); $("bLang").value = /^(TWD|NTD|NT\$)?$/i.test(BL.cur) && (!c || !c.nameEn || c.nameEn === c.full) ? "zh" : "en";
+  if (/^(TWD|NTD)$/i.test(BL.cur)) $("bLang").value = "zh";
+  renderBillLists();
+}
+function renderBillLists(){
+  const cur = BL.cur, R = blSales(BL.cust, cur), show = $("bShowPaid").checked;
+  const open = R.filter(r => r.bal > 0.0001), pre = round((SD().payments || []).filter(p => (p.custCode || p.customer) === BL.cust && (p.currency || "") === cur)
+    .reduce((s, p) => { let a = {}; try{ a = JSON.parse(p.alloc || "{}"); }catch(e){} return s + Number(p.amount || 0) + Number(p.fee || 0) - Object.values(a).reduce((t, v) => t + Number(v || 0), 0); }, 0));
+  $("bSum").innerHTML = `未收 <b class="num">${esc(cur)} ${money(open.reduce((s, r) => s + r.bal, 0), cur)}</b>（${open.length} 張）` + (pre > 0.0001 ? `　預收未沖銷 <b class="num">${money(pre, cur)}</b>` : "");
+  const rows = R.filter(r => show || r.bal > 0.0001);
+  $("bRows").innerHTML = rows.map(r => `<tr${BL.sel[r.x.no] ? ' class="sel"' : ""}><td><input type="checkbox" data-bs="${esc(r.x.no)}" ${BL.sel[r.x.no] ? "checked" : ""} style="width:auto"></td>
+    <td class="mono">${esc(shipDay(r.x))}</td><td class="mono"><a href="#" data-bsa="${esc(r.x.no)}">${esc(r.x.no)}</a></td>
+    <td class="mono" style="font-size:12px">${r.ords.map(esc).join("<br>")}${r.pos.length ? `<span class="sub">PO ${r.pos.map(esc).join("、")}</span>` : ""}</td>
+    <td class="mono" style="font-size:12px">${esc(r.x.exportNo || "")}</td><td class="r num">${money(r.amt, cur)}</td><td class="r num">${r.paid ? money(r.paid, cur) : ""}</td>
+    <td class="r num"><b>${r.bal > 0.0001 ? money(r.bal, cur) : "已收清"}</b></td><td class="mono" style="font-size:12px">${r.bills.map(esc).join("<br>")}</td></tr>`).join("")
+    || `<tr><td colspan="9"><div class="empty">這個客戶${esc(cur)}沒有未收款的銷貨單。</div></td></tr>`;
+  $("bRows").querySelectorAll("[data-bs]").forEach(cb => cb.addEventListener("change", () => { if (cb.checked) BL.sel[cb.dataset.bs] = 1; else delete BL.sel[cb.dataset.bs]; renderBillLists(); }));
+  $("bRows").querySelectorAll("[data-bsa]").forEach(a => a.addEventListener("click", e => { e.preventDefault(); openDoc("sale", a.dataset.bsa); }));
+  const sel = R.filter(r => BL.sel[r.x.no]);
+  $("bSelStat").textContent = sel.length ? `已勾 ${sel.length} 張，金額 ${cur} ${money(sel.reduce((s, r) => s + r.amt, 0), cur)}，未收 ${money(sel.reduce((s, r) => s + Math.max(0, r.bal), 0), cur)}` : "勾選要放進這次結帳單的銷貨單";
+  // 收款沖銷
+  const amt = Number($("pAmt").value) || 0, fee = Number($("pFee").value) || 0;
+  $("pRows").innerHTML = open.map(r => `<tr><td class="mono">${esc(shipDay(r.x))}</td><td class="mono">${esc(r.x.no)}</td><td class="r num">${money(r.bal, cur)}</td>
+    <td class="r"><input type="number" step="any" min="0" data-pa2="${esc(r.x.no)}" value="${BL.alloc[r.x.no] ?? ""}" style="text-align:right"></td></tr>`).join("")
+    || `<tr><td colspan="4"><div class="empty">沒有未收款的銷貨單；收到的錢會記成預收。</div></td></tr>`;
+  $("pRows").querySelectorAll("[data-pa2]").forEach(el => el.addEventListener("input", () => { const v = el.value.trim(); if (v === "") delete BL.alloc[el.dataset.pa2]; else BL.alloc[el.dataset.pa2] = Number(v); payStat(); }));
+  payStat();
+  // 結帳單、收款紀錄
+  const paid = blPaid(), allS = {}; (SD().sales || []).forEach(x => allS[x.no] = x);
+  const bills = (SD().bills || []).filter(b => (b.custCode || b.customer) === BL.cust && (b.currency || "") === cur).sort((a, b) => String(b.no).localeCompare(String(a.no)));
+  $("blRows").innerHTML = bills.map(b => { const nos = blFiles(b.sales); const bal = round(nos.reduce((s, no) => s + (allS[no] ? saleAmt(allS[no]) - (paid[no] || 0) : 0), 0));
+    const st = bal <= 0.0001 ? "已收清" : b.status || "草稿";
+    return `<tr><td class="mono">${esc(b.no)}</td><td class="mono">${esc(b.date)}</td><td class="mono" style="font-size:12px">${nos.map(esc).join("<br>")}</td>
+      <td class="r num">${money(b.amount, cur)}</td><td class="r num">${bal > 0.0001 ? money(bal, cur) : ""}</td>
+      <td><span class="chip ${st === "已收清" ? "in" : st === "客戶已確認" ? "xfer" : st === "已寄出" ? "adj" : "wh"}">${esc(st)}</span>${b.sentAt ? `<span class="sub">寄出 ${esc(b.sentAt)}</span>` : ""}${b.confirmedAt ? `<span class="sub">確認 ${esc(b.confirmedAt)}</span>` : ""}${b.confirmNote ? `<span class="sub">${esc(b.confirmNote)}</span>` : ""}</td>
+      <td style="font-size:12px">${blFileLinks(b.files)}</td>
+      <td style="white-space:nowrap"><button type="button" class="btn sm" data-bpdf="${esc(b.no)}">對帳單 PDF</button> <button type="button" class="btn sm" data-bxl="${esc(b.no)}">Excel</button>
+        ${b.status !== "已寄出" && b.status !== "客戶已確認" ? `<button type="button" class="btn sm" data-bsent="${esc(b.no)}">標記已寄出</button>` : ""}
+        ${b.status !== "客戶已確認" ? `<button type="button" class="btn sm primary" data-bok="${esc(b.no)}">客戶已確認</button>` : ""}
+        <button type="button" class="btn sm" data-bdel="${esc(b.no)}">刪除</button></td></tr>`; }).join("") || `<tr><td colspan="8"><div class="empty">還沒有結帳單。</div></td></tr>`;
+  $("blRows").querySelectorAll("[data-bpdf]").forEach(b => b.addEventListener("click", () => billPdf(b.dataset.bpdf)));
+  $("blRows").querySelectorAll("[data-bxl]").forEach(b => b.addEventListener("click", () => billXlsx(b.dataset.bxl)));
+  $("blRows").querySelectorAll("[data-bsent]").forEach(b => b.addEventListener("click", () => billRun(() => call("billStatus", { no:b.dataset.bsent, status:"已寄出" }), "已標記寄出。")));
+  $("blRows").querySelectorAll("[data-bok]").forEach(b => b.addEventListener("click", () => billConfirm(b.dataset.bok)));
+  $("blRows").querySelectorAll("[data-bdel]").forEach(b => b.addEventListener("click", async () => { if (await ask(`刪除結帳單 ${b.dataset.bdel}？（銷貨單和收款紀錄不受影響）`)) billRun(() => call("billDelete", { no:b.dataset.bdel }), "已刪除結帳單。"); }));
+  const pays = (SD().payments || []).filter(p => (p.custCode || p.customer) === BL.cust && (p.currency || "") === cur).sort((a, b) => String(b.date).localeCompare(String(a.date)) || String(b.id).localeCompare(String(a.id)));
+  $("pyRows").innerHTML = pays.map(p => { let a = {}; try{ a = JSON.parse(p.alloc || "{}"); }catch(e){} const used = Object.values(a).reduce((s, v) => s + Number(v || 0), 0), left = round(Number(p.amount || 0) + Number(p.fee || 0) - used);
+    return `<tr><td class="mono">${esc(p.date)}</td><td class="mono">${esc(p.id)}</td><td class="r num">${money(p.amount, cur)}</td><td class="r num">${Number(p.fee) ? money(p.fee, cur) : ""}</td>
+      <td class="mono" style="font-size:12px">${Object.entries(a).map(([k, v]) => `${esc(k)}　${money(v, cur)}`).join("<br>")}</td><td class="r num">${left > 0.0001 ? money(left, cur) : ""}</td>
+      <td style="font-size:12px">${blFileLinks(p.files) || '<span class="chip low">未上傳</span>'}</td><td style="font-size:12px">${esc(p.note || "")}</td>
+      <td style="white-space:nowrap"><button type="button" class="btn sm" data-pyf="${esc(p.id)}">補上傳憑證</button> <button type="button" class="btn sm" data-pyd="${esc(p.id)}">刪除</button></td></tr>`; }).join("")
+    || `<tr><td colspan="9"><div class="empty">還沒有收款紀錄。</div></td></tr>`;
+  $("pyRows").querySelectorAll("[data-pyd]").forEach(b => b.addEventListener("click", async () => { if (await ask(`刪除收款 ${b.dataset.pyd}？沖銷會一起取消，那些銷貨單會變回未收。`)) billRun(() => call("payDelete", { id:b.dataset.pyd }), "已刪除收款紀錄。"); }));
+  $("pyRows").querySelectorAll("[data-pyf]").forEach(b => b.addEventListener("click", () => pickFiles(async files => { const p = (SD().payments || []).find(x => x.id === b.dataset.pyf); if (!p) return;
+    let a = {}; try{ a = JSON.parse(p.alloc || "{}"); }catch(e){}
+    billRun(() => call("paySave", { doc:{ id:p.id, date:p.date, custCode:p.custCode, customer:p.customer, currency:p.currency, amount:p.amount, fee:p.fee, note:p.note, alloc:a, files:[...blFiles(p.files), ...files] } }), "已上傳匯款憑證。"); })));
+}
+function payStat(){
+  const cur = BL.cur, amt = Number($("pAmt").value) || 0, fee = Number($("pFee").value) || 0, used = round(Object.values(BL.alloc).reduce((s, v) => s + (Number(v) || 0), 0));
+  const left = round(amt + fee - used);
+  $("pStat").innerHTML = amt ? `客戶付款 ${cur} ${money(amt + fee, cur)}，沖銷 ${money(used, cur)}` + (left > 0.0001 ? `，<b>剩 ${money(left, cur)} 記為預收</b>` : left < -0.0001 ? `，<b style="color:var(--bad)">沖銷超過付款 ${money(-left, cur)}</b>` : "，剛好沖完") : "";
+}
+function payAuto(){
+  const cur = BL.cur, open = blSales(BL.cust, cur).filter(r => r.bal > 0.0001); let left = round((Number($("pAmt").value) || 0) + (Number($("pFee").value) || 0));
+  BL.alloc = {}; open.forEach(r => { if (left <= 0.0001) return; const t = round(Math.min(left, r.bal)); BL.alloc[r.x.no] = t; left = round(left - t); });
+  renderBillLists();
+}
+async function billRun(fn, ok){ try{ await busy(fn); await refreshSales(); renderBillLists(); flash(ok); }catch(err){ msg("bMsg", err.message, "err"); } }
+const readFiles = files => Promise.all([...files].map(f => new Promise((res, rej) => { if (f.size > 10 * 1024 * 1024) return rej(new Error(`檔案「${f.name}」太大，請小於 10MB。`));
+  const r = new FileReader(); r.onload = () => res({ name:f.name, mime:f.type || "application/octet-stream", b64:String(r.result).split(",")[1] }); r.onerror = () => rej(new Error("讀不到檔案 " + f.name)); r.readAsDataURL(f); })));
+function pickFiles(cb){ const inp = document.createElement("input"); inp.type = "file"; inp.multiple = true; inp.accept = "image/*,application/pdf";
+  inp.onchange = async () => { try{ cb(await readFiles(inp.files)); }catch(err){ msg("bMsg", err.message, "err"); } }; inp.click(); }
+async function billConfirm(no){
+  const note = await ask(`${no}：客戶已確認金額。\n可以寫一下確認方式（例如：Email 回覆 11/20、簽回對帳單），下一步可以選擇上傳客戶的確認信或簽回檔案（可略過）。`, "");
+  if (note === null) return;
+  const up = await ask("要上傳客戶的確認信或簽回的對帳單嗎？");
+  const go = files => billRun(() => call("billStatus", { no, status:"客戶已確認", confirmNote:note, ...(files ? { files:[...blFiles((SD().bills || []).find(b => b.no === no)?.files), ...files] } : {}) }), "已標記客戶確認。");
+  if (up) pickFiles(go); else go(null);
+}
+function billDoc(no){
+  const b = (SD().bills || []).find(x => x.no === no); if (!b) return null;
+  const paid = blPaid(), allS = {}; (SD().sales || []).forEach(x => allS[x.no] = x);
+  const rows = blFiles(b.sales).map(n => allS[n]).filter(Boolean).map(x => { const amt = saleAmt(x), L = saLinesOf(x.no); const ords = [...new Set([x.orderNo, ...L.map(l => l.orderNo)].filter(Boolean))];
+    return { date:shipDay(x), no:x.no, exportNo:x.exportNo || "", ords, pos: ords.map(o => SD().orders.find(y => y.no === o)?.custPO).filter(Boolean), amt, paid: paid[x.no] || 0, bal: round(amt - (paid[x.no] || 0)) }; })
+    .sort((a, c) => a.date.localeCompare(c.date) || a.no.localeCompare(c.no));
+  const c = CUSTS().find(x => x.code === b.custCode) || {};
+  const sum = f => round(rows.reduce((s, r) => s + r[f], 0));
+  return { b, rows, c, cur:b.currency || "", total:sum("amt"), paid:sum("paid"), bal:sum("bal"), en:(b.lang || "en") === "en" };
+}
+function billPdf(no){
+  const D = billDoc(no); if (!D) return; const { b, rows, c, cur, en } = D, T = en ? {
+    ti:"STATEMENT OF ACCOUNT", to:"To", no:"Statement No.", date:"Date", cur:"Currency", cols:["No.","Ship Date","Invoice No.","Order / PO","Amount","Received","Balance"],
+    tot:"Total", bal:"BALANCE DUE", note:"Please kindly confirm the above amount and arrange payment accordingly. After remittance, please send us the bank slip for our records. Thank you.",
+    sign:"Confirmed by (Customer signature / stamp)", dt:"Date" } : {
+    ti:"對 帳 單", to:"客戶", no:"結帳單號", date:"日期", cur:"幣別", cols:["項次","出貨日","銷貨單號","訂單 / 客戶 PO","金額","已收","未收"],
+    tot:"合計", bal:"應收金額", note:"請確認以上金額並安排付款；匯款後煩請回傳匯款單據，以利入帳，謝謝。", sign:"客戶確認（簽章）", dt:"日期" };
+  const co = en ? CO.en : CO.zh, who = en ? (c.nameEn || c.full || b.customer) : (c.full || b.customer);
+  const tr = rows.map((r, i) => `<tr><td class="c">${i + 1}</td><td class="c">${esc(r.date)}</td><td>${esc(r.no)}</td><td style="font-size:8pt">${r.ords.map(esc).join("<br>")}${r.pos.length ? "<br>PO " + r.pos.map(esc).join(", ") : ""}</td>
+    <td class="r">${money(r.amt, cur)}</td><td class="r">${r.paid ? money(r.paid, cur) : ""}</td><td class="r">${money(r.bal, cur)}</td></tr>`).join("");
+  makePdf(`<style>.bl th,.bl td{white-space:normal;padding:4pt 5pt;font-size:9pt;position:static;vertical-align:top}.bl .tot td{font-weight:bold;border-top:1pt solid #333}.bl .kv td{border:0;padding:1pt 6pt 1pt 0}</style>
+    <div class="sl-doc bl" style="width:186mm"><div class="sl-co">${esc(co.name)}</div><div style="color:#555;font-size:9pt">${esc(co.addr)}</div>
+    <div class="sl-ti" style="margin-top:8pt;text-align:center;font-size:15pt">${T.ti}</div>
+    <table class="kv" style="margin:8pt 0 10pt;width:auto"><tr><td>${T.to}:</td><td><b>${esc(who)}</b>${b.custCode ? " (" + esc(b.custCode) + ")" : ""}${c.address ? "<br>" + esc(c.address) : ""}</td></tr>
+      <tr><td>${T.no}:</td><td>${esc(b.no)}</td></tr><tr><td>${T.date}:</td><td>${esc(b.date)}</td></tr><tr><td>${T.cur}:</td><td>${esc(cur)}</td></tr></table>
+    <table><thead><tr>${T.cols.map((h, i) => `<th class="${i >= 4 ? "r" : i < 2 ? "c" : ""}">${h}</th>`).join("")}</tr></thead><tbody>${tr}
+      <tr class="tot"><td colspan="4" class="r">${T.tot}</td><td class="r">${money(D.total, cur)}</td><td class="r">${D.paid ? money(D.paid, cur) : ""}</td><td class="r">${money(D.bal, cur)}</td></tr></tbody></table>
+    <div style="margin-top:10pt;text-align:right;font-size:12pt"><b>${T.bal}: ${esc(cur)} ${money(D.bal, cur)}</b></div>
+    <p style="margin-top:12pt;font-size:9pt">${T.note}</p>
+    <div style="margin-top:28pt;display:flex;gap:30mm;font-size:9pt"><div style="flex:1;border-top:0.5pt solid #333;padding-top:3pt">${T.sign}</div><div style="width:45mm;border-top:0.5pt solid #333;padding-top:3pt">${T.dt}</div></div></div>`,
+    `${en ? "Statement" : "對帳單"}_${b.no}_${(b.custCode || "").replace(/[\\/:*?"<>|\s]+/g, "_")}.pdf`);
+}
+async function billXlsx(no){
+  const D = billDoc(no); if (!D) return; if (typeof ExcelJS === "undefined") return msg("bMsg", "Excel 元件還沒載入，請稍候再按一次。", "err");
+  const { b, rows, c, cur, en } = D, co = en ? CO.en : CO.zh, font = { name:"Arial", size:10 };
+  const wb = new ExcelJS.Workbook(); const ws = wb.addWorksheet(en ? "Statement" : "對帳單", { pageSetup:{ paperSize:9, orientation:"portrait", fitToPage:true, fitToWidth:1, fitToHeight:0 }, views:[{ showGridLines:false }] });
+  ws.columns = [6, 12, 20, 26, 15, 15, 15].map(w => ({ width:w }));
+  const put = (r, v, f) => { ws.mergeCells(r, 1, r, 7); Object.assign(ws.getCell(r, 1), { value:v, font:{ ...font, ...f } }); };
+  put(1, co.name, { size:16, bold:true, color:{ argb:"FF" + SL_BLUE } }); put(2, co.addr, { color:{ argb:"FF555555" } });
+  put(4, en ? "STATEMENT OF ACCOUNT" : "對 帳 單", { size:14, bold:true }); ws.getCell(4, 1).alignment = { horizontal:"center" };
+  put(6, `${en ? "To" : "客戶"}: ${en ? (c.nameEn || c.full || b.customer) : (c.full || b.customer)}${b.custCode ? " (" + b.custCode + ")" : ""}`, { bold:true });
+  put(7, `${en ? "Statement No." : "結帳單號"}: ${b.no}      ${en ? "Date" : "日期"}: ${b.date}      ${en ? "Currency" : "幣別"}: ${cur}`, {});
+  const H = en ? ["No.","Ship Date","Invoice No.","Order / PO","Amount","Received","Balance"] : ["項次","出貨日","銷貨單號","訂單 / 客戶 PO","金額","已收","未收"];
+  const hr = ws.getRow(9); H.forEach((h, i) => { const cell = hr.getCell(i + 1); cell.value = h; cell.font = { ...font, bold:true, color:{ argb:"FFFFFFFF" } }; cell.fill = { type:"pattern", pattern:"solid", fgColor:{ argb:"FF" + SL_BLUE } }; cell.alignment = { horizontal:"center", vertical:"middle" }; });
+  const thin = { style:"thin", color:{ argb:"FFD0D7E2" } }, nf = DEC(cur) ? "#,##0." + "0".repeat(DEC(cur)) : "#,##0";
+  rows.forEach((r, k) => { const row = ws.getRow(10 + k); [k + 1, r.date, r.no, r.ords.join(", ") + (r.pos.length ? " / PO " + r.pos.join(", ") : ""), r.amt, r.paid || null, r.bal].forEach((v, i) => { const cell = row.getCell(i + 1); cell.value = v; cell.font = font; cell.border = { bottom:thin };
+    cell.alignment = { vertical:"top", wrapText:true, horizontal: i >= 4 ? "right" : i < 2 ? "center" : "left" }; if (i >= 4) cell.numFmt = nf; }); });
+  const t = 10 + rows.length; const tr = ws.getRow(t); ws.mergeCells(t, 1, t, 4); tr.getCell(1).value = en ? "Total" : "合計"; tr.getCell(1).alignment = { horizontal:"right" };
+  [[5, D.total], [6, D.paid || null], [7, D.bal]].forEach(([i, v]) => { const cell = tr.getCell(i); cell.value = v; cell.numFmt = nf; });
+  tr.eachCell(cell => { cell.font = { ...font, bold:true }; cell.border = { top:{ style:"thin" } }; });
+  put(t + 2, `${en ? "BALANCE DUE" : "應收金額"}: ${cur} ${money(D.bal, cur)}`, { bold:true, size:12 }); ws.getCell(t + 2, 1).alignment = { horizontal:"right" };
+  put(t + 4, en ? "Please kindly confirm the above amount and arrange payment accordingly. After remittance, please send us the bank slip for our records. Thank you." : "請確認以上金額並安排付款；匯款後煩請回傳匯款單據，以利入帳，謝謝。", { size:9 });
+  ws.getCell(t + 4, 1).alignment = { wrapText:true }; ws.getRow(t + 4).height = 30;
+  put(t + 7, (en ? "Confirmed by (Customer signature / stamp): " : "客戶確認（簽章）：") + "______________________      " + (en ? "Date: " : "日期：") + "____________", { size:9 });
+  const buf = await wb.xlsx.writeBuffer(); const fn = `${en ? "Statement" : "對帳單"}_${b.no}_${(b.custCode || "").replace(/[\\/:*?"<>|\s]+/g, "_")}.xlsx`;
+  download(fn, new Blob([buf], { type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })); flash(`已匯出 ${fn}`);
+}
+$("bCust").addEventListener("change", () => { BL.cust = $("bCust").value; BL.cur = ""; BL.sel = {}; BL.alloc = {}; renderBill(); });
+$("bCur").addEventListener("change", () => { BL.cur = $("bCur").value; BL.sel = {}; BL.alloc = {}; renderBillLists(); });
+$("bShowPaid").addEventListener("change", renderBillLists);
+$("bPickMonth").addEventListener("click", () => { const m = $("bMonth").value; blSales(BL.cust, BL.cur).filter(r => r.bal > 0.0001 && shipDay(r.x).slice(0, 7) === m).forEach(r => BL.sel[r.x.no] = 1); renderBillLists(); });
+$("bPickAll").addEventListener("click", () => { blSales(BL.cust, BL.cur).filter(r => r.bal > 0.0001).forEach(r => BL.sel[r.x.no] = 1); renderBillLists(); });
+$("bPickNone").addEventListener("click", () => { BL.sel = {}; renderBillLists(); });
+$("bMake").addEventListener("click", async () => {
+  const R = blSales(BL.cust, BL.cur).filter(r => BL.sel[r.x.no]); if (!R.length) return msg("bMsg", "請先勾選要放進結帳單的銷貨單。", "err");
+  const x0 = R[0].x, amt = round(R.reduce((s, r) => s + r.amt, 0));
+  try{ const r = await busy(() => call("billSave", { doc:{ date:$("bDate").value || today(), custCode:x0.custCode || "", customer:x0.customer, currency:BL.cur, period:$("bMonth").value, lang:$("bLang").value, sales:R.map(r => r.x.no), amount:amt } }));
+    BL.sel = {}; await refreshSales(); renderBillLists(); flash(`已建立結帳單 ${r.no}，可以輸出對帳單給客戶。`); msg("bMsg", `✓ 已建立結帳單 ${r.no}（${R.length} 張、${BL.cur} ${money(amt, BL.cur)}）。在下方「結帳單」按「對帳單 PDF」或「Excel」輸出。`); }
+  catch(err){ msg("bMsg", err.message, "err"); }
+});
+$("bMarkOld").addEventListener("click", async () => {
+  const R = blSales(BL.cust, BL.cur).filter(r => BL.sel[r.x.no] && r.bal > 0.0001); if (!R.length) return msg("bMsg", "請先勾選要標記為已收的舊銷貨單。", "err");
+  const amt = round(R.reduce((s, r) => s + r.bal, 0));
+  if (!(await ask(`把勾選的 ${R.length} 張銷貨單（${BL.cur} ${money(amt, BL.cur)}）標記為已收？\n用在系統開始管收款以前就已經收過錢的舊帳，會記一筆「舊帳標記已收」的收款，不用上傳憑證。`))) return;
+  const x0 = R[0].x, alloc = {}; R.forEach(r => alloc[r.x.no] = r.bal);
+  try{ await busy(() => call("paySave", { doc:{ date:today(), custCode:x0.custCode || "", customer:x0.customer, currency:BL.cur, amount:amt, fee:0, note:"舊帳標記已收", alloc, files:[] } }));
+    BL.sel = {}; await refreshSales(); renderBillLists(); flash(`已把 ${R.length} 張舊銷貨單標記為已收。`); }
+  catch(err){ msg("bMsg", err.message, "err"); }
+});
+["pAmt","pFee"].forEach(id => $(id).addEventListener("input", payAuto));
+$("pAuto").addEventListener("click", payAuto);
+$("pFiles").addEventListener("change", async () => { try{ BL.files = await readFiles($("pFiles").files); $("pFileList").textContent = BL.files.map(f => f.name).join("、"); }catch(err){ BL.files = []; $("pFiles").value = ""; msg("bMsg", err.message, "err"); } });
+$("pSave").addEventListener("click", async () => {
+  const amt = Number($("pAmt").value); if (!(amt > 0)) return msg("bMsg", "請填入帳金額。", "err");
+  const x0 = (SD().sales || []).find(x => blKey(x) === BL.cust) || {};
+  if (!BL.files.length && !(await ask("還沒有上傳匯款憑證，仍要先儲存嗎？（之後可以在收款紀錄補上傳）"))) return;
+  try{ const r = await busy(() => call("paySave", { doc:{ date:$("pDate").value || today(), custCode:x0.custCode || "", customer:x0.customer || BL.cust, currency:BL.cur, amount:amt, fee:Number($("pFee").value) || 0, note:$("pNote").value, alloc:BL.alloc, files:BL.files } }));
+    ["pAmt","pFee","pNote","pFiles"].forEach(id => $(id).value = ""); $("pFileList").textContent = ""; BL.files = []; BL.alloc = {};
+    await refreshSales(); renderBillLists(); flash(`已登記收款 ${r.id}。`); msg("bMsg", `✓ 已登記收款 ${r.id}。`); }
+  catch(err){ msg("bMsg", err.message, "err"); }
+});
+$("docDlg").addEventListener("close", () => { if (S.tab === "bill") renderBillLists(); });
+
 function renderStmt(){
   if (!$("stMonth").value){ const d = new Date(); d.setMonth(d.getMonth() - (d.getDate() <= 10 ? 1 : 0)); $("stMonth").value = d.toISOString().slice(0, 7); }
   const keep = $("stCust").value; const cs = {}; (SD().sales || []).filter(x => x.status === "已出貨").forEach(x => cs[x.custCode || x.customer] = x.customer + (x.custCode ? `（${x.custCode}）` : ""));

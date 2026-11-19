@@ -37,6 +37,11 @@ const F = {
   customers:[['code','客戶代號','s'],['short','客戶簡稱','s'],['full','客戶全名','s'],['nameEn','英文名稱','s'],['contact','聯絡人','s'],
           ['phone','電話','s'],['email','E-mail','s'],['address','地址','s'],['shipTo','收貨資訊','s'],['currency','幣別','s'],['taxType','稅別','s'],
           ['payTerms','付款條件','s'],['tradeTerms','貿易條件','s'],['salesName','負責業務','s'],['note','備註','s'],['active','啟用','s'],['updatedAt','更新時間','s']],
+  bills:[['no','結帳單號','s'],['date','結帳日','s'],['custCode','客戶代號','s'],['customer','客戶','s'],['currency','幣別','s'],['period','結帳月份','s'],
+          ['sales','銷貨單(JSON)','s'],['amount','結帳金額','n'],['lang','語言','s'],['status','狀態','s'],['sentAt','寄出日','s'],['confirmedAt','客戶確認日','s'],
+          ['confirmNote','確認說明','s'],['files','附件(JSON)','s'],['note','備註','s'],['byName','建立人','s'],['ts','建立時間','n'],['updatedAt','更新時間','s']],
+  payments:[['id','收款編號','s'],['date','收款日','s'],['custCode','客戶代號','s'],['customer','客戶','s'],['currency','幣別','s'],['amount','收款金額','n'],
+          ['fee','手續費／匯差','n'],['alloc','沖銷明細(JSON)','s'],['files','匯款憑證(JSON)','s'],['note','備註','s'],['byName','登記人','s'],['ts','建立時間','n'],['updatedAt','更新時間','s']],
   invoices:[['sc','銷貨單號','s'],['json','內容JSON','s'],['updatedAt','更新時間','s'],['byName','更新人','s']],
   pallets:[['id','棧板編號','s'],['date','日期','d'],['whId','庫別','s'],['lots','批號明細','s'],['pack','棧板尺寸','s'],['palletWt','棧板重量','n'],
           ['status','狀態','s'],['note','備註','s'],['history','調整紀錄','s'],['filler','填寫人','s'],['byId','登記帳號','s'],['ts','建立時間','n'],['loc','庫位','s']],
@@ -90,7 +95,7 @@ const F = {
           ['finalItem','最終產品','s'],['station','工作站','s'],['opCode','製程代號','s'],['stationCode','工作站代號','s'],['prevDept','前站單位','s'],['prevOp','前站製程','s'],['nextDept','下站單位','s'],['nextOp','下站製程','s']]
 };
 const TAB = { users:'帳號', whs:'庫別', items:'品號', stock:'庫存', txns:'異動紀錄', counts:'盤點紀錄', packings:'PackingList', consignees:'收件人',
-  quotes:'報價單', quoteLines:'報價單身', orders:'訂單', orderLines:'訂單單身', wos:'工單', woMats:'工單用料', sales:'銷貨單', salesLines:'銷貨單身', repacks:'包裝紀錄', pallets:'棧板', invoices:'Invoice', customers:'客戶', costLog:'單價紀錄', costItems:'成本資料庫', bom:'BOM', bomHeads:'BOM表頭', bomLog:'BOM修改紀錄', metalPrices:'金屬價格', ops:'製程', settings:'設定', mails:'寄信紀錄', woOps:'工單製程', woOut:'委外紀錄', woReports:'報工紀錄' };
+  quotes:'報價單', quoteLines:'報價單身', orders:'訂單', orderLines:'訂單單身', wos:'工單', woMats:'工單用料', sales:'銷貨單', salesLines:'銷貨單身', repacks:'包裝紀錄', pallets:'棧板', invoices:'Invoice', bills:'結帳單', payments:'收款', customers:'客戶', costLog:'單價紀錄', costItems:'成本資料庫', bom:'BOM', bomHeads:'BOM表頭', bomLog:'BOM修改紀錄', metalPrices:'金屬價格', ops:'製程', settings:'設定', mails:'寄信紀錄', woOps:'工單製程', woOut:'委外紀錄', woReports:'報工紀錄' };
 const TYPE_LABEL = { in:'入庫', out:'出庫', xfer:'調撥', adj:'調整' };
 const LABEL_TYPE = { '入庫':'in', '出庫':'out', '調撥':'xfer', '調整':'adj' };
 const ROLE_RANK = { staff:0, viewer:1, user:2, admin:3 };
@@ -380,6 +385,11 @@ const HANDLERS = {
   renameItems: ['admin', renameItems_, true],
   saveEnglish: ['admin', saveEnglish_, true],
   salesLoad:   ['viewer', salesLoad_],
+  billSave:    ['user', billSave_, true],
+  billStatus:  ['user', billStatus_, true],
+  billDelete:  ['user', billDelete_, true],
+  paySave:     ['user', paySave_, true],
+  payDelete:   ['user', payDelete_, true],
   saveQuote:   ['user', saveQuote_, true],
   quoteStatus: ['user', quoteStatus_, true],
   setErpNo:    ['user', setErpNo_, true],
@@ -1253,7 +1263,9 @@ function salesLoad_(u) {
   const mails = pm.sales ? readAll_('mails').slice(-300) : [];
   const ops = readAll_('ops').map(o => { delete o._row; return o; });
   let codeRules = null; try { codeRules = JSON.parse(setting_('codeRules') || 'null'); } catch (e) {}
-  return { perm: pm, quotes, qLines, orders, oLines, shipped, wos, woMats, woDone, woIssued, woUsed, woOut, woOps, woReports, opSum, sales, sLines, customers, salesPeople, mails, ops, codeRules };
+  const bills = pm.price ? readAll_('bills').map(x => { delete x._row; return x; }) : [];
+  const payments = pm.price ? readAll_('payments').map(x => { delete x._row; return x; }) : [];
+  return { perm: pm, quotes, qLines, orders, oLines, shipped, wos, woMats, woDone, woIssued, woUsed, woOut, woOps, woReports, opSum, sales, sLines, customers, salesPeople, mails, ops, codeRules, bills, payments };
 }
 function cleanLines_(lines, keepFrom, pm, isQuote) {
   const items = readAll_('items');
@@ -2070,6 +2082,72 @@ function unshipSale_(u, p) {
   x.editLog = (x.editLog ? x.editLog + '\n' : '') + nowStr_() + ' ' + u.name + '｜取消出貨：' + (outs.length ? '' : '出庫紀錄已先手動刪除，只改回待出貨') + outs.map(t => t.itemCode + ' ' + t.qty + '（' + t.whCode + '）').join('、') + (why ? '；原因：' + why : '');
   x.updatedAt = nowStr_(); update_('sales', x);
   return { count: outs.length };
+}
+
+// ======================= 結帳與收款 =======================
+// 結帳單：挑一個客戶的已出貨銷貨單（預設某個月，也可以加入之前還沒收款的），輸出對帳單給客戶確認金額。
+// 收款：客戶匯款常常不是一張一張付，收款時把金額沖到哪幾張銷貨單（預設從最舊的未收款開始沖），匯款憑證存成附件。
+function needPrice_(u) { if (!perms_(u).price) throw new Error('只有業務或管理員可以處理結帳與收款。'); }
+const jsonArr_ = v => { try { const a = JSON.parse(v || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } };
+const jsonObj_ = v => { try { const a = JSON.parse(v || '{}'); return a && typeof a === 'object' && !Array.isArray(a) ? a : {}; } catch (e) { return {}; } };
+/** 附件：網頁傳來 [{name, mime, b64}] 存到「收款與結帳附件」資料夾；已存的 [{id, name, url}] 原樣保留 */
+function saveFiles_(list) {
+  const out = [];
+  (list || []).forEach(f => {
+    if (f && f.id) { out.push({ id: f.id, name: f.name, url: f.url, mime: f.mime || '' }); return; }
+    if (!f || !f.b64) return;
+    if (String(f.b64).length > 14e6) throw new Error('檔案「' + f.name + '」太大，請小於 10MB。');
+    const root = DriveApp.getRootFolder(); const it = root.getFoldersByName('收款與結帳附件');
+    const folder = it.hasNext() ? it.next() : root.createFolder('收款與結帳附件');
+    const file = folder.createFile(Utilities.newBlob(Utilities.base64Decode(f.b64), f.mime || 'application/octet-stream', String(f.name || 'file')));
+    out.push({ id: file.getId(), name: file.getName(), url: file.getUrl(), mime: f.mime || '' });
+  });
+  return JSON.stringify(out);
+}
+function billSave_(u, p) {
+  needPrice_(u); const d = p.doc || {};
+  const sales = (d.sales || []).map(String).filter(Boolean); if (!sales.length) throw new Error('請至少勾一張銷貨單。');
+  const all = readAll_('bills'); const now = nowStr_();
+  let x = d.no ? all.find(b => b.no === d.no) : null;
+  if (!x) x = { no: nextNo_('BL', d.date || today_(), all.map(b => b.no)), status: '草稿', byName: u.name, ts: Date.now(), files: '[]' };
+  ['date', 'custCode', 'customer', 'currency', 'period', 'lang', 'note'].forEach(k => { if (d[k] !== undefined) x[k] = String(d[k]).trim(); });
+  if (!x.date) x.date = today_();
+  x.sales = JSON.stringify(sales); x.amount = Number(d.amount) || 0; x.updatedAt = now;
+  if (x._row) update_('bills', x); else append_('bills', [x]);
+  return { no: x.no };
+}
+function billStatus_(u, p) {
+  needPrice_(u); const x = readAll_('bills').find(b => b.no === p.no); if (!x) throw new Error('找不到結帳單。');
+  if (p.status) { if (['草稿', '已寄出', '客戶已確認'].indexOf(p.status) < 0) throw new Error('狀態不正確。'); x.status = p.status; }
+  if (p.status === '已寄出' && !x.sentAt) x.sentAt = p.date || today_();
+  if (p.status === '客戶已確認') x.confirmedAt = p.date || today_();
+  if (p.status === '草稿') { x.sentAt = ''; x.confirmedAt = ''; }
+  if (p.confirmNote !== undefined) x.confirmNote = String(p.confirmNote).trim();
+  if (p.files) x.files = saveFiles_(p.files);
+  x.updatedAt = nowStr_(); update_('bills', x); return true;
+}
+function billDelete_(u, p) {
+  needPrice_(u); const x = readAll_('bills').find(b => b.no === p.no); if (!x) throw new Error('找不到結帳單。');
+  deleteRow_('bills', x); return true;
+}
+function paySave_(u, p) {
+  needPrice_(u); const d = p.doc || {}; const all = readAll_('payments'); const now = nowStr_();
+  const amount = Number(d.amount); if (!(amount > 0)) throw new Error('收款金額要大於 0。');
+  if (!d.custCode && !d.customer) throw new Error('請選客戶。');
+  const alloc = {}; Object.keys(d.alloc || {}).forEach(k => { const v = Number(d.alloc[k]); if (v > 0) alloc[k] = v; });
+  const used = Object.values(alloc).reduce((s, v) => s + v, 0), fee = Number(d.fee) || 0;
+  if (used > amount + fee + 0.005) throw new Error('沖銷金額合計（' + used + '）不能大於收款金額加手續費／匯差（' + (amount + fee) + '）。');
+  let x = d.id ? all.find(y => y.id === d.id) : null;
+  if (!x) x = { id: nextNo_('RC', d.date || today_(), all.map(y => y.id)), byName: u.name, ts: Date.now() };
+  ['date', 'custCode', 'customer', 'currency', 'note'].forEach(k => { if (d[k] !== undefined) x[k] = String(d[k]).trim(); });
+  if (!x.date) x.date = today_();
+  x.amount = amount; x.fee = fee; x.alloc = JSON.stringify(alloc); x.files = saveFiles_(d.files); x.updatedAt = now;
+  if (x._row) update_('payments', x); else append_('payments', [x]);
+  return { id: x.id };
+}
+function payDelete_(u, p) {
+  needPrice_(u); const x = readAll_('payments').find(y => y.id === p.id); if (!x) throw new Error('找不到收款紀錄。');
+  deleteRow_('payments', x); return true;
 }
 
 // ======================= 重新包裝 =======================

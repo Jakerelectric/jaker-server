@@ -63,6 +63,16 @@ async function setupErp(app, { cfg, ROOT, log, serial }) {
     res.set('Cache-Control', 'no-store').type('html').send(indexHtml());
   });
 
+  // 結帳／收款附件（匯款憑證、客戶確認信）：檔案存在 data/erp-drive，用隨機編號開啟
+  app.get('/erp/drive/file/:id', (req, res) => {
+    const m = rt.drive._item(req.params.id);
+    if (!m || m.kind !== 'file' || m.trashed) return res.status(404).send('找不到檔案');
+    res.set('Content-Type', m.mime || 'application/octet-stream');
+    res.set('Content-Disposition', (req.query.dl ? 'attachment' : 'inline') + "; filename*=UTF-8''" + encodeURIComponent(m.name));
+    res.set('Content-Security-Policy', 'sandbox');
+    res.sendFile(rt.drive._path(m.id));
+  });
+
   // 行政服務確認員工編號＋密碼
   async function adminLogin(empId, pin) {
     try {
