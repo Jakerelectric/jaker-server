@@ -5304,26 +5304,42 @@ const billFile = (D, ext) => `${D.en ? "Statement" : "對帳單"}_${D.b.no}_${(D
 function billPdf(no){
   const D = billDoc(no); if (!D) return; const { b, rows, c, cur, en } = D, T = billT(en);
   const co = en ? CO.en : CO.zh, who = en ? (c.nameEn || c.full || b.customer) : (c.full || b.customer), m = v => money(v, cur);
-  const body = rows.map((r, i) => { const n = Math.max(1, r.items.length);
-    const it = (l, k) => `${k === 0 ? `<td class="c" rowspan="${n}">${i + 1}</td><td class="c" rowspan="${n}">${esc(r.date)}</td><td rowspan="${n}"><b>${esc(r.no)}</b>${r.ords.length ? `<div class="s">${T.ord} ${r.ords.map(esc).join(", ")}${r.pos.length ? "<br>PO " + r.pos.map(esc).join(", ") : ""}</div>` : ""}</td><td rowspan="${n}">${esc(r.exportNo)}</td>` : ""}
-      <td>${esc(l.code)}</td><td>${esc(l.desc)}</td><td class="r">${fmt(l.qty, 2)}</td><td class="c">${esc(l.unit)}</td><td class="r">${l.free ? "" : m(l.price)}</td><td class="r">${l.free ? `<i>${T.foc}</i>` : m(l.amt)}</td>`;
-    const lines = (r.items.length ? r.items : [{ code:"", desc:"", qty:0, unit:"", price:0, amt:0 }]).map((l, k) => `<tr>${it(l, k)}</tr>`).join("");
-    const sub = `<tr class="sub"><td colspan="9" class="r">${T.inv}${r.paid ? `　(${T.rec} ${m(r.paid)}　${T.bal1} ${m(r.bal)})` : ""}</td><td class="r">${m(r.amt)}</td></tr>`;
-    return lines + sub; }).join("");
-  makePdf(`<style>.bl th,.bl td{white-space:normal;padding:3pt 4pt;font-size:8pt;position:static;vertical-align:top}.bl th{font-size:7.5pt}.bl .s{font-size:7pt;color:#555;margin-top:2pt}
-    .bl .sub td{font-weight:bold;background:#f3f6fb;border-bottom:0.8pt solid #999}.bl .tot td{font-weight:bold;border:0;padding:2pt 4pt}.bl .kv td{border:0;padding:1pt 6pt 1pt 0;font-size:9pt}</style>
-    <div class="sl-doc bl" style="width:273mm"><div class="sl-co">${esc(co.name)}</div><div style="color:#555;font-size:9pt">${esc(co.addr)}</div>
-    <div class="sl-ti" style="margin-top:6pt;text-align:center;font-size:15pt">${T.ti}</div>
-    <table class="kv" style="margin:6pt 0 8pt;width:auto"><tr><td>${T.to}:</td><td><b>${esc(who)}</b>${b.custCode ? " (" + esc(b.custCode) + ")" : ""}${c.address ? "<br>" + esc(c.address) : ""}</td></tr>
-      <tr><td>${T.no}:</td><td>${esc(b.no)}</td></tr><tr><td>${T.date}:</td><td>${esc(b.date)}</td></tr><tr><td>${T.cur}:</td><td>${esc(cur)}</td></tr></table>
-    <table><colgroup>${[4,7,13,13,10,22,6,5,8,10].map(w => `<col style="width:${w}%">`).join("")}</colgroup>
-      <thead><tr>${T.cols.map((h, i) => `<th class="${i >= 8 || i === 6 ? "r" : i < 2 || i === 7 ? "c" : ""}">${h}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table>
-    <table class="tot" style="width:auto;margin:8pt 0 0 auto"><tr><td class="r">${T.tot}</td><td class="r">${esc(cur)} ${m(D.total)}</td></tr>
+  const css = `<style>.bl th,.bl td{white-space:normal;padding:1.6pt 4pt;font-size:9pt;line-height:1.25;position:static;vertical-align:top}.bl th{font-size:8.5pt;padding:3pt 4pt}.bl .s{font-size:7.5pt;color:#555;margin-top:1pt}
+    .bl .sub td{font-weight:bold;background:#f3f6fb;border-bottom:0.8pt solid #999}.bl .tot td{font-weight:bold;border:0;padding:1.5pt 4pt;font-size:9.5pt}.bl .kv td{border:0;padding:0.5pt 6pt 0.5pt 0;font-size:9.5pt}.bl .cont td{color:#777;font-style:italic}</style>`;
+  const head = `<div class="sl-co">${esc(co.name)}</div><div style="color:#555;font-size:9pt">${esc(co.addr)}</div>
+    <div class="sl-ti" style="margin-top:4pt;text-align:center;font-size:15pt">${T.ti}</div>
+    <table class="kv" style="margin:4pt 0 6pt;width:auto"><tr><td>${T.to}:</td><td><b>${esc(who)}</b>${b.custCode ? " (" + esc(b.custCode) + ")" : ""}${c.address ? "<br>" + esc(c.address) : ""}</td></tr>
+      <tr><td>${T.no}:</td><td>${esc(b.no)}　　${T.date}: ${esc(b.date)}　　${T.cur}: ${esc(cur)}</td></tr></table>`;
+  const cols = `<colgroup>${[4,7,13,13,10,22,6,5,8,10].map(w => `<col style="width:${w}%">`).join("")}</colgroup>`;
+  const thead = `<thead><tr>${T.cols.map((h, i) => `<th class="${i >= 8 || i === 6 ? "r" : i < 2 || i === 7 ? "c" : ""}">${h}</th>`).join("")}</tr></thead>`;
+  // 每一列獨立（不用跨列合併），才能在任何一列換頁；換頁後第一列補上單號（續）
+  const R = [];
+  rows.forEach((r, i) => {
+    (r.items.length ? r.items : [{ code:"", desc:"", qty:0, unit:"", price:0, amt:0 }]).forEach((l, k) => R.push({ inv:r.no, html:
+      `${k === 0 ? `<td class="c">${i + 1}</td><td class="c">${esc(r.date)}</td><td><b>${esc(r.no)}</b>${r.ords.length ? `<div class="s">${T.ord} ${r.ords.map(esc).join(", ")}${r.pos.length ? "<br>PO " + r.pos.map(esc).join(", ") : ""}</div>` : ""}</td><td>${esc(r.exportNo)}</td>` : `<td></td><td></td><td></td><td></td>`}
+      <td>${esc(l.code)}</td><td>${esc(l.desc)}</td><td class="r">${l.qty ? fmt(l.qty, 2) : ""}</td><td class="c">${esc(l.unit)}</td><td class="r">${l.free || !l.qty ? "" : m(l.price)}</td><td class="r">${l.free ? `<i>${T.foc}</i>` : l.qty ? m(l.amt) : ""}</td>` }));
+    R.push({ inv:r.no, sub:true, html:`<td colspan="9" class="r">${T.inv}　${esc(r.no)}${r.paid ? `　(${T.rec} ${m(r.paid)}　${T.bal1} ${m(r.bal)})` : ""}</td><td class="r">${m(r.amt)}</td>` });
+  });
+  const foot = `<table class="tot" style="width:auto;margin:6pt 0 0 auto"><tr><td class="r">${T.tot}</td><td class="r">${esc(cur)} ${m(D.total)}</td></tr>
       ${D.paid ? `<tr><td class="r">${T.lessRec}</td><td class="r">${esc(cur)} ${m(D.paid)}</td></tr>` : ""}
       <tr><td class="r" style="font-size:11pt">${T.bal}</td><td class="r" style="font-size:11pt">${esc(cur)} ${m(D.bal)}</td></tr></table>
-    <p style="margin-top:10pt;font-size:9pt">${T.note}</p>
-    <div style="margin-top:24pt;display:flex;gap:30mm;font-size:9pt"><div style="flex:1;border-top:0.5pt solid #333;padding-top:3pt">${T.sign}</div><div style="width:50mm;border-top:0.5pt solid #333;padding-top:3pt">${T.dt}</div></div></div>`,
-    billFile(D, "pdf"), { orientation:"landscape" });
+    <p style="margin-top:8pt;font-size:9pt">${T.note}</p>
+    <div style="margin-top:20pt;display:flex;gap:30mm;font-size:9pt"><div style="flex:1;border-top:0.5pt solid #333;padding-top:3pt">${T.sign}</div><div style="width:50mm;border-top:0.5pt solid #333;padding-top:3pt">${T.dt}</div></div>`;
+  // 量每一列的高度，自己分頁：每頁都有表頭
+  const probe = document.createElement("div"); probe.style.cssText = "position:absolute;left:-20000px;top:0;visibility:hidden";
+  probe.innerHTML = `<style>${PDF_CSS}${SL_CSS}</style>${css}<div class="sl-doc bl" style="width:273mm"><div id="blpH">${head}</div><table>${cols}${thead}<tbody>${R.map(x => `<tr class="${x.sub ? "sub" : ""}">${x.html}</tr>`).join("")}</tbody></table><div id="blpF">${foot}</div></div>`;
+  document.body.appendChild(probe);
+  const doc = probe.querySelector(".sl-doc"), mm = 273 / doc.offsetWidth;
+  const hH = probe.querySelector("#blpH").offsetHeight * mm, thH = probe.querySelector("thead").offsetHeight * mm, fH = probe.querySelector("#blpF").offsetHeight * mm;
+  const rH = [...probe.querySelectorAll("tbody tr")].map(tr => tr.offsetHeight * mm); probe.remove();
+  const PAGE = 168; const pages = [[]]; let used = hH + thH;   // 量到的高度比實際印出來略小，留一點餘裕
+  R.forEach((x, i) => { if (used + rH[i] > PAGE && pages[pages.length - 1].length){ pages.push([]); used = thH + rH[i] + 5; } else used += rH[i]; pages[pages.length - 1].push(i); });
+  const footNew = used + fH > PAGE;
+  const html = pages.map((idx, p) => { const first = idx[0], cont = p > 0 && !R[first].sub && !/<b>/.test(R[first].html.slice(0, 200)) ? `<tr class="cont"><td></td><td></td><td colspan="8">${esc(R[first].inv)}（${en ? "continued" : "續"}）</td></tr>` : "";
+    return `${p ? '<div class="html2pdf__page-break"></div>' : head}<table>${cols}${thead}<tbody>${cont}${idx.map(i => `<tr class="${R[i].sub ? "sub" : ""}">${R[i].html}</tr>`).join("")}</tbody></table>
+      ${p > 0 || pages.length > 1 ? `<div style="text-align:right;font-size:7.5pt;color:#888;margin-top:2pt">${esc(b.no)}　${p + 1} / ${pages.length + (footNew ? 1 : 0)}</div>` : ""}`; }).join("")
+    + (footNew ? `<div class="html2pdf__page-break"></div>` : "") + foot;
+  makePdf(`${css}<div class="sl-doc bl" style="width:273mm">${html}</div>`, billFile(D, "pdf"), { orientation:"landscape" });
 }
 async function billXlsx(no){
   const D = billDoc(no); if (!D) return; if (typeof ExcelJS === "undefined") return msg("bMsg", "Excel 元件還沒載入，請稍候再按一次。", "err");
