@@ -2031,7 +2031,7 @@ function unshipSale_(u, p) {
   if (x.imported === '是') throw new Error('這張是從舊資料匯入的銷貨單，沒有系統的出貨紀錄可以取消；請改由出入庫紀錄更正。');
   const lines = readAll_('salesLines').filter(l => l.saleNo === x.no), codes = new Set(lines.map(l => l.itemCode));
   const outs = readAll_('txns').filter(t => t.typeLabel === '出庫' && t.purpose === '銷貨出庫' && String(t.ref || '').trim() === x.no && codes.has(t.itemCode));
-  if (!outs.length) throw new Error('找不到這張銷貨單的出庫紀錄（可能已經被刪除或改過單號），請到出入庫登記確認。');
+  if (!outs.length && !p.noOuts) throw new Error('NOOUT:找不到這張銷貨單的出庫紀錄（可能已經手動刪除）。');
   if (!p.force) { const hits = []; outs.forEach(t => countedAfter_(t, txnKeys_(t)).forEach(h => hits.push(h))); if (hits.length) throw new Error('COUNTED:' + hits.join('；')); }
   const ctx = stockCtx_();
   outs.forEach(t => applyTxnDelta_(ctx, itemForTxn_(t), t, -Number(t.qty), ''));
@@ -2040,7 +2040,7 @@ function unshipSale_(u, p) {
   lines.forEach(l => { l.shipQty = ''; update_('salesLines', l); });
   const why = String(p.reason || '').trim();
   x.status = '待出貨'; x.shippedAt = ''; x.shippedBy = '';
-  x.editLog = (x.editLog ? x.editLog + '\n' : '') + nowStr_() + ' ' + u.name + '｜取消出貨：' + outs.map(t => t.itemCode + ' ' + t.qty + '（' + t.whCode + '）').join('、') + (why ? '；原因：' + why : '');
+  x.editLog = (x.editLog ? x.editLog + '\n' : '') + nowStr_() + ' ' + u.name + '｜取消出貨：' + (outs.length ? '' : '出庫紀錄已先手動刪除，只改回待出貨') + outs.map(t => t.itemCode + ' ' + t.qty + '（' + t.whCode + '）').join('、') + (why ? '；原因：' + why : '');
   x.updatedAt = nowStr_(); update_('sales', x);
   return { count: outs.length };
 }

@@ -6339,6 +6339,11 @@ function renderDocBtns(){
       const no = DOC.no, p = { no, reason: String(why || "") };
       try{ await busy(() => call("unshipSale", p)); }
       catch(e){
+        if (String(e.message).startsWith("NOOUT:")){
+          if (!await ask("找不到這張銷貨單的出庫紀錄（可能已經在出入庫登記手動刪除了，庫存也已經跟著加回）。\n\n只把銷貨單改回「待出貨」嗎？")) return;
+          try{ await busy(() => call("unshipSale", { ...p, noOuts:true })); }catch(e2){ return msg("docMsg", e2.message, "err"); }
+          await refreshSales(); await refresh(); openDoc("sale", no); flash("銷貨單已改回「待出貨」。"); msg("docMsg", `✓ 已改回待出貨（${nowHM()}）。要整張不用的話可以按「作廢」。`); return;
+        }
         if (!String(e.message).startsWith("COUNTED:")) return msg("docMsg", e.message, "err");
         if (!await ask("這些出庫之後已經有盤點紀錄：\n" + e.message.slice(8) + "\n\n仍要取消出貨嗎？（盤點數字不會跟著改）")) return;
         try{ await busy(() => call("unshipSale", { ...p, force:true })); }catch(e2){ return msg("docMsg", e2.message, "err"); }
