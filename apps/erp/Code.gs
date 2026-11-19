@@ -619,6 +619,13 @@ function moveOne_(u, p, ctx, rec, items, whs) {
   if (p.orderNo) f.orderNo = String(p.orderNo).trim();
   if (p.woNo) f.woNo = String(p.woNo).trim();
   if (p.loc) f.loc = locNorm_(p.loc);
+  if (type === 'out' && p.lotNo) {   // 出庫指定批號：在庫批號就會扣這一批（沒指定的出庫照舊依先進先出推算）
+    const ln = String(p.lotNo).trim().toUpperCase();
+    const src = readAll_('txns').find(t => t.typeLabel === '入庫' && String(t.lotNo || '').toUpperCase() === ln);
+    if (!src) throw new Error('找不到批號 ' + ln + '。');
+    if (src.itemCode !== item.code) throw new Error('批號 ' + ln + ' 是 ' + src.itemCode + '，不是 ' + item.code + '。');
+    f.lotNo = src.lotNo;
+  }
   if (p.packLines) { const pk = packNorm_(p.packLines); if (pk.text) { f.packLines = pk.text; f.boxes = pk.boxes; delete f.spb; delete f.mb; delete f.m; } }
   if (p.filler) f.filler = String(p.filler).trim();
   if (p.dept) f.dept = String(p.dept).trim();
@@ -1061,6 +1068,9 @@ function getPacking_(u, p) {
 function lotUse_(sc, inclReserved) {
   const outRefs = {}; readAll_('txns').forEach(t => { if (t.typeLabel === '出庫' && t.ref) outRefs[t.ref] = 1; });
   const used = {}, reserved = {}, own = {}, ownK = {};
+  // 出入庫登記時指定批號的出庫：直接算這一批用掉了
+  const lotId = {}; readAll_('txns').forEach(t => { if (t.typeLabel === '入庫' && t.lotNo) lotId[t.lotNo] = t.id; });
+  readAll_('txns').forEach(t => { if (t.typeLabel === '出庫' && t.lotNo && lotId[t.lotNo]) used[lotId[t.lotNo]] = (used[lotId[t.lotNo]] || 0) + (Number(t.qty) || 0); });
   readAll_('packings').forEach(pk => { let d; try { d = JSON.parse(pk.json || '{}'); } catch (e) { return; }
     (d.picks || []).forEach(p => { const q = Number(p.qty) || 0; if (!(q > 0) || !p.lotId) return; const k = p.itemCode + '__' + p.whId;
       if (inclReserved && pk.sc !== sc && !outRefs[pk.sc]) return;   // 棧板調整：還沒出貨的 Packing List 勾的貨也列出來

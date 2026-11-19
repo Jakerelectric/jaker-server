@@ -337,6 +337,7 @@ nav.tabs [data-tab].g-off{display:none}
           <label class="f" data-single>填寫人<input data-scan id="mvFiller" required placeholder="輸入姓名，或刷員工證"></label>
           <label class="f" data-single>單位<input id="mvDept" list="deptOptions" required></label>
           <label class="f"><span id="mvRefText">單號</span><input id="mvRef" placeholder="選填"></label>
+          <label class="f" id="mvLotWrap" hidden>出貨批號<input id="mvLotNo" list="mvLotList" placeholder="選填，指定從哪一批出" autocomplete="off"><datalist id="mvLotList"></datalist><small class="muted" id="mvLotHint"></small></label>
           <label class="f" id="mvPartyWrap"><span id="mvPartyText">供應商</span><input id="mvParty" placeholder="選填"></label>
           <label class="f" id="mvWoWrap" hidden>工單單號<input id="mvWo" list="woOptions" placeholder="選填，會算進工單進度"></label>
           <label class="f" id="mvOrderWrap" hidden>訂單單號<input id="mvOrder" list="orderOptions" placeholder="選填，出貨會算進訂單進度"></label>
@@ -2046,6 +2047,7 @@ function setMoveType(t){
   $("mvToWrap").hidden = t!=="xfer";
   if ($("mxWrap")) $("mxWrap").hidden = t!=="in";
   if ($("mvLocWrap")) $("mvLocWrap").hidden = t==="out";
+  $("mvLotWrap").hidden = t!=="out"; if (t!=="out") $("mvLotNo").value = ""; else mvLotOpts();
   onPurpose();
   if (typeof SCAN !== "undefined" && SCAN.mode==="scan") renderScan();
 }
@@ -2155,6 +2157,18 @@ const ERP_WH_NAME = { "1111":"原料倉", "1112":"物料倉", "1113":"半成品�
 function erpWhOf(it, purpose){ if (purpose === "客戶退回") return "1121"; if (it && it.erpWh) return String(it.erpWh).trim(); return ERP_WH_BY_PREFIX[String(it && (it.code || it.id) || "").charAt(0)] || ""; }
 const erpWhLabel = c => c ? `${c} ${ERP_WH_NAME[c] || ""}`.trim() : "（品號開頭不是 1～6，請指定）";
 
+/* ---------- 出庫指定批號：列出這個品號、這個庫別目前在庫的批號 ---------- */
+async function mvLotOpts(){
+  if ($("mvLotWrap").hidden) return;
+  const it = findItemFromInput($("mvItem").value), wh = $("mvWh").value;
+  if (!it){ $("mvLotList").innerHTML = ""; $("mvLotHint").textContent = ""; return; }
+  if (!PA.loaded && !PA.busy){ try{ await paLoad(); }catch(e){} }
+  const L = (PA.lots || []).filter(l => l.itemCode === it.code && (!wh || l.whId === wh));
+  $("mvLotList").innerHTML = L.map(l => `<option value="${esc(l.lotNo)}">${esc(l.lotNo)}　在庫 ${fmt(l.qty,2)}${l.loc ? "　" + esc(l.loc) : ""}</option>`).join("");
+  $("mvLotHint").textContent = L.length ? `${L.length} 批在庫；不填就照先進先出推算` : "";
+}
+["mvItem","mvWh"].forEach(id => $(id).addEventListener("change", mvLotOpts));
+
 /* ---------- 生產入庫：一起包裝的原有庫存（其他庫別的同品號） ---------- */
 const MG = [];
 const mgSum = () => round(MG.reduce((s,x) => s + (Number(x.qty)||0), 0));
@@ -2216,6 +2230,7 @@ $("moveForm").addEventListener("submit", async e => {
   if (MV_PERSON && MV_PERSON.name === filler) p.fillerId = MV_PERSON.id;
   Object.entries(packData().d).forEach(([k,v]) => { if (v!==null && v!=="") p[k] = v; });
   if (S.mvType!=="out" && $("mvLoc").value.trim()) p.loc = locNorm($("mvLoc").value);
+  if (S.mvType==="out" && $("mvLotNo").value.trim()) p.lotNo = $("mvLotNo").value.trim().split(/\s/)[0];
   const mx = S.mvType==="in" ? MX.filter(x => String(x.item).trim() || Number(x.qty)) : [];
   const extra = [];
   for (const [i,x] of mx.entries()){
@@ -2259,7 +2274,7 @@ $("moveForm").addEventListener("submit", async e => {
     const r = await busy(() => call("move", p));
     let t = S.mvType==="xfer" ? `已調撥 ${it.code} ${fmt(qty,2)} ${it.unit}：${whLabel(whId)} 結存 ${fmt(r.after,2)}，${whLabel(toWhId)} 結存 ${fmt(r.toAfter,2)}。`
       : `已${TYPE_LABEL[S.mvType]} ${it.code} ${fmt(qty,2)} ${it.unit}，${whLabel(whId)} 結存 ${fmt(r.after,2)}。`;
-    $("mvQty").value=""; $("mvRef").value=""; $("mvNote").value=""; $("mvParty").value=""; $("mvLoc").value=""; locHint(); PK.forEach(id => $(id).value=""); setPack($("pkLines"), []); qtyAuto=false; $("pkHint").textContent="";
+    $("mvQty").value=""; $("mvRef").value=""; $("mvLotNo").value=""; if (typeof PA !== "undefined") PA.loaded = false; $("mvNote").value=""; $("mvParty").value=""; $("mvLoc").value=""; locHint(); PK.forEach(id => $(id).value=""); setPack($("pkLines"), []); qtyAuto=false; $("pkHint").textContent="";
     await refresh(); showMvLots(r.lotNo ? [r.lotNo] : []);
     const total = qtyOf(it.id); const low = it.safety>0 && total<it.safety;
     if (low) t += `\n注意：合計庫存 ${fmt(total,2)} 已低於安全存量 ${fmt(it.safety,2)}。`;
