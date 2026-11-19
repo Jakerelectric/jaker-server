@@ -1560,6 +1560,7 @@ nav.tabs [data-tab].g-off{display:none}
       <label class="f">供應商/客戶<input id="txParty"></label>
       <label class="f">訂單單號<input id="txOrder" list="orderOptions"></label>
       <label class="f">工單單號<input id="txWo" list="woOptions"></label>
+      <label class="f" id="txLotWrap">出貨批號<input id="txLot" placeholder="選填，例：IN20260625-009" autocomplete="off"></label>
       <div class="span2 pk-lines" id="txLines" style="grid-column:1/-1"></div>
       <label class="f">包裝 / 棧板尺寸<input id="txPack" list="packOptions"></label>
       <label class="f">棧板重量（kg）<input id="txWt" type="number" min="0" step="any"></label>
@@ -1976,7 +1977,7 @@ function renderMoves(){
 }
 
 /* ---------- 修改異動（管理員） ---------- */
-const TX_MAP = { txDate:"date", txPurpose:"purpose", txQty:"qty", txRef:"ref", txParty:"party", txOrder:"orderNo", txWo:"woNo", txPack:"pack", txWt:"palletWt", txReport:"report", txFiller:"filler", txDept:"dept", txNote:"note" };
+const TX_MAP = { txDate:"date", txPurpose:"purpose", txQty:"qty", txRef:"ref", txParty:"party", txOrder:"orderNo", txWo:"woNo", txPack:"pack", txWt:"palletWt", txReport:"report", txFiller:"filler", txDept:"dept", txNote:"note", txLot:"lotNo" };
 let editingTxn = null;
 function openTxn(id){
   const t = S.txns.find(x => x.id===id); if (!t) return; editingTxn = t; setTimeout(() => presCtx("txn:"+id), 0);
@@ -1989,6 +1990,7 @@ function openTxn(id){
   Object.entries(TX_MAP).forEach(([el,k]) => $(el).value = t[k]==null ? "" : t[k]);
   $("txPurposeOptions").innerHTML = (PURPOSE[t.type]||[]).map(p=>`<option value="${esc(p)}"></option>`).join("");
   $("txQty").disabled = t.type==="adj";
+  $("txLotWrap").hidden = t.type!=="out"; $("txLot").disabled = t.type!=="out";
   $("txQtyHint").textContent = t.type==="adj" ? "盤點/匯入調整的品號、庫別、數量不能直接修改，不對的話請重新盤點。"
     : "改品號、庫別或數量時，庫存會自動把舊的還原、新的補上。入庫/出庫類型要改的話，請刪除這筆再重新登記。結存欄是當時的快照，不會跟著改。";
   setPack($("txLines"), packOf(t));

@@ -655,7 +655,7 @@ function packNorm_(v) {
 }
 
 // ---------- 管理員修改 / 刪除異動紀錄 ----------
-const TXN_EDITABLE = ['itemCode', 'whCode', 'toWhCode', 'date', 'purpose', 'qty', 'ref', 'party', 'orderNo', 'woNo', 'packLines', 'pack', 'palletWt', 'report', 'filler', 'dept', 'note', 'pltNo', 'loc'];
+const TXN_EDITABLE = ['itemCode', 'whCode', 'toWhCode', 'date', 'purpose', 'qty', 'ref', 'party', 'orderNo', 'woNo', 'packLines', 'pack', 'palletWt', 'report', 'filler', 'dept', 'note', 'pltNo', 'loc', 'lotNo'];
 function txnById_(id) { const t = readAll_('txns').find(x => x.id === id); if (!t) throw new Error('找不到這筆異動紀錄（可能已被刪除），請重新整理。'); return t; }
 /** 依類型把「數量變化 d」套到庫存；d>0 代表這筆的數量變多 */
 function applyTxnDelta_(ctx, item, t, d, date) {
@@ -724,6 +724,16 @@ function updateTxn_(u, p) {
     const ctx = stockCtx_(); const items = readAll_('items');
     Object.keys(acc).forEach(k => { if (!acc[k]) return; const [ic, wh] = k.split('__'); adjust_(ctx, items.find(i => i.code === ic) || { code: ic }, wh, acc[k], {}); });
     flushStock_(ctx);
+  }
+  if (ch.lotNo !== undefined) {   // 批號：入庫的批號不能改（品管檢驗跟著它）；出庫可以補上／改成實際出貨的批號
+    if (t.typeLabel !== '出庫') delete ch.lotNo;
+    else if (String(ch.lotNo).trim()) {
+      const ln = String(ch.lotNo).trim().toUpperCase();
+      const src = readAll_('txns').find(x => x.typeLabel === '入庫' && String(x.lotNo || '').toUpperCase() === ln);
+      if (!src) throw new Error('找不到批號 ' + ln + '。');
+      if (src.itemCode !== pick('itemCode')) throw new Error('批號 ' + ln + ' 是 ' + src.itemCode + '，不是 ' + pick('itemCode') + '。');
+      ch.lotNo = src.lotNo;
+    }
   }
   TXN_EDITABLE.forEach(k => {
     if (ch[k] === undefined) return;
@@ -1182,11 +1192,12 @@ function orderNoResolver_() {
 /** 從舊 Excel 匯入、已出貨的銷貨單：當時的出庫已經在異動紀錄裡，不另外扣庫存，只計入訂單的已出貨數量 */
 function importedShipped_(onlyOrder) {
   // 這張銷貨單後來在出入庫登記有填訂單單號的出庫（單號對得上），出貨量已經從出庫紀錄算過，不再重複算
-  const counted = new Set(); readAll_('txns').forEach(t => { if (t.typeLabel === '出庫' && t.orderNo && t.ref) { counted.add(String(t.ref).trim()); } });
-  const out = {}; const sales = readAll_('sales').filter(x => x.imported === '是' && x.status === '已出貨' &&
-    !counted.has(x.no) && !counted.has(String(x.no).split('-').pop())); if (!sales.length) return out;
+  // 依「單號＋品號」判斷：同一張單只有部分品項補登了出庫時，其他品項仍照匯入的銷貨單算
+  const counted = new Set(); readAll_('txns').forEach(t => { if (t.typeLabel === '出庫' && t.orderNo && t.ref) { counted.add(String(t.ref).trim() + '__' + t.itemCode); } });
+  const out = {}; const sales = readAll_('sales').filter(x => x.imported === '是' && x.status === '已出貨'); if (!sales.length) return out;
   const by = {}; sales.forEach(x => by[x.no] = x);
   readAll_('salesLines').forEach(l => { const x = by[l.saleNo]; if (!x) return; const o = l.orderNo || x.orderNo; if (!o || (onlyOrder && o !== onlyOrder)) return;
+    if (counted.has(x.no + '__' + l.itemCode) || counted.has(String(x.no).split('-').pop() + '__' + l.itemCode)) return;
     const k = o + '__' + l.itemCode; out[k] = round_((out[k] || 0) + Number(l.shipQty !== '' && l.shipQty != null ? l.shipQty : l.qty || 0)); });
   return out;
 }
