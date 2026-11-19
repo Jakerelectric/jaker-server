@@ -560,6 +560,7 @@ function move_(u, p) {
   const ctx = stockCtx_(); const rec = [];
   const res = moveOne_(u, p, ctx, rec, readAll_('items'), readAll_('whs'));
   flushStock_(ctx); append_('txns', rec);
+  const inRec = rec.find(r => r.typeLabel === '入庫'); if (inRec) res.lotNo = inRec.lotNo;   // 入庫批號（印批號標籤用）
   return res;
 }
 /** 刷條碼批次登記：全部檢查通過才寫入，任何一筆庫存不足就整批不寫 */
@@ -572,7 +573,7 @@ function moveBatch_(u, p) {
   if (mg) mergeApply_(u, list[0], rec[0], mg, newQty, ctx, rec, items, whs);
   if (p.samePallet) samePallet_(rec);
   flushStock_(ctx); append_('txns', rec);
-  return { count: results.length, results };
+  return { count: results.length, results, lots: rec.filter(r => r.typeLabel === '入庫').map(r => r.lotNo) };
 }
 /** 生產入庫時，把其他庫別（例如廠務區）原本就有的同品號庫存跟新完成的一起包裝入庫：
  *  整批記成一筆生產入庫（一個批號、一份包裝資料，品管檢驗對這個批號），另外從來源庫別各記一筆「併入包裝」出庫；

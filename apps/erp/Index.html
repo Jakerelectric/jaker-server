@@ -397,6 +397,7 @@ nav.tabs [data-tab].g-off{display:none}
         <div id="mvHint"></div>
         <div class="row" style="margin-top:14px" data-single><button class="btn primary" type="submit" id="mvSubmit" data-write>確認入庫</button></div>
         <div id="mvMsg"></div>
+        <div id="mvLot" class="row" hidden style="margin-top:6px;gap:8px;flex-wrap:wrap"></div>
       </form>
     </div>
     <div class="sec-head"><h3 style="margin:0">異動明細</h3>
@@ -669,7 +670,7 @@ nav.tabs [data-tab].g-off{display:none}
       <h3 style="margin:0 0 4px">棧板調整：併板／改包裝</h3>
       <p class="muted" style="margin:0 0 10px;font-size:13px">客戶要求併板、併貨，或某幾板重新打包時用。<b>原本的入庫紀錄、批號、品管出廠檢驗都不會改</b>，系統另外記一筆棧板資料；Packing List 會帶出調整後的包裝、尺寸和棧板重。勾選要放在同一板的批號（只勾一個就是改那一板的包裝）。</p>
       <div class="row" style="gap:8px;margin-bottom:8px"><input id="paSearch" type="search" placeholder="品號、批號、客戶代號或訂單單號；多個用空白或逗號分開" style="width:420px" title="可以一次查多個：用空白、逗號分開，也可以從 Excel 貼一整欄品號。輸入客戶代號（例如 A20007）或訂單單號，會列出那些訂單還沒出完的品項。"><select id="paWh" style="width:auto" aria-label="庫別"></select>
-        <button type="button" class="btn sm" id="paReload">重新整理</button><span class="muted" id="paCount" style="font-size:13px"></span></div>
+        <button type="button" class="btn sm" id="paReload">重新整理</button><button type="button" class="btn sm" id="paLabel" title="勾選批號後補印批號標籤">列印批號標籤</button><span class="muted" id="paCount" style="font-size:13px"></span></div>
       <div class="tbl-wrap" style="max-height:380px;overflow:auto"><table>
         <thead><tr><th style="width:34px"></th><th>批號</th><th>入庫日</th><th>品號 / 品名</th><th class="r">在庫</th><th>目前包裝</th><th>尺寸 / 棧板重</th><th>庫位</th><th>目前同板</th></tr></thead>
         <tbody id="paRows"></tbody></table></div>
@@ -1262,6 +1263,23 @@ nav.tabs [data-tab].g-off{display:none}
   <div id="lbPreview" class="label-sheet" style="max-height:260px;overflow:auto;border:1px dashed var(--line);padding:8px"></div>
 </dialog>
 <div id="labelPrint" class="label-sheet"></div>
+<!-- 批號標籤 -->
+<dialog id="lotLblDlg" style="width:min(900px,calc(100vw - 32px))">
+  <h2 style="margin-bottom:10px">列印批號標籤</h2>
+  <p class="muted" style="margin-top:0">條碼內容是入庫批號（Code 128），貼在棧板或箱子上，之後出貨、盤點、品管都能用批號對回這筆入庫。標籤上另外印品號、品名、數量、包裝、入庫日和庫位。</p>
+  <div class="row" style="margin-bottom:10px;gap:14px">
+    <label class="f" style="flex-direction:row;align-items:center;gap:6px">標籤尺寸<select id="llSize" style="width:auto"><option value="100x50">100 × 50 mm</option><option value="100x70">100 × 70 mm</option><option value="60x40">60 × 40 mm</option></select></label>
+    <button type="button" class="btn sm" id="llPerBox">張數改成每箱一張</button>
+  </div>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>批號</th><th>品號 / 品名</th><th class="r">數量</th><th>包裝</th><th class="r" style="width:90px">張數</th></tr></thead>
+    <tbody id="llRows"></tbody></table></div>
+  <div class="row" style="margin-top:12px">
+    <button class="btn primary" id="llPrint">列印</button><button class="btn" id="llClose">關閉</button><span class="muted" id="llStat"></span>
+  </div>
+  <h3 style="margin-top:16px">預覽</h3>
+  <div id="llPreview" class="label-sheet" style="max-height:300px;overflow:auto;border:1px dashed var(--line);padding:8px"></div>
+</dialog>
 
 <!-- 品號 -->
 <dialog id="itemDlg">
@@ -2181,7 +2199,7 @@ function renderMx(){
 function mxName(i){ const it = findItemFromInput(MX[i].item), el = $("mxRows").querySelector(`[data-mxn="${i}"]`); if (el) el.textContent = it ? `${it.name||""}${it.spec?" · "+it.spec:""}` : (MX[i].item ? "找不到這個品號" : ""); }
 $("mxAdd").addEventListener("click", () => { MX.push({ item:"", pack:"", qty:"", auto:false }); $("mvPack").open = true; renderMx(); const a = $("mxRows").querySelectorAll("[data-mxi]"); a[a.length-1].focus(); });
 $("moveForm").addEventListener("submit", async e => {
-  e.preventDefault(); msg("mvMsg","");
+  e.preventDefault(); msg("mvMsg",""); $("mvLot").hidden = true;
   if (SCAN.mode==="scan") return;
   const it = findItemFromInput($("mvItem").value); const qty = Number($("mvQty").value);
   const whId = $("mvWh").value, toWhId = $("mvToWh").value, purpose = $("mvPurpose").value;
@@ -2222,7 +2240,7 @@ $("moveForm").addEventListener("submit", async e => {
     try{
       const r = await busy(() => call("moveBatch", { moves:[p], merge: mg.map(x => ({ whId:x.whId, qty:Number(x.qty) })) }));
       $("mvQty").value=""; $("mvRef").value=""; $("mvNote").value=""; $("mvParty").value=""; $("mvLoc").value=""; locHint(); PK.forEach(id => $(id).value=""); setPack($("pkLines"), []); qtyAuto=false; $("pkHint").textContent="";
-      MG.length = 0; renderMg(); await refresh();
+      MG.length = 0; renderMg(); await refresh(); showMvLots(r.lots);
       msg("mvMsg", `已入庫 ${it.code} 整批 ${fmt(round(qty+add),2)} ${it.unit}（新完成 ${fmt(qty,2)}＋原有 ${fmt(add,2)}），${whLabel(whId)} 結存 ${fmt((r.results[0]||{}).after,2)}。`, "ok");
     }catch(err){ msg("mvMsg", err.message, "err"); }
     finally{ $("mvSubmit").disabled = !can("user"); }
@@ -2235,14 +2253,14 @@ $("moveForm").addEventListener("submit", async e => {
       const r = await busy(() => call("moveBatch", { samePallet:true, moves:[p, ...extra] }));
       $("mvQty").value=""; $("mvRef").value=""; $("mvNote").value=""; $("mvParty").value=""; $("mvLoc").value=""; locHint(); PK.forEach(id => $(id).value=""); setPack($("pkLines"), []); qtyAuto=false; $("pkHint").textContent="";
       MX.length = 0; renderMx(); await refresh();
-      msg("mvMsg", `已入庫混裝板 ${r.count} 個品項（同一板）：` + [it.code, ...extra.map(x => (itemById(x.itemId)||{}).code || x.itemId)].join("、") + "。", "ok");
+      showMvLots(r.lots); msg("mvMsg", `已入庫混裝板 ${r.count} 個品項（同一板）：` + [it.code, ...extra.map(x => (itemById(x.itemId)||{}).code || x.itemId)].join("、") + "。", "ok");
       return;
     }
     const r = await busy(() => call("move", p));
     let t = S.mvType==="xfer" ? `已調撥 ${it.code} ${fmt(qty,2)} ${it.unit}：${whLabel(whId)} 結存 ${fmt(r.after,2)}，${whLabel(toWhId)} 結存 ${fmt(r.toAfter,2)}。`
       : `已${TYPE_LABEL[S.mvType]} ${it.code} ${fmt(qty,2)} ${it.unit}，${whLabel(whId)} 結存 ${fmt(r.after,2)}。`;
     $("mvQty").value=""; $("mvRef").value=""; $("mvNote").value=""; $("mvParty").value=""; $("mvLoc").value=""; locHint(); PK.forEach(id => $(id).value=""); setPack($("pkLines"), []); qtyAuto=false; $("pkHint").textContent="";
-    await refresh();
+    await refresh(); showMvLots(r.lotNo ? [r.lotNo] : []);
     const total = qtyOf(it.id); const low = it.safety>0 && total<it.safety;
     if (low) t += `\n注意：合計庫存 ${fmt(total,2)} 已低於安全存量 ${fmt(it.safety,2)}。`;
     msg("mvMsg", t, low?"err":"ok");
@@ -2417,7 +2435,57 @@ $("lbDownload").addEventListener("click", () => {
   download(`條碼標籤_${ymd(today())}.html`, doc, "text/html");
   msg("lbMsg","已下載標籤檔，用瀏覽器開啟後按 Ctrl+P 列印。");
 });
-const LABEL_CSS = `.label-sheet{display:flex;flex-wrap:wrap;gap:2mm}.lbl{box-sizing:border-box;border:0.2mm dashed #bbb;padding:1.5mm 2mm;display:flex;flex-direction:column;justify-content:space-between;background:#fff;color:#000;font-family:Arial,"Noto Sans TC",sans-serif;break-inside:avoid;page-break-inside:avoid;overflow:hidden}.lbl-name{font-size:8pt;line-height:1.15;max-height:2.3em;overflow:hidden}.lbl-bar{flex:1;min-height:0;display:flex}.lbl-bar svg{width:100%;height:100%}.lbl-code{font-family:"IBM Plex Mono",monospace;font-size:10pt;font-weight:bold;text-align:center;letter-spacing:.05em}`;
+/* ---------- 批號標籤（入庫後列印；包裝分頁也能補印） ---------- */
+const LL = { lots:[] };
+const llBoxes = pk => { let n = 0; String(pk||"").replace(/(\d+(?:\.\d+)?)\s*[×xX*]\s*\d/g, (m, a) => { n += Number(a); return m; }); return Math.round(n); };
+function lotInfo(no){
+  const t = S.txns.find(x => x.lotNo === no && x.typeLabel === "入庫"); if (!t) return null;
+  const it = S.items.find(i => i.code === t.itemCode) || {};
+  return { lotNo:no, code:t.itemCode, name:t.itemName || it.name || "", spec:t.spec || it.spec || "", qty:Number(t.qty)||0, unit:t.unit || it.unit || "",
+    date:String(t.date||"").slice(0,10), wh:t.whCode || "", loc:t.loc || "", pk:t.packLines || packText(packOf(t)) || "", size:t.pack || "", plt:t.pltNo && t.pltNo !== no ? t.pltNo : "", n:1 };
+}
+function openLotLabels(list){
+  LL.lots = (list || []).filter(Boolean); if (!LL.lots.length) return flash("找不到這些批號的入庫資料。");
+  renderLL(); $("lotLblDlg").showModal();
+}
+function lotLabelHtml(){
+  const [w,h] = $("llSize").value.split("x").map(Number), small = w < 80, out = [];
+  LL.lots.forEach(l => {
+    let svg = ""; try{ const el = document.createElementNS("http:\/\/www.w3.org/2000/svg","svg"); JsBarcode(el, l.lotNo, { format:"CODE128", displayValue:false, margin:0, height:60, width:2 }); el.setAttribute("preserveAspectRatio","none"); svg = el.outerHTML; }
+    catch(e){ svg = `<div style="color:#c00">無法產生條碼</div>`; }
+    const meta = [l.pk && "包裝 " + l.pk, l.size && l.size !== "併板" && "尺寸 " + l.size, l.date && "入庫 " + l.date, l.loc && "庫位 " + l.loc, l.plt && "同板 " + l.plt].filter(Boolean).join("　");
+    const one = `<div class="lbl lbl-lot${small ? " sm" : ""}" style="width:${w}mm;height:${h}mm"><div class="ll-top"><span>${esc(l.code)}</span><span>${fmt(l.qty,2)} ${esc(l.unit)}</span></div>
+      <div class="lbl-name">${esc(l.name)}${l.spec ? " " + esc(l.spec) : ""}</div>${small ? "" : `<div class="ll-meta">${esc(meta)}</div>`}<div class="lbl-bar">${svg}</div><div class="lbl-code">${esc(l.lotNo)}</div></div>`;
+    for (let k = 0; k < Math.max(1, Number(l.n)||1); k++) out.push(one);
+  });
+  return out.join("");
+}
+function renderLL(){
+  $("llRows").innerHTML = LL.lots.map((l,i) => `<tr><td class="mono">${esc(l.lotNo)}</td><td><span class="mono">${esc(l.code)}</span><span class="sub">${esc(l.name)}</span></td><td class="r num">${fmt(l.qty,2)} ${esc(l.unit)}</td><td>${esc(l.pk || "—")}</td>
+    <td class="r"><input type="number" min="1" step="1" value="${l.n}" data-lln="${i}" style="text-align:right"></td></tr>`).join("");
+  $("llRows").querySelectorAll("[data-lln]").forEach(inp => inp.addEventListener("input", () => { LL.lots[inp.dataset.lln].n = Math.max(1, Number(inp.value)||1); renderLLPrev(); }));
+  renderLLPrev();
+}
+function renderLLPrev(){
+  if (typeof JsBarcode === "undefined"){ $("llPreview").innerHTML = '<div class="muted">條碼元件還沒載入，請稍候再開一次。</div>'; return; }
+  const html = lotLabelHtml(); $("llPreview").innerHTML = html; $("llStat").textContent = `共 ${(html.match(/class="lbl /g)||[]).length} 張`;
+}
+$("llSize").addEventListener("change", renderLLPrev);
+$("llPerBox").addEventListener("click", () => { LL.lots.forEach(l => { const b = llBoxes(l.pk); if (b > 0) l.n = b; }); renderLL(); });
+$("llClose").addEventListener("click", () => $("lotLblDlg").close());
+$("llPrint").addEventListener("click", () => {
+  const html = lotLabelHtml(); if (!html) return;
+  $("labelPrint").innerHTML = html; $("lotLblDlg").close(); document.body.classList.add("lb-printing");
+  const done = () => { document.body.classList.remove("lb-printing"); window.removeEventListener("afterprint", done); };
+  window.addEventListener("afterprint", done);
+  setTimeout(() => { try{ window.print(); }catch(e){} setTimeout(done, 1500); }, 100);
+});
+function showMvLots(nos){
+  nos = (nos || []).filter(Boolean); const box = $("mvLot"); box.hidden = !nos.length; if (!nos.length) return;
+  box.innerHTML = `<span>入庫批號：${nos.map(n => `<b class="mono">${esc(n)}</b>`).join("、")}</span><button type="button" class="btn sm primary" id="mvLotPrint">列印批號標籤</button>`;
+  $("mvLotPrint").addEventListener("click", () => openLotLabels(nos.map(lotInfo)));
+}
+const LABEL_CSS = `.lbl-lot .ll-top{display:flex;justify-content:space-between;gap:2mm;font-weight:bold;font-size:12pt;line-height:1.2}.lbl-lot.sm .ll-top{font-size:9pt}.lbl-lot .ll-meta{font-size:7.5pt;line-height:1.25}.lbl-lot .lbl-bar{margin:1mm 0}.label-sheet{display:flex;flex-wrap:wrap;gap:2mm}.lbl{box-sizing:border-box;border:0.2mm dashed #bbb;padding:1.5mm 2mm;display:flex;flex-direction:column;justify-content:space-between;background:#fff;color:#000;font-family:Arial,"Noto Sans TC",sans-serif;break-inside:avoid;page-break-inside:avoid;overflow:hidden}.lbl-name{font-size:8pt;line-height:1.15;max-height:2.3em;overflow:hidden}.lbl-bar{flex:1;min-height:0;display:flex}.lbl-bar svg{width:100%;height:100%}.lbl-code{font-family:"IBM Plex Mono",monospace;font-size:10pt;font-weight:bold;text-align:center;letter-spacing:.05em}`;
 (() => { const st = document.createElement("style"); st.textContent = LABEL_CSS + `#labelPrint{display:none}@media print{body.lb-printing *{visibility:hidden!important}body.lb-printing #labelPrint,body.lb-printing #labelPrint *{visibility:visible!important}body.lb-printing #labelPrint{display:flex!important;position:absolute;left:0;top:0}body.lb-printing .lbl{border:0}@page{margin:5mm}}`; document.head.appendChild(st); })();
 
 /* ---------- item dialog ---------- */
@@ -4109,6 +4177,12 @@ function paRender(){
     || `<tr><td colspan="7"><div class="empty">還沒有棧板調整紀錄。</div></td></tr>`;
 }
 $("paSearch").addEventListener("input", paRender);
+$("paLabel").addEventListener("click", () => {
+  const sel = Object.keys(PA.sel); if (!sel.length) return msg("paMsg","請先勾選要印標籤的批號。","err");
+  openLotLabels(sel.map(no => { const l = PA.lots.find(x => x.lotNo === no); if (!l) return null; const it = S.items.find(i => i.code === l.itemCode) || {};
+    return { lotNo:l.lotNo, code:l.itemCode, name:l.itemName || it.name || "", spec:it.spec || "", qty:Number(l.qty)||0, unit:it.unit || "", date:String(l.date||"").slice(0,10), wh:l.whId || "", loc:l.loc || "",
+      pk:paPk(l) || "", size:l.pack || "", plt:l.pltNo && l.pltNo !== l.lotNo ? l.pltNo : "", n:1 }; }));
+});
 $("paLoc").addEventListener("input", () => locHint($("paLoc"), $("paLocHint"))); $("paLoc").addEventListener("focus", locOptions);
 $("paLoc").addEventListener("blur", () => { $("paLoc").value = locNorm($("paLoc").value); locHint($("paLoc"), $("paLocHint")); }); $("paWh").addEventListener("change", paRender);
 $("paReload").addEventListener("click", paLoad);
