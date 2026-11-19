@@ -1067,7 +1067,7 @@ nav.tabs [data-tab].g-off{display:none}
       <div class="tools"><div class="seg" id="slMode"><button aria-pressed="true" data-m="cust">依客戶訂單</button><button aria-pressed="false" data-m="gen">一般庫存表</button></div></div>
     </div>
     <div id="scBox">
-    <p class="muted" style="margin-top:-8px">輸入客戶，列出這個客戶每張訂單、每個品項的訂購量、已交、未交、目前可出貨數量和預交日。可出貨數量是用現有庫存依預交日先後分配給這個客戶的未交品項。匯出的英文版給客戶看，不含價格、成本、庫別。</p>
+    <p class="muted" style="margin-top:-8px">輸入客戶，列出這個客戶每張訂單、每個品項的訂購量、已交、未交和預交日。勾「依現有庫存顯示可出貨」才會加上可出貨數量（用現有庫存依預交日先後分配給這個客戶的未交品項）。匯出的英文版給客戶看，不含價格、成本、庫別。</p>
     <div class="panel" style="margin-bottom:16px">
       <div class="form-grid">
         <label class="f">客戶（代號或名稱）<input id="scCust" list="scCustList" placeholder="例：A20007"><datalist id="scCustList"></datalist><small class="muted" id="scCustHint"></small></label>
@@ -1077,6 +1077,7 @@ nav.tabs [data-tab].g-off{display:none}
       <div class="row" style="margin-top:10px;gap:16px">
         <label class="row" style="font-size:13px"><input type="checkbox" id="scDone"> 包含已交清的品項</label>
         <label class="row" style="font-size:13px"><input type="checkbox" id="scClosed"> 包含已結案的訂單</label>
+        <label class="row" style="font-size:13px"><input type="checkbox" id="scReady"> 依現有庫存顯示「可出貨」</label>
         <label class="row" style="font-size:13px"><input type="checkbox" id="scShowStock"> 匯出時顯示現有庫存總數</label>
       </div>
     </div>
@@ -1084,7 +1085,7 @@ nav.tabs [data-tab].g-off{display:none}
       <button class="btn" id="scPdf">輸出 PDF</button><button class="btn primary" id="scExcel">匯出 Excel</button></div>
     <div id="scMsg"></div>
     <div class="tbl-wrap"><table>
-      <thead><tr><th>訂單單號</th><th>客戶 PO</th><th>品號</th><th>品名</th><th class="r">訂購</th><th class="r">已交</th><th class="r">未交</th><th class="r">現有庫存</th><th class="r">可出貨</th><th>預交日</th><th>狀態</th></tr></thead>
+      <thead><tr><th>訂單單號</th><th>客戶 PO</th><th>品號</th><th>品名</th><th class="r">訂購</th><th class="r">已交</th><th class="r">未交</th><th class="r sc-stk">現有庫存</th><th class="r sc-stk">可出貨</th><th>預交日</th><th>狀態</th></tr></thead>
       <tbody id="scRows"></tbody>
     </table></div>
     <p class="notice">現有庫存是所有庫別合計；同一品號有多張訂單時，依預交日先後分配。其他客戶的訂單不會先扣，出貨前請以「待出貨」為準。</p>
@@ -2951,7 +2952,7 @@ $("slMode").querySelectorAll("button").forEach(b => b.addEventListener("click", 
   SC_MODE = b.dataset.m; $("slMode").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b));
   $("scBox").hidden = SC_MODE !== "cust"; $("slGenBox").hidden = SC_MODE !== "gen"; if (SC_MODE === "cust") renderSc(); else renderSl();
 }));
-const SC_ST = { done:["已交清","Delivered","in"], ready:["可全數出貨","Ready to ship","in"], part:["部分可出貨","Partially ready","adj"], prod:["生產中","In production","xfer"], wait:["備料中","Pending","wh"] };
+const SC_ST = { open:["未交","Open","wh"], pdel:["部分交貨","Partially delivered","adj"], done:["已交清","Delivered","in"], ready:["可全數出貨","Ready to ship","in"], part:["部分可出貨","Partially ready","adj"], prod:["生產中","In production","xfer"], wait:["備料中","Pending","wh"] };
 function scCustomer(){
   const v = $("scCust").value.trim(); if (!v) return null;
   const c = custByAny(v); if (c) return { code:c.code, name:c.short || c.full, full:c.full, en:c.nameEn || c.full || c.short };
@@ -2960,7 +2961,7 @@ function scCustomer(){
 }
 function scData(){
   const c = scCustomer(); if (!c) return null;
-  const td = today(), withClosed = $("scClosed").checked, withDone = $("scDone").checked;
+  const td = today(), withClosed = $("scClosed").checked, withDone = $("scDone").checked, useStock = $("scReady").checked;
   const orders = SD().orders.filter(o => o.status !== "已取消" && (withClosed || o.status !== "已結案") &&
     ((c.code && o.custCode === c.code) || [c.name, c.full, c.en].some(n => n && String(o.customer||"").trim().toLowerCase() === String(n).trim().toLowerCase())));
   const rows = [];
@@ -2977,13 +2978,14 @@ function scData(){
   const wos = SD().wos || [];
   rows.forEach(r => {
     if (r.stock === undefined){ const it = itemByCode(r.itemCode); r.stock = it ? slQtyAll(it) : 0; r.ready = 0; }
-    r.st = r.bal <= 0 ? "done" : r.ready >= r.bal ? "ready" : r.ready > 0 ? "part"
-      : wos.some(w => w.orderNo === r.order && w.itemCode === r.itemCode && ["未開工","生產中"].includes(w.status)) ? "prod" : "wait";
+    const inProd = wos.some(w => w.orderNo === r.order && w.itemCode === r.itemCode && ["未開工","生產中"].includes(w.status));
+    r.st = r.bal <= 0 ? "done" : !useStock ? (inProd ? "prod" : r.done > 0 ? "pdel" : "open")
+      : r.ready >= r.bal ? "ready" : r.ready > 0 ? "part" : inProd ? "prod" : "wait";
     r.late = r.bal > 0 && r.due && r.due < td;
     const it = itemByCode(r.itemCode); r.en = r.nameEn || (it && slName(it)) || ""; r.unitEn = unitEn(r.unit) || r.unit || "";
   });
   const out = rows.filter(r => withDone || r.bal > 0).sort((a,b) => String(a.order).localeCompare(String(b.order)) || 0);
-  return { cust:c, date:$("scDate").value || td, title:$("scTitle").value.trim() || "ORDER STATUS REPORT", rows:out, showStock:$("scShowStock").checked, orders:orders.length };
+  return { cust:c, date:$("scDate").value || td, title:$("scTitle").value.trim() || "ORDER STATUS REPORT", rows:out, useStock, showStock:useStock && $("scShowStock").checked, orders:orders.length };
 }
 const slQtyAll = i => Math.max(0, round(S.whs.reduce((s, w) => s + qtyOf(i.id, w.id), 0)));
 function renderSc(){
@@ -2996,17 +2998,19 @@ function renderSc(){
   $("scCustHint").textContent = d.cust.code ? `客戶代號 ${d.cust.code}　${d.cust.full || ""}` : d.cust.none ? "找不到這個客戶的訂單" : "不在客戶主檔，用名稱比對訂單";
   $("scRows").innerHTML = d.rows.map(r => { const S1 = SC_ST[r.st];
     return `<tr><td class="mono">${esc(r.order)}</td><td>${esc(r.po)}</td><td class="mono">${esc(r.itemCode)}</td><td>${esc(r.name)}${r.en ? `<span class="sub">${esc(r.en)}</span>` : ` <span class="chip low">缺英文品名</span>`}</td>
-      <td class="r num">${fmt(r.qty,2)}</td><td class="r num">${fmt(r.done,2)}</td><td class="r num"><b>${fmt(r.bal,2)}</b></td><td class="r num">${fmt(r.stock,2)}</td><td class="r num">${fmt(r.ready,2)}</td>
+      <td class="r num">${fmt(r.qty,2)}</td><td class="r num">${fmt(r.done,2)}</td><td class="r num"><b>${fmt(r.bal,2)}</b></td>${d.useStock ? `<td class="r num">${fmt(r.stock,2)}</td><td class="r num">${fmt(r.ready,2)}</td>` : ""}
       <td class="mono">${esc(r.due)}${r.late ? ' <span class="chip low">逾期</span>' : ""}</td><td><span class="chip ${S1[2]}">${S1[0]}</span></td></tr>`; }).join("")
     || `<tr><td colspan="11"><div class="empty">${d.orders ? "這個客戶的訂單都已交清（勾「包含已交清的品項」可以看全部）。" : "沒有找到這個客戶的訂單。"}</div></td></tr>`;
   const bal = d.rows.filter(r => r.bal > 0);
-  $("scStat").textContent = `${d.orders} 張訂單、${d.rows.length} 個品項；未交 ${bal.length} 項，其中可全數出貨 ${bal.filter(r => r.st === "ready").length} 項、逾期 ${bal.filter(r => r.late).length} 項`;
+  document.querySelectorAll(".sc-stk").forEach(th => th.hidden = !d.useStock);
+  $("scStat").textContent = `${d.orders} 張訂單、${d.rows.length} 個品項；未交 ${bal.length} 項` + (d.useStock ? `，其中可全數出貨 ${bal.filter(r => r.st === "ready").length} 項` : "") + `、逾期 ${bal.filter(r => r.late).length} 項`;
 }
 ["scCust"].forEach(id => $(id).addEventListener("change", renderSc));
 $("scCust").addEventListener("keydown", e => { if (e.key === "Enter" && !e.isComposing){ e.preventDefault(); renderSc(); } });
-["scDone","scClosed","scDate"].forEach(id => $(id).addEventListener("change", renderSc));
-function scCols(d){ return [["Order No.",14],["Your PO",16],["Product No.",18],["Description",34],["Ordered",10],["Delivered",10],["Balance",10], ...(d.showStock ? [["In Stock",10]] : []), ["Ready to Ship",12],["Due Date",12],["Status",16]]; }
-function scVals(d, r){ return [r.order, r.po, r.itemCode, r.en, r.qty, r.done, r.bal, ...(d.showStock ? [r.stock] : []), r.ready, r.due, SC_ST[r.st][1] + (r.late ? " (Overdue)" : "")]; }
+["scDone","scClosed","scDate","scReady"].forEach(id => $(id).addEventListener("change", renderSc));
+$("scReady").addEventListener("change", () => { $("scShowStock").disabled = !$("scReady").checked; }); $("scShowStock").disabled = true;
+function scCols(d){ return [["Order No.",14],["Your PO",16],["Product No.",18],["Description",34],["Ordered",10],["Delivered",10],["Balance",10], ...(d.showStock ? [["In Stock",10]] : []), ...(d.useStock ? [["Ready to Ship",12]] : []),["Due Date",12],["Status",16]]; }
+function scVals(d, r){ return [r.order, r.po, r.itemCode, r.en, r.qty, r.done, r.bal, ...(d.showStock ? [r.stock] : []), ...(d.useStock ? [r.ready] : []), r.due, SC_ST[r.st][1] + (r.late ? " (Overdue)" : "")]; }
 function scCheck(d){
   if (!d) return msg("scMsg","請先輸入客戶。","err"), false;
   if (!d.rows.length) return msg("scMsg","沒有可匯出的品項。","err"), false;
@@ -3027,7 +3031,7 @@ $("scExcel").addEventListener("click", async () => {
   d.rows.forEach((r,k) => { const row = ws.getRow(6+k); scVals(d, r).forEach((x,i) => { const c = row.getCell(i+1); c.value = x === "" ? null : x; c.font = r.late && i === n-1 ? { ...font, color:{ argb:"FFC00000" }, bold:true } : font; c.border = { bottom:thin };
     c.alignment = { vertical:"top", wrapText:true, horizontal: typeof x === "number" ? "right" : (i === n-2 ? "center" : "left") }; if (typeof x === "number") c.numFmt = "#,##0.##"; }); });
   const end = 6 + d.rows.length + 1; ws.mergeCells(end,1,end,n);
-  ws.getCell(end,1).value = "Ready-to-ship quantities are based on current stock and are subject to change without prior notice."; ws.getCell(end,1).font = { ...font, italic:true, size:9, color:{ argb:"FF777777" } };
+  ws.getCell(end,1).value = d.useStock ? "Ready-to-ship quantities are based on current stock and are subject to change without prior notice." : "Delivered quantities are as of the date above."; ws.getCell(end,1).font = { ...font, italic:true, size:9, color:{ argb:"FF777777" } };
   ws.pageSetup.printTitlesRow = "5:5";
   const buf = await wb.xlsx.writeBuffer(); const fn = scFile(d, "xlsx");
   download(fn, new Blob([buf], { type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })); flash(`已匯出 ${fn}`);
@@ -3039,7 +3043,7 @@ $("scPdf").addEventListener("click", () => {
     <div class="sl-doc sc-doc" style="width:186mm"><div class="sl-co">JAKER ELECTRIC CO., LTD.</div><div class="sl-ti">${esc(d.title.toUpperCase())}</div>
     <div class="sl-me">Customer: ${esc(d.cust.en)}${d.cust.code ? " (" + esc(d.cust.code) + ")" : ""}&nbsp;&nbsp;&nbsp;&nbsp;As of: ${esc(d.date)}</div>
     <table><thead><tr>${cols.map(c => `<th>${c[0]}</th>`).join("")}</tr></thead><tbody>${tr}</tbody></table>
-    <div class="sl-ft">Ready-to-ship quantities are based on current stock and are subject to change without prior notice.</div></div>`, scFile(d, "pdf"));
+    <div class="sl-ft">${d.useStock ? "Ready-to-ship quantities are based on current stock and are subject to change without prior notice." : "Delivered quantities are as of the date above."}</div></div>`, scFile(d, "pdf"));
 });
 const SL_BLUE = "0064F3";
 const slQtyText = (d,r) => d.avail ? (r.qty>0 ? "In stock" : "Out of stock") : r.qty;
