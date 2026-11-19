@@ -668,7 +668,7 @@ nav.tabs [data-tab].g-off{display:none}
     <div class="panel" style="margin-bottom:18px">
       <h3 style="margin:0 0 4px">棧板調整：併板／改包裝</h3>
       <p class="muted" style="margin:0 0 10px;font-size:13px">客戶要求併板、併貨，或某幾板重新打包時用。<b>原本的入庫紀錄、批號、品管出廠檢驗都不會改</b>，系統另外記一筆棧板資料；Packing List 會帶出調整後的包裝、尺寸和棧板重。勾選要放在同一板的批號（只勾一個就是改那一板的包裝）。</p>
-      <div class="row" style="gap:8px;margin-bottom:8px"><input id="paSearch" type="search" placeholder="搜尋品號、品名、批號" style="width:240px"><select id="paWh" style="width:auto" aria-label="庫別"></select>
+      <div class="row" style="gap:8px;margin-bottom:8px"><input id="paSearch" type="search" placeholder="品號、批號、客戶代號或訂單單號；多個用空白或逗號分開" style="width:420px" title="可以一次查多個：用空白、逗號分開，也可以從 Excel 貼一整欄品號。輸入客戶代號（例如 A20007）或訂單單號，會列出那些訂單還沒出完的品項。"><select id="paWh" style="width:auto" aria-label="庫別"></select>
         <button type="button" class="btn sm" id="paReload">重新整理</button><span class="muted" id="paCount" style="font-size:13px"></span></div>
       <div class="tbl-wrap" style="max-height:380px;overflow:auto"><table>
         <thead><tr><th style="width:34px"></th><th>批號</th><th>入庫日</th><th>品號 / 品名</th><th class="r">在庫</th><th>目前包裝</th><th>尺寸 / 棧板重</th><th>庫位</th><th>目前同板</th></tr></thead>
@@ -4059,11 +4059,29 @@ async function paLoad(){
 }
 const paPk = l => l.packLines || packText(packOf(l));   // 舊資料用箱數／每箱數量
 const paGroup = l => !l.pltNo ? "" : (String(l.pltNo).startsWith("PLT") ? `棧板 ${l.pltNo}` : `混裝板 ${l.pltNo}`);
+/** 包裝分頁的搜尋：多個關鍵字（空白、逗號、換行分開）；客戶代號／名稱或訂單單號會展開成那些訂單還沒出完的品號 */
+function paFilter(raw){
+  const terms = String(raw || "").split(/[\s,，、;；]+/).map(t => t.trim()).filter(Boolean);
+  if (!terms.length) return { on:false, hit:() => true, note:"" };
+  const codes = new Set(), plain = [], notes = [];
+  const openItems = os => { let n = 0; os.forEach(o => { const sh = shippedByLine(o); oLinesOf(o.no).forEach(l => { if ((Number(l.qty)||0) - (Number(sh[l.lid])||0) > 0){ codes.add(l.itemCode); n++; } }); }); return n; };
+  const live = SD().orders.filter(o => !["已結案","已取消"].includes(o.status));
+  terms.forEach(t => {
+    const tl = t.toLowerCase();
+    const os = live.filter(o => o.no === t || o.erpNo === t || String(o.no).endsWith("-" + t));
+    if (os.length){ notes.push(`${t}：${openItems(os)} 個未出品項`); return; }
+    const c = custByAny(t);
+    if (c){ const co = live.filter(o => o.custCode === c.code); notes.push(`${c.code} ${c.short || c.full}：${co.length} 張訂單、${openItems(co)} 個未出品項`); return; }
+    plain.push(tl);
+  });
+  return { on:true, note: notes.length ? "（" + notes.join("；") + "）" : "",
+    hit: l => codes.has(l.itemCode) || plain.some(q => [l.lotNo, l.itemCode, l.itemName, l.pltNo, l.loc].some(v => String(v||"").toLowerCase().includes(q))) };
+}
 function paRender(){
-  const q = $("paSearch").value.trim().toLowerCase(), wh = $("paWh").value;
-  const L = PA.lots.filter(l => (!wh || l.whId === wh) && (!q || [l.lotNo, l.itemCode, l.itemName, l.pltNo, l.loc].some(v => String(v||"").toLowerCase().includes(q))));
-  $("paCount").textContent = `${L.length} 批在庫`;
-  $("paRows").innerHTML = L.slice(0, 400).map(l => `<tr${PA.sel[l.lotNo] ? ' class="sel"' : ""}><td><input type="checkbox" data-pa="${esc(l.lotNo)}" ${PA.sel[l.lotNo] ? "checked" : ""} style="width:auto"></td>
+  const wh = $("paWh").value, f = paFilter($("paSearch").value);
+  const L = PA.lots.filter(l => (!wh || l.whId === wh) && f.hit(l)).sort((a,b) => f.on ? String(a.itemCode).localeCompare(String(b.itemCode)) || String(a.date).localeCompare(String(b.date)) : 0);
+  $("paCount").textContent = `${L.length} 批在庫` + f.note;
+  $("paRows").innerHTML = L.slice(0, 1500).map(l => `<tr${PA.sel[l.lotNo] ? ' class="sel"' : ""}><td><input type="checkbox" data-pa="${esc(l.lotNo)}" ${PA.sel[l.lotNo] ? "checked" : ""} style="width:auto"></td>
     <td class="mono">${esc(l.lotNo)}</td><td class="mono">${esc(l.date||"")}</td><td><span class="mono">${esc(l.itemCode)}</span><span class="sub">${esc(l.itemName||"")}</span></td>
     <td class="r num">${fmt(l.qty,2)}${l.partial ? `<span class="sub">入庫 ${fmt(l.qtyIn,2)}</span>` : ""}</td><td>${esc(paPk(l) || "—")}</td>
     <td>${esc(l.pack || "")}${Number(l.palletWt) ? `<span class="sub">${fmt(l.palletWt,2)} kg</span>` : ""}</td><td class="mono">${esc(l.loc || "")}</td><td>${esc(paGroup(l))}${l.adjusted ? ' <span class="chip">已調整</span>' : ""}</td></tr>`).join("")
