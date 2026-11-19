@@ -4086,8 +4086,14 @@ $("shGo").addEventListener("click", async () => {
   const bad = L.find(l => l.packLines && !packParse(l.packLines).length); if (bad) return msg("shMsg", `${bad.itemCode} 的包裝明細看不懂，請寫成「3×10 + 1×5」。`, "err");
   $("shGo").disabled = true;
   try{
-    await busy(() => call("shipSale", { no:SH.no, date:$("shDate").value, note:$("shNote").value, filler:SH.person.name, dept:SH.person.dept || "", fillerId:SH.person.id || "",
-      lines: L.map(l => ({ lid:l.lid, qty:Number(l.ship), whId:l.whId, packLines:l.packLines, pack:l.pack, palletWt:l.palletWt })) }));
+    const sp = { no:SH.no, date:$("shDate").value, note:$("shNote").value, filler:SH.person.name, dept:SH.person.dept || "", fillerId:SH.person.id || "",
+      lines: L.map(l => ({ lid:l.lid, qty:Number(l.ship), whId:l.whId, packLines:l.packLines, pack:l.pack, palletWt:l.palletWt })) };
+    try{ await busy(() => call("shipSale", sp)); }
+    catch(e){
+      if (!String(e.message).startsWith("DUPSHIP:")) throw e;
+      if (!await ask("這張銷貨單已經有出庫紀錄了：\n" + e.message.slice(8).split("；").join("\n") + "\n\n可能已經在出入庫登記登記過。再確認一次會重複扣庫存。\n真的還要再出貨一次嗎？")) return;
+      await busy(() => call("shipSale", { ...sp, force:true }));
+    }
     $("shipDlg").close(); await refresh(true); renderShip();
     const less = SH.lines.filter(l => Number(l.ship) < Number(l.qty)).length;
     flash(`${SH.no} 已出貨，庫存已扣除。` + (less ? `有 ${less} 項少出，剩下的回到訂單未出數量。` : ""));

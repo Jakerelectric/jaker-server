@@ -2015,6 +2015,12 @@ function shipSale_(u, p) {
       packLines: l.packLines || '', pack: l.pack || '', palletWt: l.palletWt || '', note: String(p.note || '').trim(), filler: p.filler, dept: p.dept, fillerId: p.fillerId } };
   });
   if (!moves.length) throw new Error('請填入實出數量。');
+  // 這張單（含沒有單別的舊單號，例如 2304-20261014001 ↔ 20261014001）已經有同品號的銷貨出庫：多半是在出入庫登記先登記過，再確認一次就會重複扣庫存
+  if (!p.force) {
+    const tail = String(x.no).split('-').pop(), codes = new Set(moves.map(v => v.sl.itemCode));
+    const dup = readAll_('txns').filter(t => t.typeLabel === '出庫' && codes.has(t.itemCode) && (String(t.ref || '').trim() === x.no || String(t.ref || '').trim() === tail || String(t.ref || '').split('-').pop() === tail && /^\d{8,}$/.test(tail)));
+    if (dup.length) throw new Error('DUPSHIP:' + dup.map(t => String(t.date).slice(0, 10) + ' ' + t.itemCode + ' ' + t.qty + '（單號 ' + t.ref + '）').join('；'));
+  }
   const ctx = stockCtx_(); const rec = []; const items = readAll_('items'), whs = readAll_('whs');
   moves.forEach(v => moveOne_(u, v.m, ctx, rec, items, whs));
   flushStock_(ctx); append_('txns', rec);
