@@ -5279,59 +5279,89 @@ async function billConfirm(no){
 }
 function billDoc(no){
   const b = (SD().bills || []).find(x => x.no === no); if (!b) return null;
-  const paid = blPaid(), allS = {}; (SD().sales || []).forEach(x => allS[x.no] = x);
+  const paid = blPaid(), allS = {}; (SD().sales || []).forEach(x => allS[x.no] = x); const en = (b.lang || "en") === "en";
   const rows = blFiles(b.sales).map(n => allS[n]).filter(Boolean).map(x => { const amt = saleAmt(x), L = saLinesOf(x.no); const ords = [...new Set([x.orderNo, ...L.map(l => l.orderNo)].filter(Boolean))];
-    return { date:docDay(x), no:x.no, exportNo:x.exportNo || "", ords, pos: ords.map(o => SD().orders.find(y => y.no === o)?.custPO).filter(Boolean), amt, paid: paid[x.no] || 0, bal: round(amt - (paid[x.no] || 0)) }; })
+    const items = L.map(l => { const q = Number(l.shipQty !== "" && l.shipQty != null ? l.shipQty : l.qty) || 0, it = itemByCode(l.itemCode) || {};
+        return { code:l.itemCode, desc: en ? (l.nameEn || it.nameEn || l.name || "") : (l.name || it.name || ""), qty:q, unit: en ? (unitEn(l.unit) || l.unit || "") : (l.unit || ""),
+          price:Number(l.price) || 0, free:l.free || "", amt: l.free ? 0 : rnd(q * (Number(l.price) || 0), x.currency) }; }).filter(l => l.qty > 0);
+    return { date:docDay(x), no:x.no, exportNo:x.exportNo || "", ords, pos: ords.map(o => SD().orders.find(y => y.no === o)?.custPO).filter(Boolean), items, amt, paid: paid[x.no] || 0, bal: round(amt - (paid[x.no] || 0)) }; })
     .sort((a, c) => a.date.localeCompare(c.date) || a.no.localeCompare(c.no));
   const c = CUSTS().find(x => x.code === b.custCode) || {};
   const sum = f => round(rows.reduce((s, r) => s + r[f], 0));
-  return { b, rows, c, cur:b.currency || "", total:sum("amt"), paid:sum("paid"), bal:sum("bal"), en:(b.lang || "en") === "en" };
+  return { b, rows, c, cur:b.currency || "", total:sum("amt"), paid:sum("paid"), bal:sum("bal"), en };
 }
+const billT = en => en ? {
+  ti:"STATEMENT OF ACCOUNT", to:"To", no:"Statement No.", date:"Date", cur:"Currency",
+  cols:["No.","Date","Invoice No.","Export Decl. No.","Product No.","Description","Qty","Unit","Unit Price","Amount"],
+  inv:"Invoice total", rec:"Received", bal1:"Balance", foc:"Free of charge", ord:"Order", tot:"Total amount", lessRec:"Less: received", bal:"BALANCE DUE",
+  note:"Please kindly confirm the above amount and arrange payment accordingly. After remittance, please send us the bank slip for our records. Thank you.",
+  sign:"Confirmed by (Customer signature / stamp)", dt:"Date" } : {
+  ti:"對 帳 單", to:"客戶", no:"結帳單號", date:"日期", cur:"幣別",
+  cols:["項次","單據日","銷貨單號","出口報單號碼","品號","品名","數量","單位","單價","金額"],
+  inv:"本單小計", rec:"已收", bal1:"未收", foc:"不計價", ord:"訂單", tot:"合計金額", lessRec:"減：已收", bal:"應收金額",
+  note:"請確認以上金額並安排付款；匯款後煩請回傳匯款單據，以利入帳，謝謝。", sign:"客戶確認（簽章）", dt:"日期" };
+const billFile = (D, ext) => `${D.en ? "Statement" : "對帳單"}_${D.b.no}_${(D.b.custCode || "").replace(/[\\/:*?"<>|\s]+/g, "_")}.${ext}`;
 function billPdf(no){
-  const D = billDoc(no); if (!D) return; const { b, rows, c, cur, en } = D, T = en ? {
-    ti:"STATEMENT OF ACCOUNT", to:"To", no:"Statement No.", date:"Date", cur:"Currency", cols:["No.","Date","Invoice No.","Order / PO","Amount","Received","Balance"],
-    tot:"Total", bal:"BALANCE DUE", note:"Please kindly confirm the above amount and arrange payment accordingly. After remittance, please send us the bank slip for our records. Thank you.",
-    sign:"Confirmed by (Customer signature / stamp)", dt:"Date" } : {
-    ti:"對 帳 單", to:"客戶", no:"結帳單號", date:"日期", cur:"幣別", cols:["項次","單據日","銷貨單號","訂單 / 客戶 PO","金額","已收","未收"],
-    tot:"合計", bal:"應收金額", note:"請確認以上金額並安排付款；匯款後煩請回傳匯款單據，以利入帳，謝謝。", sign:"客戶確認（簽章）", dt:"日期" };
-  const co = en ? CO.en : CO.zh, who = en ? (c.nameEn || c.full || b.customer) : (c.full || b.customer);
-  const tr = rows.map((r, i) => `<tr><td class="c">${i + 1}</td><td class="c">${esc(r.date)}</td><td>${esc(r.no)}</td><td style="font-size:8pt">${r.ords.map(esc).join("<br>")}${r.pos.length ? "<br>PO " + r.pos.map(esc).join(", ") : ""}</td>
-    <td class="r">${money(r.amt, cur)}</td><td class="r">${r.paid ? money(r.paid, cur) : ""}</td><td class="r">${money(r.bal, cur)}</td></tr>`).join("");
-  makePdf(`<style>.bl th,.bl td{white-space:normal;padding:4pt 5pt;font-size:9pt;position:static;vertical-align:top}.bl .tot td{font-weight:bold;border-top:1pt solid #333}.bl .kv td{border:0;padding:1pt 6pt 1pt 0}</style>
-    <div class="sl-doc bl" style="width:186mm"><div class="sl-co">${esc(co.name)}</div><div style="color:#555;font-size:9pt">${esc(co.addr)}</div>
-    <div class="sl-ti" style="margin-top:8pt;text-align:center;font-size:15pt">${T.ti}</div>
-    <table class="kv" style="margin:8pt 0 10pt;width:auto"><tr><td>${T.to}:</td><td><b>${esc(who)}</b>${b.custCode ? " (" + esc(b.custCode) + ")" : ""}${c.address ? "<br>" + esc(c.address) : ""}</td></tr>
+  const D = billDoc(no); if (!D) return; const { b, rows, c, cur, en } = D, T = billT(en);
+  const co = en ? CO.en : CO.zh, who = en ? (c.nameEn || c.full || b.customer) : (c.full || b.customer), m = v => money(v, cur);
+  const body = rows.map((r, i) => { const n = Math.max(1, r.items.length);
+    const it = (l, k) => `${k === 0 ? `<td class="c" rowspan="${n}">${i + 1}</td><td class="c" rowspan="${n}">${esc(r.date)}</td><td rowspan="${n}"><b>${esc(r.no)}</b>${r.ords.length ? `<div class="s">${T.ord} ${r.ords.map(esc).join(", ")}${r.pos.length ? "<br>PO " + r.pos.map(esc).join(", ") : ""}</div>` : ""}</td><td rowspan="${n}">${esc(r.exportNo)}</td>` : ""}
+      <td>${esc(l.code)}</td><td>${esc(l.desc)}</td><td class="r">${fmt(l.qty, 2)}</td><td class="c">${esc(l.unit)}</td><td class="r">${l.free ? "" : m(l.price)}</td><td class="r">${l.free ? `<i>${T.foc}</i>` : m(l.amt)}</td>`;
+    const lines = (r.items.length ? r.items : [{ code:"", desc:"", qty:0, unit:"", price:0, amt:0 }]).map((l, k) => `<tr>${it(l, k)}</tr>`).join("");
+    const sub = `<tr class="sub"><td colspan="9" class="r">${T.inv}${r.paid ? `　(${T.rec} ${m(r.paid)}　${T.bal1} ${m(r.bal)})` : ""}</td><td class="r">${m(r.amt)}</td></tr>`;
+    return lines + sub; }).join("");
+  makePdf(`<style>.bl th,.bl td{white-space:normal;padding:3pt 4pt;font-size:8pt;position:static;vertical-align:top}.bl th{font-size:7.5pt}.bl .s{font-size:7pt;color:#555;margin-top:2pt}
+    .bl .sub td{font-weight:bold;background:#f3f6fb;border-bottom:0.8pt solid #999}.bl .tot td{font-weight:bold;border:0;padding:2pt 4pt}.bl .kv td{border:0;padding:1pt 6pt 1pt 0;font-size:9pt}</style>
+    <div class="sl-doc bl" style="width:273mm"><div class="sl-co">${esc(co.name)}</div><div style="color:#555;font-size:9pt">${esc(co.addr)}</div>
+    <div class="sl-ti" style="margin-top:6pt;text-align:center;font-size:15pt">${T.ti}</div>
+    <table class="kv" style="margin:6pt 0 8pt;width:auto"><tr><td>${T.to}:</td><td><b>${esc(who)}</b>${b.custCode ? " (" + esc(b.custCode) + ")" : ""}${c.address ? "<br>" + esc(c.address) : ""}</td></tr>
       <tr><td>${T.no}:</td><td>${esc(b.no)}</td></tr><tr><td>${T.date}:</td><td>${esc(b.date)}</td></tr><tr><td>${T.cur}:</td><td>${esc(cur)}</td></tr></table>
-    <table><thead><tr>${T.cols.map((h, i) => `<th class="${i >= 4 ? "r" : i < 2 ? "c" : ""}">${h}</th>`).join("")}</tr></thead><tbody>${tr}
-      <tr class="tot"><td colspan="4" class="r">${T.tot}</td><td class="r">${money(D.total, cur)}</td><td class="r">${D.paid ? money(D.paid, cur) : ""}</td><td class="r">${money(D.bal, cur)}</td></tr></tbody></table>
-    <div style="margin-top:10pt;text-align:right;font-size:12pt"><b>${T.bal}: ${esc(cur)} ${money(D.bal, cur)}</b></div>
-    <p style="margin-top:12pt;font-size:9pt">${T.note}</p>
-    <div style="margin-top:28pt;display:flex;gap:30mm;font-size:9pt"><div style="flex:1;border-top:0.5pt solid #333;padding-top:3pt">${T.sign}</div><div style="width:45mm;border-top:0.5pt solid #333;padding-top:3pt">${T.dt}</div></div></div>`,
-    `${en ? "Statement" : "對帳單"}_${b.no}_${(b.custCode || "").replace(/[\\/:*?"<>|\s]+/g, "_")}.pdf`);
+    <table><colgroup>${[4,7,13,13,10,22,6,5,8,10].map(w => `<col style="width:${w}%">`).join("")}</colgroup>
+      <thead><tr>${T.cols.map((h, i) => `<th class="${i >= 8 || i === 6 ? "r" : i < 2 || i === 7 ? "c" : ""}">${h}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table>
+    <table class="tot" style="width:auto;margin:8pt 0 0 auto"><tr><td class="r">${T.tot}</td><td class="r">${esc(cur)} ${m(D.total)}</td></tr>
+      ${D.paid ? `<tr><td class="r">${T.lessRec}</td><td class="r">${esc(cur)} ${m(D.paid)}</td></tr>` : ""}
+      <tr><td class="r" style="font-size:11pt">${T.bal}</td><td class="r" style="font-size:11pt">${esc(cur)} ${m(D.bal)}</td></tr></table>
+    <p style="margin-top:10pt;font-size:9pt">${T.note}</p>
+    <div style="margin-top:24pt;display:flex;gap:30mm;font-size:9pt"><div style="flex:1;border-top:0.5pt solid #333;padding-top:3pt">${T.sign}</div><div style="width:50mm;border-top:0.5pt solid #333;padding-top:3pt">${T.dt}</div></div></div>`,
+    billFile(D, "pdf"), { orientation:"landscape" });
 }
 async function billXlsx(no){
   const D = billDoc(no); if (!D) return; if (typeof ExcelJS === "undefined") return msg("bMsg", "Excel 元件還沒載入，請稍候再按一次。", "err");
-  const { b, rows, c, cur, en } = D, co = en ? CO.en : CO.zh, font = { name:"Arial", size:10 };
-  const wb = new ExcelJS.Workbook(); const ws = wb.addWorksheet(en ? "Statement" : "對帳單", { pageSetup:{ paperSize:9, orientation:"portrait", fitToPage:true, fitToWidth:1, fitToHeight:0 }, views:[{ showGridLines:false }] });
-  ws.columns = [6, 12, 20, 26, 15, 15, 15].map(w => ({ width:w }));
-  const put = (r, v, f) => { ws.mergeCells(r, 1, r, 7); Object.assign(ws.getCell(r, 1), { value:v, font:{ ...font, ...f } }); };
+  const { b, rows, c, cur, en } = D, T = billT(en), co = en ? CO.en : CO.zh, font = { name:"Arial", size:10 }, N = 10;
+  const wb = new ExcelJS.Workbook(); const ws = wb.addWorksheet(en ? "Statement" : "對帳單", { pageSetup:{ paperSize:9, orientation:"landscape", fitToPage:true, fitToWidth:1, fitToHeight:0 }, views:[{ showGridLines:false }] });
+  ws.columns = [5, 11, 18, 20, 15, 34, 9, 6, 11, 13].map(w => ({ width:w }));
+  const put = (r, v, f) => { ws.mergeCells(r, 1, r, N); Object.assign(ws.getCell(r, 1), { value:v, font:{ ...font, ...f } }); };
   put(1, co.name, { size:16, bold:true, color:{ argb:"FF" + SL_BLUE } }); put(2, co.addr, { color:{ argb:"FF555555" } });
-  put(4, en ? "STATEMENT OF ACCOUNT" : "對 帳 單", { size:14, bold:true }); ws.getCell(4, 1).alignment = { horizontal:"center" };
-  put(6, `${en ? "To" : "客戶"}: ${en ? (c.nameEn || c.full || b.customer) : (c.full || b.customer)}${b.custCode ? " (" + b.custCode + ")" : ""}`, { bold:true });
-  put(7, `${en ? "Statement No." : "結帳單號"}: ${b.no}      ${en ? "Date" : "日期"}: ${b.date}      ${en ? "Currency" : "幣別"}: ${cur}`, {});
-  const H = en ? ["No.","Date","Invoice No.","Order / PO","Amount","Received","Balance"] : ["項次","單據日","銷貨單號","訂單 / 客戶 PO","金額","已收","未收"];
-  const hr = ws.getRow(9); H.forEach((h, i) => { const cell = hr.getCell(i + 1); cell.value = h; cell.font = { ...font, bold:true, color:{ argb:"FFFFFFFF" } }; cell.fill = { type:"pattern", pattern:"solid", fgColor:{ argb:"FF" + SL_BLUE } }; cell.alignment = { horizontal:"center", vertical:"middle" }; });
-  const thin = { style:"thin", color:{ argb:"FFD0D7E2" } }, nf = DEC(cur) ? "#,##0." + "0".repeat(DEC(cur)) : "#,##0";
-  rows.forEach((r, k) => { const row = ws.getRow(10 + k); [k + 1, r.date, r.no, r.ords.join(", ") + (r.pos.length ? " / PO " + r.pos.join(", ") : ""), r.amt, r.paid || null, r.bal].forEach((v, i) => { const cell = row.getCell(i + 1); cell.value = v; cell.font = font; cell.border = { bottom:thin };
-    cell.alignment = { vertical:"top", wrapText:true, horizontal: i >= 4 ? "right" : i < 2 ? "center" : "left" }; if (i >= 4) cell.numFmt = nf; }); });
-  const t = 10 + rows.length; const tr = ws.getRow(t); ws.mergeCells(t, 1, t, 4); tr.getCell(1).value = en ? "Total" : "合計"; tr.getCell(1).alignment = { horizontal:"right" };
-  [[5, D.total], [6, D.paid || null], [7, D.bal]].forEach(([i, v]) => { const cell = tr.getCell(i); cell.value = v; cell.numFmt = nf; });
-  tr.eachCell(cell => { cell.font = { ...font, bold:true }; cell.border = { top:{ style:"thin" } }; });
-  put(t + 2, `${en ? "BALANCE DUE" : "應收金額"}: ${cur} ${money(D.bal, cur)}`, { bold:true, size:12 }); ws.getCell(t + 2, 1).alignment = { horizontal:"right" };
-  put(t + 4, en ? "Please kindly confirm the above amount and arrange payment accordingly. After remittance, please send us the bank slip for our records. Thank you." : "請確認以上金額並安排付款；匯款後煩請回傳匯款單據，以利入帳，謝謝。", { size:9 });
-  ws.getCell(t + 4, 1).alignment = { wrapText:true }; ws.getRow(t + 4).height = 30;
-  put(t + 7, (en ? "Confirmed by (Customer signature / stamp): " : "客戶確認（簽章）：") + "______________________      " + (en ? "Date: " : "日期：") + "____________", { size:9 });
-  const buf = await wb.xlsx.writeBuffer(); const fn = `${en ? "Statement" : "對帳單"}_${b.no}_${(b.custCode || "").replace(/[\\/:*?"<>|\s]+/g, "_")}.xlsx`;
+  put(4, T.ti, { size:14, bold:true }); ws.getCell(4, 1).alignment = { horizontal:"center" };
+  put(6, `${T.to}: ${en ? (c.nameEn || c.full || b.customer) : (c.full || b.customer)}${b.custCode ? " (" + b.custCode + ")" : ""}`, { bold:true });
+  put(7, `${T.no}: ${b.no}      ${T.date}: ${b.date}      ${T.cur}: ${cur}`, {});
+  const hr = ws.getRow(9); T.cols.forEach((h, i) => { const cell = hr.getCell(i + 1); cell.value = h; cell.font = { ...font, bold:true, color:{ argb:"FFFFFFFF" } }; cell.fill = { type:"pattern", pattern:"solid", fgColor:{ argb:"FF" + SL_BLUE } }; cell.alignment = { horizontal:"center", vertical:"middle", wrapText:true }; });
+  hr.height = 22; ws.pageSetup.printTitlesRow = "9:9";
+  const thin = { style:"thin", color:{ argb:"FFD0D7E2" } }, nf = DEC(cur) ? "#,##0." + "0".repeat(DEC(cur)) : "#,##0", pf = "#,##0.####";
+  let r = 10;
+  rows.forEach((x, i) => {
+    const start = r; const its = x.items.length ? x.items : [{ code:"", desc:"", qty:null, unit:"", price:null, amt:null }];
+    its.forEach((l, k) => { const row = ws.getRow(r);
+      const v = [k ? null : i + 1, k ? null : x.date, k ? null : x.no + (x.ords.length ? `\n${T.ord} ${x.ords.join(", ")}` : "") + (x.pos.length ? `\nPO ${x.pos.join(", ")}` : ""), k ? null : x.exportNo,
+        l.code, l.desc, l.qty, l.unit, l.free ? null : l.price, l.free ? T.foc : l.amt];
+      v.forEach((val, j) => { const cell = row.getCell(j + 1); cell.value = val; cell.font = j === 9 && l.free ? { ...font, italic:true } : font; cell.border = { bottom:thin };
+        cell.alignment = { vertical:"top", wrapText:true, horizontal: j >= 8 || j === 6 ? "right" : j < 2 || j === 7 ? "center" : "left" };
+        if (j === 9 && !l.free) cell.numFmt = nf; if (j === 8) cell.numFmt = pf; if (j === 6) cell.numFmt = "#,##0.##"; });
+      r++; });
+    if (its.length > 1) [1, 2, 3, 4].forEach(j => ws.mergeCells(start, j, r - 1, j));
+    const sr = ws.getRow(r); ws.mergeCells(r, 1, r, 9);
+    sr.getCell(1).value = T.inv + (x.paid ? `   (${T.rec} ${money(x.paid, cur)}   ${T.bal1} ${money(x.bal, cur)})` : ""); sr.getCell(1).alignment = { horizontal:"right" };
+    sr.getCell(10).value = x.amt; sr.getCell(10).numFmt = nf;
+    sr.eachCell(cell => { cell.font = { ...font, bold:true }; cell.fill = { type:"pattern", pattern:"solid", fgColor:{ argb:"FFF3F6FB" } }; cell.border = { bottom:{ style:"thin", color:{ argb:"FF999999" } } }; });
+    r++;
+  });
+  r++;
+  const tl = (lab, v, big) => { ws.mergeCells(r, 1, r, 9); const row = ws.getRow(r); row.getCell(1).value = lab; row.getCell(1).alignment = { horizontal:"right" }; row.getCell(10).value = v; row.getCell(10).numFmt = nf;
+    [1, 10].forEach(j => row.getCell(j).font = { ...font, bold:true, size: big ? 12 : 10 }); r++; };
+  tl(`${T.tot} (${cur})`, D.total); if (D.paid) tl(`${T.lessRec} (${cur})`, D.paid); tl(`${T.bal} (${cur})`, D.bal, true);
+  r++; put(r, T.note, { size:9 }); ws.getCell(r, 1).alignment = { wrapText:true }; ws.getRow(r).height = 30;
+  r += 3; put(r, `${T.sign}: ______________________      ${T.dt}: ____________`, { size:9 });
+  const buf = await wb.xlsx.writeBuffer(); const fn = billFile(D, "xlsx");
   download(fn, new Blob([buf], { type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })); flash(`已匯出 ${fn}`);
 }
 $("bCust").addEventListener("change", () => { BL.cust = $("bCust").value; BL.cur = ""; BL.sel = {}; BL.alloc = {}; renderBill(); });
