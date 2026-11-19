@@ -2007,6 +2007,15 @@ function saleStatus_(u, p) {
   needSales_(u);
   const x = readAll_('sales').find(y => y.no === p.no); if (!x) throw new Error('找不到銷貨單。');
   if (x.status === '已出貨') throw new Error('已出貨的銷貨單不能改狀態；要更正請由管理員修改出庫紀錄。');
+  if (p.status === '已出貨') {   // 誤按作廢、但貨其實已經出了（出庫紀錄還在）：管理員可以恢復成已出貨，不會再扣一次庫存
+    if (u.role !== 'admin') throw new Error('只有管理員可以把銷貨單恢復成已出貨。');
+    const tail = String(x.no).split('-').pop();
+    const outs = readAll_('txns').filter(t => t.typeLabel === '出庫' && [x.no, tail].indexOf(String(t.ref || '').trim()) >= 0);
+    if (!outs.length) throw new Error('找不到這張銷貨單的出庫紀錄，不能直接恢復成已出貨；請改成待出貨，再由倉庫確認出貨。');
+    x.status = '已出貨'; if (!x.shippedAt) x.shippedAt = String(outs[0].date).slice(0, 10);
+    x.editLog = (x.editLog ? x.editLog + '\n' : '') + nowStr_() + ' ' + u.name + '｜作廢 → 已出貨（出庫紀錄 ' + outs.length + ' 筆已存在）';
+    x.updatedAt = nowStr_(); update_('sales', x); return true;
+  }
   if (['作廢', '待出貨'].indexOf(p.status) < 0) throw new Error('狀態不正確。');
   x.status = p.status; x.updatedAt = nowStr_(); update_('sales', x); return true;
 }

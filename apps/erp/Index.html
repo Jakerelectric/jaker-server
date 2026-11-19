@@ -6595,6 +6595,7 @@ function renderDocBtns(){
   }
   if (sa && pm.sales && DOC.no){
     if (d.status === "待出貨") B.push(["", "作廢", () => docRun(() => call("saleStatus", { no:DOC.no, status:"作廢" }), "銷貨單已作廢。")]);
+    if (d.status === "作廢" && can("admin")) B.push(["", "恢復為已出貨（貨已出）", async () => { if (await ask(`${DOC.no} 的貨其實已經出了？\n系統會檢查出庫紀錄還在，恢復成「已出貨」，不會再扣一次庫存。`)) docRun(() => call("saleStatus", { no:DOC.no, status:"已出貨" }), "已恢復為已出貨。", true); }]);
     if (d.status === "作廢") B.push(["", "恢復為待出貨", () => docRun(() => call("saleStatus", { no:DOC.no, status:"待出貨" }), "已恢復為待出貨。", true)]);
     if (saleBillEdit()) B.push(["primary", "儲存修改", () => docRun(() => call("saleAdjust", { no:DOC.no, head:{ terms:$("dTerms").value, note:$("dNote").value, exportNo:$("dExport").value, currency:$("dCur").value, taxType:$("dTax").value },
       lines: DOC.lines.map(l => ({ lid:l.lid, price:l.price ?? "", free:l.free || "", note:l.note || "" })) }), "已儲存修改。", true)]);
