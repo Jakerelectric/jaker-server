@@ -394,6 +394,7 @@ const HANDLERS = {
   renameDoc:   ['user', renameDoc_, true],
   orderToSale: ['user', orderToSale_, true],
   shipSale:    ['user', shipSale_, true],
+  unshipSale:  ['admin', unshipSale_, true],
   deleteTxn:   ['admin', deleteTxn_, true]
 };
 
@@ -2020,6 +2021,28 @@ function shipSale_(u, p) {
   moves.forEach(v => { v.sl.shipQty = v.m.qty; v.sl.whId = v.m.whId; update_('salesLines', v.sl); });
   x.status = '已出貨'; x.shippedAt = nowStr_(); x.shippedBy = p.filler || u.name; x.updatedAt = nowStr_(); update_('sales', x);
   return { count: moves.length };
+}
+
+/** 取消出貨（管理員）：出貨後發現銷貨單有錯時用。刪掉這張單「確認出貨」產生的銷貨出庫、把庫存加回去，
+ *  銷貨單回到「待出貨」，改好後倉庫再重新確認出貨。入庫紀錄、批號都不動；修改紀錄會留下取消了哪些出庫。 */
+function unshipSale_(u, p) {
+  const x = readAll_('sales').find(y => y.no === p.no); if (!x) throw new Error('找不到銷貨單。');
+  if (x.status !== '已出貨') throw new Error('這張銷貨單的狀態是「' + x.status + '」，不用取消出貨。');
+  if (x.imported === '是') throw new Error('這張是從舊資料匯入的銷貨單，沒有系統的出貨紀錄可以取消；請改由出入庫紀錄更正。');
+  const lines = readAll_('salesLines').filter(l => l.saleNo === x.no), codes = new Set(lines.map(l => l.itemCode));
+  const outs = readAll_('txns').filter(t => t.typeLabel === '出庫' && t.purpose === '銷貨出庫' && String(t.ref || '').trim() === x.no && codes.has(t.itemCode));
+  if (!outs.length) throw new Error('找不到這張銷貨單的出庫紀錄（可能已經被刪除或改過單號），請到出入庫登記確認。');
+  if (!p.force) { const hits = []; outs.forEach(t => countedAfter_(t, txnKeys_(t)).forEach(h => hits.push(h))); if (hits.length) throw new Error('COUNTED:' + hits.join('；')); }
+  const ctx = stockCtx_();
+  outs.forEach(t => applyTxnDelta_(ctx, itemForTxn_(t), t, -Number(t.qty), ''));
+  flushStock_(ctx);
+  outs.slice().sort((a, b) => (b._row || 0) - (a._row || 0)).forEach(t => deleteRow_('txns', t));
+  lines.forEach(l => { l.shipQty = ''; update_('salesLines', l); });
+  const why = String(p.reason || '').trim();
+  x.status = '待出貨'; x.shippedAt = ''; x.shippedBy = '';
+  x.editLog = (x.editLog ? x.editLog + '\n' : '') + nowStr_() + ' ' + u.name + '｜取消出貨：' + outs.map(t => t.itemCode + ' ' + t.qty + '（' + t.whCode + '）').join('、') + (why ? '；原因：' + why : '');
+  x.updatedAt = nowStr_(); update_('sales', x);
+  return { count: outs.length };
 }
 
 // ======================= 重新包裝 =======================

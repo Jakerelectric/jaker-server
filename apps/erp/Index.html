@@ -6333,6 +6333,17 @@ function renderDocBtns(){
     if (d.status === "作廢") B.push(["", "恢復為待出貨", () => docRun(() => call("saleStatus", { no:DOC.no, status:"待出貨" }), "已恢復為待出貨。", true)]);
     if (saleBillEdit()) B.push(["primary", "儲存修改", () => docRun(() => call("saleAdjust", { no:DOC.no, head:{ terms:$("dTerms").value, note:$("dNote").value, exportNo:$("dExport").value, currency:$("dCur").value, taxType:$("dTax").value },
       lines: DOC.lines.map(l => ({ lid:l.lid, price:l.price ?? "", free:l.free || "", note:l.note || "" })) }), "已儲存修改。", true)]);
+    if (d.status === "已出貨" && can("admin") && d.imported !== "是") B.push(["", "取消出貨", async () => {
+      const why = await ask(`取消 ${DOC.no} 的出貨？\n系統會刪掉這張單確認出貨時產生的出庫紀錄、把庫存加回去，銷貨單回到「待出貨」。改好銷貨單後，請倉庫重新確認出貨。\n\n請輸入取消原因（例如：數量開錯）：`, "");
+      if (why === null || why === false) return;
+      const no = DOC.no, p = { no, reason: String(why || "") };
+      try{ await busy(() => call("unshipSale", p)); }
+      catch(e){
+        if (!String(e.message).startsWith("COUNTED:")) return msg("docMsg", e.message, "err");
+        if (!await ask("這些出庫之後已經有盤點紀錄：\n" + e.message.slice(8) + "\n\n仍要取消出貨嗎？（盤點數字不會跟著改）")) return;
+        try{ await busy(() => call("unshipSale", { ...p, force:true })); }catch(e2){ return msg("docMsg", e2.message, "err"); }
+      }
+      await refreshSales(); await refresh(); openDoc("sale", no); flash("已取消出貨，銷貨單回到「待出貨」。"); msg("docMsg", `✓ 已取消出貨（${nowHM()}），改好後請倉庫在「待出貨」重新確認出貨。`); }]);
     if (d.status === "已出貨") B.push(["", "開啟 Packing List", () => { $("docDlg").close(); showGroup("biz"); showTab("pack"); $("pkSc").value = DOC.no; $("pkLoad").click(); }]);
     if (d.status !== "作廢") B.push(["", "開啟 Invoice", () => { const no = DOC.no; $("docDlg").close(); showGroup("biz"); showTab("inv"); $("ivSc").value = no; invLoad(false); }]);
     (DOC.orders && DOC.orders.length ? DOC.orders : [d.orderNo]).filter(Boolean).forEach(no => B.push(["", "開啟訂單 " + no, () => openDoc("order", no)]));
