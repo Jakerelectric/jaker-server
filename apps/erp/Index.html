@@ -3009,7 +3009,7 @@ function renderSc(){
 $("scCust").addEventListener("keydown", e => { if (e.key === "Enter" && !e.isComposing){ e.preventDefault(); renderSc(); } });
 ["scDone","scClosed","scDate","scReady"].forEach(id => $(id).addEventListener("change", renderSc));
 $("scReady").addEventListener("change", () => { $("scShowStock").disabled = !$("scReady").checked; }); $("scShowStock").disabled = true;
-function scCols(d){ return [["Order No.",14],["Your PO",16],["Product No.",18],["Description",34],["Ordered",10],["Delivered",10],["Balance",10], ...(d.showStock ? [["In Stock",10]] : []), ...(d.useStock ? [["Ready to Ship",12]] : []),["Due Date",12],["Status",16]]; }
+function scCols(d){ return [["Order No.",14],["Your PO",16],["Product No.",18],["Description",34],["Ordered",10],["Delivered",10],["Balance",10], ...(d.showStock ? [["In Stock",10]] : []), ...(d.useStock ? [["Ready to Ship",12]] : []),["Due Date",12],["Status",22]]; }
 function scVals(d, r){ return [r.order, r.po, r.itemCode, r.en, r.qty, r.done, r.bal, ...(d.showStock ? [r.stock] : []), ...(d.useStock ? [r.ready] : []), r.due, SC_ST[r.st][1] + (r.late ? " (Overdue)" : "")]; }
 function scCheck(d){
   if (!d) return msg("scMsg","請先輸入客戶。","err"), false;
@@ -3037,13 +3037,15 @@ $("scExcel").addEventListener("click", async () => {
   download(fn, new Blob([buf], { type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })); flash(`已匯出 ${fn}`);
 });
 $("scPdf").addEventListener("click", () => {
-  const d = scData(); if (!scCheck(d)) return; const cols = scCols(d);
-  const tr = d.rows.map(r => `<tr>${scVals(d, r).map((x, i) => `<td class="${typeof x === "number" ? "r" : i === cols.length-2 ? "c" : ""}${r.late && i === cols.length-1 ? " late" : ""}">${typeof x === "number" ? fmt(x,2) : esc(x)}</td>`).join("")}</tr>`).join("");
-  makePdf(`<style>.sc-doc th,.sc-doc td{white-space:normal;padding:3pt;font-size:8pt;position:static}.sc-doc th{font-size:7.5pt}.sc-doc .late{color:#c00000;font-weight:bold}</style>
-    <div class="sl-doc sc-doc" style="width:186mm"><div class="sl-co">JAKER ELECTRIC CO., LTD.</div><div class="sl-ti">${esc(d.title.toUpperCase())}</div>
+  const d = scData(); if (!scCheck(d)) return; const cols = scCols(d), tot = cols.reduce((s,c) => s + c[1], 0);
+  const nw = new Set(["Order No.","Product No.","Due Date","Ordered","Delivered","Balance","In Stock","Ready to Ship"]);   // 單號、品號、日期、數字不換行
+  const tr = d.rows.map(r => `<tr>${scVals(d, r).map((x, i) => `<td class="${typeof x === "number" ? "r" : cols[i][0] === "Due Date" ? "c" : ""}${nw.has(cols[i][0]) ? " nw" : ""}${r.late && i === cols.length-1 ? " late" : ""}">${typeof x === "number" ? fmt(x,2) : esc(x)}</td>`).join("")}</tr>`).join("");
+  makePdf(`<style>.sc-doc table{table-layout:fixed}.sc-doc th,.sc-doc td{white-space:normal;word-break:break-word;padding:3pt 4pt;font-size:8.5pt;position:static;vertical-align:top}.sc-doc th{font-size:8pt;white-space:nowrap}.sc-doc .nw{white-space:nowrap;word-break:normal}.sc-doc .late{color:#c00000;font-weight:bold}</style>
+    <div class="sl-doc sc-doc" style="width:273mm"><div class="sl-co">JAKER ELECTRIC CO., LTD.</div><div class="sl-ti">${esc(d.title.toUpperCase())}</div>
     <div class="sl-me">Customer: ${esc(d.cust.en)}${d.cust.code ? " (" + esc(d.cust.code) + ")" : ""}&nbsp;&nbsp;&nbsp;&nbsp;As of: ${esc(d.date)}</div>
-    <table><thead><tr>${cols.map(c => `<th>${c[0]}</th>`).join("")}</tr></thead><tbody>${tr}</tbody></table>
-    <div class="sl-ft">${d.useStock ? "Ready-to-ship quantities are based on current stock and are subject to change without prior notice." : "Delivered quantities are as of the date above."}</div></div>`, scFile(d, "pdf"));
+    <table><colgroup>${cols.map(c => `<col style="width:${(c[1] / tot * 100).toFixed(2)}%">`).join("")}</colgroup>
+    <thead><tr>${cols.map((c,i) => `<th class="${typeof scVals(d, d.rows[0])[i] === "number" ? "r" : c[0] === "Due Date" ? "c" : ""}">${c[0]}</th>`).join("")}</tr></thead><tbody>${tr}</tbody></table>
+    <div class="sl-ft">${d.useStock ? "Ready-to-ship quantities are based on current stock and are subject to change without prior notice." : "Delivered quantities are as of the date above."}</div></div>`, scFile(d, "pdf"), { orientation:"landscape" });
 });
 const SL_BLUE = "0064F3";
 const slQtyText = (d,r) => d.avail ? (r.qty>0 ? "In stock" : "Out of stock") : r.qty;
@@ -4419,7 +4421,7 @@ async function makePdf(html, filename, opt){
   const sx = window.scrollX, sy = window.scrollY; window.scrollTo(0, 0); let out = null;
   try{ await busy(async () => {
     const blob = await html2pdf().set({ margin:(opt && opt.margin) || [10,10,12,10], filename, image:{ type:"jpeg", quality:0.95 }, html2canvas:{ scale:2, useCORS:true, backgroundColor:"#ffffff" },
-      jsPDF:{ unit:"mm", format:"a4", orientation:"portrait" }, pagebreak:{ mode:["css","legacy"], avoid:"tr" } }).from(box).outputPdf("blob");
+      jsPDF:{ unit:"mm", format:"a4", orientation:(opt && opt.orientation) || "portrait" }, pagebreak:{ mode:["css","legacy"], avoid:"tr" } }).from(box).outputPdf("blob");
     if (opt && opt.blob){ out = blob; return; }
     download(filename, blob, "application/pdf");
   }); } finally { window.scrollTo(sx, sy); }
