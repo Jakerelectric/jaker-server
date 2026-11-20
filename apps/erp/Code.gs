@@ -7,7 +7,7 @@
 // ---------- 分頁與欄位定義（key, 標題, 型別 s=文字 n=數字 d=日期文字） ----------
 const F = {
   users: [['id','員工ID','s'],['name','姓名','s'],['dept','單位','s'],['role','角色','s'],['active','啟用','s'],
-          ['hash','密碼雜湊','s'],['salt','鹽','s'],['createdAt','建立時間','s'],['lastLogin','最後登入','s'],['perms','職能(業務/採購/倉庫/生管/生產)','s'],['title','職務(部門主管/代理主管/課長/組長)','s'],['defWh','預設庫別','s']],
+          ['hash','密碼雜湊','s'],['salt','鹽','s'],['createdAt','建立時間','s'],['lastLogin','最後登入','s'],['perms','職能(業務/採購/倉庫/生管/生產)','s'],['title','職務(部門主管/代理主管/課長/組長)','s'],['defWh','預設庫別','s'],['whAllow','可異動庫別(空白=全部)','s']],
   whs:   [['code','庫別代號','s'],['name','庫別名稱','s'],['type','類型','s']],  // 類型：倉庫 / 生產（生產地點）/ 委外（委外廠商）
   items: [['code','品號','s'],['name','品名','s'],['nameEn','英文品名','s'],['spec','規格','s'],['unit','庫存單位','s'],
           ['cat','類別','s'],['mainWh','主要庫別','s'],['safety','安全存量','n'],['cost','單位成本','n'],
@@ -243,8 +243,15 @@ function newToken_(u) {
 }
 
 // ---------- 對外唯一入口 ----------
+/** 帳號的「可異動庫別」：非管理員有設定時，只能增減這些庫別的庫存（調撥可以從自己的庫別撥到別的庫別） */
+let WH_GUARD_ = null;
+function whGuardOf_(u) {
+  if (!u || u.role === 'admin') return null;
+  const L = String(u.whAllow || '').split(',').map(x => x.trim()).filter(Boolean);
+  return L.length ? new Set(L) : null;
+}
 function api(token, action, p) {
-  COSTLOG_CACHE_ = null; BOMC_CACHE_ = null; READ_MEMO_ = {};  // 每次呼叫重新讀單價紀錄、BOM
+  COSTLOG_CACHE_ = null; BOMC_CACHE_ = null; READ_MEMO_ = {}; WH_GUARD_ = null;  // 每次呼叫重新讀單價紀錄、BOM
   p = p || {};
   try {
     if (action === 'status') return ok_({ hasUsers: readAll_('users').length > 0 });
@@ -256,6 +263,7 @@ function api(token, action, p) {
       return ok_(true);
     }
     const u = session_(token);
+    WH_GUARD_ = whGuardOf_(u);
     const H = HANDLERS[action];
     if (!H) throw new Error('未知的操作：' + action);
     need_(u, H[0]);
@@ -461,6 +469,7 @@ function saveUser_(u, p) {
   rec.name = String(p.name || '').trim(); rec.dept = String(p.dept || '').trim(); rec.role = p.role; rec.active = p.active === '否' ? '否' : '是';
   rec.title = ['部門主管', '代理主管', '課長', '組長'].includes(String(p.title || '')) ? String(p.title) : '';
   rec.defWh = String(p.defWh || '').trim();
+  rec.whAllow = String(p.whAllow || '').split(',').map(x => x.trim()).filter(Boolean).join(',');
   const pin = String(p.perms || '').replace(/資材/g, '採購');  // 舊名稱「資材」改叫「採購」
   rec.perms = ['業務', '採購', '倉庫', '生管', '生產主管', '生產'].filter(x => (x === '生產' ? pin.replace(/生產主管/g, '') : pin).indexOf(x) >= 0).join(',');
   if (!rec.name) throw new Error('請輸入姓名。');
@@ -530,6 +539,7 @@ function stockCtx_() {
 }
 function adjust_(ctx, item, whId, delta, opt) {
   opt = opt || {};
+  if (WH_GUARD_ && !opt.dest && !WH_GUARD_.has(whId)) throw new Error('你的帳號只能異動這些庫別的庫存：' + [...WH_GUARD_].join('、') + '。「' + whId + '」不在範圍內，請找管理員或該庫別的負責人登記。');
   const key = item.code + '__' + whId;
   let r = ctx.map[key];
   if (!r) { r = { itemId: item.code, whId, qty: 0, loc: '', lastInAt: '', lastOutAt: '' }; ctx.map[key] = r; ctx.added.push(r); }
@@ -651,7 +661,7 @@ function moveOne_(u, p, ctx, rec, items, whs) {
   if (type === 'in') { res = adjust_(ctx, item, p.whId, qty, { date }); f.balance = res.after; }
   else if (type === 'out') { res = adjust_(ctx, item, p.whId, -qty, { date }); f.balance = res.after; }
   else {
-    const a = adjust_(ctx, item, p.whId, -qty, { date }); const b = adjust_(ctx, item, p.toWhId, qty, { date });
+    const a = adjust_(ctx, item, p.whId, -qty, { date }); const b = adjust_(ctx, item, p.toWhId, qty, { date, dest: true });
     f.toWhCode = p.toWhId; f.balance = a.after; f.toBalance = b.after; res = { after: a.after, toAfter: b.after };
   }
   if (p.scan) f.note = (f.note ? f.note + '；' : '') + '刷條碼';

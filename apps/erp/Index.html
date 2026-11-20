@@ -1436,6 +1436,7 @@ nav.tabs [data-tab].g-off{display:none}
 <dialog id="docDlg" style="width:min(1240px,calc(100vw - 24px))">
   <form id="docForm" method="dialog" autocomplete="off">
     <div class="row" style="align-items:center;margin-bottom:6px"><h2 id="docTitle" style="margin:0"></h2><span id="docStatus"></span><span style="flex:1"></span><span class="muted" id="docMeta" style="font-size:13px"></span></div>
+    <div id="docCurNote" class="hint" hidden style="margin-bottom:8px"></div>
     <div class="hint warn" data-prwarn hidden style="margin-bottom:10px"></div>
     <div class="form-grid" id="docHead">
       <label class="f">單號<input id="dNo" placeholder="留空自動編號"></label>
@@ -1657,6 +1658,7 @@ nav.tabs [data-tab].g-off{display:none}
       <label class="f" id="usTitleWrap">職務<select id="usTitle"><option value="">一般人員</option><option>課長</option><option>組長</option></select></label>
       <input type="hidden" id="usDept">
       <label class="f">預設庫別<select id="usDefWh"></select><span class="muted" style="font-size:12px">登入後庫存、出入庫、盤點先顯示這個庫別（還是可以切換）</span></label>
+      <div class="f span2"><span>可異動庫別（只能在這些庫別入庫、出庫、盤點；調撥可以從這些庫別撥出到別的庫別。都不勾＝全部都可以）</span><span class="row" id="usWhAllow" style="gap:14px;margin-top:6px;flex-wrap:wrap"></span></div>
       <label class="f">角色<select id="usRole"><option value="user">一般</option><option value="viewer">檢視</option><option value="admin">管理員</option><option value="staff">刷卡人員（不能登入）</option></select></label>
       <label class="f">狀態<select id="usActive"><option value="是">啟用</option><option value="否">停用</option></select></label>
       <div class="f span2"><span>職能（決定看得到哪些分頁）</span><span class="row" style="gap:16px;margin-top:6px">
@@ -1955,11 +1957,14 @@ function renderWhSelects(){
   fillSelect("whFilter", [["","全部庫別"], ...list]);
   fillSelect("mvWhFilter", [["","全部庫別"], ...list]);
   fillSelect("exWh", [["","全部庫別"], ...list]);
-  fillSelect("ctWh", list.length ? list : none);
-  fillSelect("mvWh", list.length ? list : none);
+  // 帳號有限制可異動庫別（非管理員）：登記出入庫、盤點只列出可以動的庫別；調撥的「撥入庫別」不限
+  const allow = S.user && S.user.role !== "admin" ? String(S.user.whAllow||"").split(",").filter(Boolean) : [];
+  const myList = allow.length ? list.filter(([id]) => allow.includes(id)) : list;
+  fillSelect("ctWh", myList.length ? myList : none);
+  fillSelect("mvWh", myList.length ? myList : none);
   fillSelect("mvToWh", list);
   // 帳號有設預設庫別：登入後第一次載入時，庫存、出入庫紀錄、登記、盤點都先選這個庫別
-  const dw = S.user && S.user.defWh;
+  const dw = S.user && (S.user.defWh || (allow.length ? allow[0] : ""));
   if (dw && S.whs.some(w => w.id === dw) && WH_DEF_APPLIED !== S.user.id) {
     WH_DEF_APPLIED = S.user.id; ["whFilter","mvWhFilter","mvWh","ctWh"].forEach(id => { $(id).value = dw; });
   }
@@ -2168,7 +2173,7 @@ function updateMoveHint(){
   const dist = (BY_ITEM[it.id]||[]).filter(s=>Number(s.qty)).map(s=>`${esc(s.whId)}：${fmt(s.qty,2)}${s.loc?"（"+esc(s.loc)+"）":""}`).join("　") || "各庫別皆無庫存";
   $("mvHint").innerHTML = `<div class="hint${isLow(it)?" warn":""}">${esc(it.code)} ${esc(it.name)} 現有庫存　${dist}　單位 ${esc(it.unit)}${isLow(it)?"　低於安全存量 "+fmt(it.safety,2):""}</div>`;
 }
-$("mvItem").addEventListener("change", () => { const it = findItemFromInput($("mvItem").value); if (it?.mainWh && whById(it.mainWh)) $("mvWh").value = it.mainWh; updateMoveHint(); });
+$("mvItem").addEventListener("change", () => { const it = findItemFromInput($("mvItem").value); if (it?.mainWh && whById(it.mainWh) && [...$("mvWh").options].some(o => o.value === it.mainWh)) $("mvWh").value = it.mainWh; updateMoveHint(); });
 $("mvItem").addEventListener("input", updateMoveHint);
 /* ---------- 包裝明細：可新增多種裝法（箱數 × 每箱數量） ---------- */
 function packParse(v){ const out = []; const re = /(\d+(?:\.\d+)?)\s*[x×*X]\s*(\d+(?:\.\d+)?)/g; let m;
@@ -3403,7 +3408,7 @@ async function loadUsers(){
 }
 function usDeptLabel(u){ const o = orgOf(u.dept); return o.legacy !== undefined ? (u.dept||"") : (o.unit==="head" ? o.dept : o.dept + "・" + o.unit) + (u.title ? "（" + u.title + "）" : ""); }
 function renderUsers(){
-  $("userRows").innerHTML = S.users.map(u => `<tr class="clickable" data-uid="${esc(u.id)}"><td class="mono">${esc(u.id)}</td><td>${esc(u.name)}${u.id===S.user.id?' <span class="chip wh">你</span>':""}</td><td>${esc(usDeptLabel(u))}</td><td>${ROLE_LABEL[u.role]||u.role}${u.perms?`<span class="sub">${esc(u.perms.replace(/,/g,"、"))}</span>`:""}</td>
+  $("userRows").innerHTML = S.users.map(u => `<tr class="clickable" data-uid="${esc(u.id)}"><td class="mono">${esc(u.id)}</td><td>${esc(u.name)}${u.id===S.user.id?' <span class="chip wh">你</span>':""}</td><td>${esc(usDeptLabel(u))}${u.role!=="admin"&&u.whAllow?`<span class="sub">只能異動：${esc(u.whAllow.split(",").map(id=>(whById(id)?.code)||id).join("、"))}</span>`:""}</td><td>${ROLE_LABEL[u.role]||u.role}${u.perms?`<span class="sub">${esc(u.perms.replace(/,/g,"、"))}</span>`:""}</td>
     <td>${u.active==="是"?'<span class="chip in">啟用</span>':'<span class="chip low">停用</span>'}</td><td class="mono">${esc(u.lastLogin||"—")}</td><td><button class="btn sm">編輯</button></td></tr>`).join("");
   $("userRows").querySelectorAll("[data-uid]").forEach(tr => tr.addEventListener("click", () => openUser(tr.dataset.uid)));
 }
@@ -3411,7 +3416,7 @@ let editingUser = null;
 function openUser(id){
   const u = id ? S.users.find(x=>x.id===id) : null; editingUser = u;
   $("userDlgTitle").textContent = u ? `編輯帳號 ${u.id}` : "新增帳號";
-  $("usId").value = u?.id || ""; $("usId").readOnly = !!u; $("usName").value = u?.name || ""; usOrgSet(u?.dept || "", u?.title || ""); fillSelect("usDefWh", [["","（不指定，看全部）"], ...S.whs.map(w => [w.id, `${w.code} ${w.name||""}`.trim()])]); $("usDefWh").value = u?.defWh || ""; $("usPermHint").textContent = "選部門／課組／職務時會自動勾建議的職能，可以再自己調整。一個都沒勾的一般帳號視為「倉庫」。管理員不用勾，全部都看得到。";
+  $("usId").value = u?.id || ""; $("usId").readOnly = !!u; $("usName").value = u?.name || ""; usOrgSet(u?.dept || "", u?.title || ""); fillSelect("usDefWh", [["","（不指定，看全部）"], ...S.whs.map(w => [w.id, `${w.code} ${w.name||""}`.trim()])]); $("usDefWh").value = u?.defWh || ""; const wa = String(u?.whAllow||"").split(",").filter(Boolean); $("usWhAllow").innerHTML = S.whs.map(w => `<label class="row" style="font-size:14px"><input type="checkbox" value="${esc(w.id)}"${wa.includes(w.id)?" checked":""}> ${esc(`${w.code} ${w.name||""}`.trim())}</label>`).join(""); $("usPermHint").textContent = "選部門／課組／職務時會自動勾建議的職能，可以再自己調整。一個都沒勾的一般帳號視為「倉庫」。管理員不用勾，全部都看得到。";
   $("usRole").value = u?.role || "user"; $("usActive").value = u?.active || "是"; $("usPw").value = "";
   $("usPermSales").checked = String(u?.perms||"").includes("業務"); $("usPermMat").checked = /採購|資材/.test(String(u?.perms||""));
   $("usPermWh").checked = String(u?.perms||"").includes("倉庫"); $("usPermLead").checked = String(u?.perms||"").includes("生產主管"); $("usPermPlan").checked = String(u?.perms||"").includes("生管"); $("usPermProd").checked = String(u?.perms||"").replace("生產主管","").includes("生產");
@@ -3434,7 +3439,7 @@ $("userForm").addEventListener("submit", async e => {
   e.preventDefault();
   if (!$("usOrgDept").value && !$("usDept").value) return msg("usDlgMsg","請選擇部門。","err");
   if ($("usOrgDept").value && (ORG[$("usOrgDept").value]||[]).length && !$("usOrgUnit").value) return msg("usDlgMsg","請選擇課／組，或選「部門主管」「代理主管」。","err");
-  const p = { id:$("usId").value.trim(), name:$("usName").value.trim(), dept:$("usDept").value.trim(), title:usTitleOf(), role:$("usRole").value, active:$("usActive").value, pw:$("usPw").value, defWh:$("usDefWh").value, isNew:!editingUser,
+  const p = { id:$("usId").value.trim(), name:$("usName").value.trim(), dept:$("usDept").value.trim(), title:usTitleOf(), role:$("usRole").value, active:$("usActive").value, pw:$("usPw").value, defWh:$("usDefWh").value, whAllow:[...$("usWhAllow").querySelectorAll("input:checked")].map(x=>x.value).join(","), isNew:!editingUser,
     perms:[$("usPermSales").checked?"業務":"", $("usPermMat").checked?"採購":"", $("usPermWh").checked?"倉庫":"", $("usPermProd").checked?"生產":"", $("usPermLead").checked?"生產主管":"", $("usPermPlan").checked?"生管":""].filter(Boolean).join(",") };
   if (!p.name) return msg("usDlgMsg","請輸入姓名。","err");
   try{ S.users = await busy(() => call("saveUser", p)); $("userDlg").close(); renderUsers(); msg("usMsg", p.isNew ? (p.role==="staff" ? `已新增刷卡人員 ${p.id}。` : `已新增帳號 ${p.id}，請把初始密碼告訴本人並請他登入後修改。`) : `已更新 ${p.id}。`); refresh(); }
@@ -4798,7 +4803,11 @@ async function copyToErp(){
     const ok = document.execCommand && document.execCommand("copy"); ta.remove(); flash(ok ? `已複製 ${L.length} 個品項。` : "瀏覽器不允許自動複製，請改用 PDF 或手動輸入。"); }
 }
 /** 報價單成本欄：有 BOM 的品號顯示 BOM 估算成本（今天的材料單價），採購可一鍵帶入 */
-function bomHint(code, i, me){ const v = bomEst(code); return v == null ? "" : `<span class="sub" title="依 BOM 和今天的材料單價估算">BOM 估算 ${fmt(v, 2)}${me ? ` <a href="#" data-bomfill="${i}" data-v="${round(v)}">帶入</a>` : ""}</span>`; }
+/** 報價成本一律是台幣；報價幣別是外幣時，用 BOM 成本設定的匯率換算（毛利率、對照用），沒有匯率回傳 0 */
+function qGm(l){ const p = Number(l.price) * qFx(), c = Number(l.cost); if (Number(l.price) && c && !qFx()) return (`<span class="muted" title="報價是外幣，要先在「BOM 成本」設定匯率才能算毛利率">—</span>`); return (p && c ? `<span class="num" style="color:var(${(p-c)/p<0.1?"--bad":"--fg"})">${Math.round((p-c)/p*100)}%</span>` : `<span class="muted">—</span>`); }
+function qFx(){ const cur = $("dCur").value || "TWD"; if (cur === "TWD") return 1; try{ return BC.d ? bcRate(cur) : 0; }catch(e){ return 0; } }
+function qCostFx(c){ const cur = $("dCur").value || "TWD", r = qFx(); c = Number(c); return cur !== "TWD" && c && r ? `<span class="sub">≈ ${cur} ${fmt(c / r, 2)}（匯率 ${r}）</span>` : ""; }
+function bomHint(code, i, me){ const v = bomEst(code); return v == null ? "" : `<span class="sub" title="依 BOM 和今天的材料單價估算">BOM 估算 TWD ${fmt(v, 2)}${me ? ` <a href="#" data-bomfill="${i}" data-v="${round(v)}">帶入</a>` : ""}</span>`; }
 function bomEst(code){ try{ if (!BC.d || !code || !bcParents().includes(code)) return null; return bcCost(code, today()).total; }catch(e){ return null; } }
 $("docLines").addEventListener("click", e => { const a = e.target.closest("[data-bomfill]"); if (!a) return; e.preventDefault();
   const el = $("docLines").querySelector(`[data-dl="${a.dataset.bomfill}"][data-k="cost"]`); if (!el) return;
@@ -6490,6 +6499,7 @@ function openDoc(kind, no){
   $("dWh").innerHTML = `<option value="">（依品號主要庫別）</option>` + S.whs.map(w => `<option value="${esc(w.code)}">${esc(whLabel(w.code))}</option>`).join("");
   $("dWh").value = d.whId || ""; $("dShip").value = d.shipDate || ""; $("dExport").value = d.exportNo || ""; DOC.orders = kind === "sale" ? [...new Set([d.orderNo, ...DOC.lines.map(l => l.orderNo)].filter(Boolean))] : [];
   if (kind === "sale" && d.shippedAt) $("docMeta").textContent += `　出貨 ${d.shippedBy||""} ${d.shippedAt}`;
+  $("docCurNote").hidden = !(kind === "quote" && PM().cost); $("docCurNote").innerHTML = `這張報價單的幣別：<b>${esc(d.currency || $("dCur").value || "TWD")}</b>　｜　「成本」欄一律填<b>台幣（TWD）未稅單價</b>，系統會依匯率換算對照`;
   if (kind === "order" && no){ const ms = (SD().mails || []).filter(m => m.docNo === no);
     ["cust","prod"].forEach(k => { const m = ms.filter(x => x.kind === k).pop(); if (m) $("docMeta").textContent += `　${k === "cust" ? "已寄客戶" : "已寄生管"} ${m.at}${m.test ? "（測試）" : ""}`; }); }
   document.querySelectorAll("#docDlg [data-price]").forEach(el => el.hidden = !PM().price);
@@ -6504,7 +6514,7 @@ function openDoc(kind, no){
   $("docDlg").showModal();
   setTimeout(() => presCtx(no ? kind + ":" + no : ""), 0);
 }
-$("dCur").addEventListener("change", () => { if ($("dCur").value !== "TWD" && $("dTax").value === "應稅5%") $("dTax").value = "零稅率"; if ($("dCur").value === "TWD" && $("dTax").value === "零稅率") $("dTax").value = "應稅5%"; renderDocTotal(); renderDocLines(); });
+$("dCur").addEventListener("change", () => { if (!$("docCurNote").hidden) $("docCurNote").querySelector("b").textContent = $("dCur").value; if ($("dCur").value !== "TWD" && $("dTax").value === "應稅5%") $("dTax").value = "零稅率"; if ($("dCur").value === "TWD" && $("dTax").value === "零稅率") $("dTax").value = "應稅5%"; renderDocTotal(); renderDocLines(); });
 $("dTax").addEventListener("change", renderDocTotal);
 function docCols(){
   const pm = PM(); const q = DOC.kind === "quote"; const sh = DOC.kind === "order" && DOC.no;
@@ -6513,7 +6523,7 @@ function docCols(){
   return [
     ["#", "seq"], ["品號", "item"], ["品名 / 規格", "name"], ["數量", "qty", "r"], ["單位", "unit"],
     q ? ["客戶希望交期", "want"] : ["預交日", "due"],
-    ...(q && pm.cost ? [["成本", "cost", "r"]] : []),
+    ...(q && pm.cost ? [["成本（台幣）", "cost", "r"]] : []),
     ...(q ? [["資材確認交期", "lead"], ["資材備註", "matNote"]] : []),
     ...(pm.price ? [["單價", "price", "r"], ["金額", "amt", "r"]] : []),
     ...(q && pm.price && pm.cost ? [["毛利率", "gm", "r"]] : []),
@@ -6548,13 +6558,13 @@ function renderDocLines(){
       case "unit": return td(lk(l) ? esc(l.unit||"") : inp(i, "unit", l.unit, { st:"width:60px", dis:!ed }));
       case "want": return td(asapCell(i, "wantDate", l.wantDate, !ed));
       case "due": return td(asapCell(i, "dueDate", l.dueDate, !ed));
-      case "cost": return td(inp(i, "cost", l.cost, { type:"number", st:"width:100px;text-align:right", dis:!me }) + `<span data-bomhint="${i}">${bomHint(l.itemCode, i, me)}</span>`);
+      case "cost": return td(`<span class="row" style="gap:4px;flex-wrap:nowrap;justify-content:flex-end"><span class="muted" style="font-size:11px">TWD</span>` + inp(i, "cost", l.cost, { type:"number", st:"width:100px;text-align:right", dis:!me }) + `</span><span data-cfx="${i}">${qCostFx(l.cost)}</span><span data-bomhint="${i}">${bomHint(l.itemCode, i, me)}</span>`);
       case "lead": return td(inp(i, "leadDate", l.leadDate, { type:"date", dis:!me }) + (l.wantDate && l.leadDate && l.leadDate > l.wantDate ? '<span class="sub" style="color:var(--bad)">晚於客戶希望</span>' : ""));
       case "matNote": return td(inp(i, "matNote", l.matNote, { st:"min-width:120px", dis:!me }) + (l.matBy ? `<span class="sub">${esc(l.matBy)} ${esc(String(l.matAt||"").slice(5))}</span>` : ""));
       case "price": return td(inp(i, "price", l.price, { type:"number", st:"width:110px;text-align:right", dis:!(ed || be) }));
       case "amt": return td(l.free ? `<span class="muted" data-amt="${i}">不計價</span>` : `<span class="num" data-amt="${i}">${money((Number(l.qty)||0)*(Number(l.price)||0), cur)}</span>`);
       case "free": return td(`<select data-dl="${i}" data-k="free" style="width:auto" ${ed || be ?"":"disabled"}>${[["","計價"],["樣品","不計價：樣品"],["補料","不計價：補料"],["其他","不計價：其他"]].map(([v,t]) => `<option value="${v}" ${(l.free||"")===v?"selected":""}>${t}</option>`).join("")}</select>`);
-      case "gm": { const p = Number(l.price), c = Number(l.cost); return td(p && c ? `<span class="num" style="color:var(${(p-c)/p<0.1?"--bad":"--fg"})">${Math.round((p-c)/p*100)}%</span>` : `<span class="muted">—</span>`); }
+      case "gm": return td(`<span data-gm="${i}">${qGm(l)}</span>`);
       case "sq": return td(`<span class="num">${fmt(l.shipQty,2)}</span><span class="sub">${esc(l.whId||"")}</span>`);
       case "ship": { const v = sh[l.lid]||0; return td(`<span class="num">${fmt(v,2)}</span>${v>=Number(l.qty)?' <span class="chip in">出完</span>':""}`); }
       case "note": return td(lk(l) && !be ? esc(l.note||"") : inp(i, "note", l.note, { st:"min-width:110px", dis:!(ed || be) }));
@@ -6564,6 +6574,7 @@ function renderDocLines(){
   $("docLines").querySelectorAll("[data-dl]").forEach(el => {
     el.addEventListener("input", () => { const l = DOC.lines[Number(el.dataset.dl)]; l[el.dataset.k] = el.value;
       if (el.dataset.k === "qty" && l._max != null){ const m = $("docLines").querySelector(`[data-qmax="${el.dataset.dl}"]`); if (m) m.style.color = Number(el.value) > l._max ? "var(--bad)" : ""; }
+      if (el.dataset.k === "cost" || el.dataset.k === "price"){ const g = $("docLines").querySelector(`[data-gm="${el.dataset.dl}"]`); if (g) g.innerHTML = qGm(l); const f = $("docLines").querySelector(`[data-cfx="${el.dataset.dl}"]`); if (f) f.innerHTML = qCostFx(l.cost); }
       if (el.dataset.k === "qty" || el.dataset.k === "price"){ const a = $("docLines").querySelector(`[data-amt="${el.dataset.dl}"]`); if (a && !l.free) a.textContent = money((Number(l.qty)||0)*(Number(l.price)||0), $("dCur").value); renderDocTotal(); } });
     if (el.dataset.k === "free") el.addEventListener("change", () => { DOC.lines[Number(el.dataset.dl)].free = el.value; renderDocLines(); });
     if (el.dataset.k === "itemCode") el.addEventListener("change", () => {
