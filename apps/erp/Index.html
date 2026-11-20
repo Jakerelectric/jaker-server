@@ -4807,7 +4807,9 @@ async function copyToErp(){
 function qGm(l){ const p = Number(l.price) * qFx(), c = Number(l.cost); if (Number(l.price) && c && !qFx()) return (`<span class="muted" title="報價是外幣，要先在「BOM 成本」設定匯率才能算毛利率">—</span>`); return (p && c ? `<span class="num" style="color:var(${(p-c)/p<0.1?"--bad":"--fg"})">${Math.round((p-c)/p*100)}%</span>` : `<span class="muted">—</span>`); }
 function qFx(){ const cur = $("dCur").value || "TWD"; if (cur === "TWD") return 1; try{ return BC.d ? bcRate(cur) : 0; }catch(e){ return 0; } }
 function qCostFx(c){ const cur = $("dCur").value || "TWD", r = qFx(); c = Number(c); return cur !== "TWD" && c && r ? `<span class="sub">≈ ${cur} ${fmt(c / r, 2)}（匯率 ${r}）</span>` : ""; }
-function bomHint(code, i, me){ const v = bomEst(code); return v == null ? "" : `<span class="sub" title="依 BOM 和今天的材料單價估算">BOM 估算 TWD ${fmt(v, 2)}${me ? ` <a href="#" data-bomfill="${i}" data-v="${round(v)}">帶入</a>` : ""}</span>`; }
+function bomHint(code, i, me){ const v = bomEst(code); if (v == null) return "";
+  const c = Number((DOC.lines[i] || {}).cost), diff = c && Math.abs(c - v) >= 0.01;
+  return `<span class="sub" title="依 BOM 和今天的材料單價估算" ${diff ? 'style="color:var(--warn)"' : ""}>BOM 估算 TWD ${fmt(v, 2)}${diff ? "（跟填入的成本不同，材料單價可能有調整）" : ""}${me ? ` <a href="#" data-bomfill="${i}" data-v="${round(v)}">${diff ? "更新為估算值" : "帶入"}</a>` : ""}</span>`; }
 function bomEst(code){ try{ if (!BC.d || !code || !bcParents().includes(code)) return null; return bcCost(code, today()).total; }catch(e){ return null; } }
 $("docLines").addEventListener("click", e => { const a = e.target.closest("[data-bomfill]"); if (!a) return; e.preventDefault();
   const el = $("docLines").querySelector(`[data-dl="${a.dataset.bomfill}"][data-k="cost"]`); if (!el) return;
@@ -4899,9 +4901,9 @@ $("cpSave").addEventListener("click", async () => { const rows = cpList();
 const BC_CATS = ["貴重材料","材料","生產","生產外包"];
 const BC = { d:null, mode:"a", par:"", edit:null, ci:{}, logBy:{}, used:{}, ciEdit:null, imp:null };
 const bcCan = () => !!(BC.d && BC.d.canEdit);
-async function bcLoad(force){
+async function bcLoad(force, quiet){
   if (BC.d && !force && !BC.stale) return;
-  const d = await busy(() => call("costLoad", {})); BC.stale = false;
+  const d = quiet ? await call("costLoad", {}) : await busy(() => call("costLoad", {})); BC.stale = false;
   // 品號是主檔：品名、規格、單位以品號為準
   const itBy = {}; S.items.forEach(i => itBy[String(i.code).toLowerCase()] = i);
   d.costItems.forEach(x => { const it = itBy[String(x.code).toLowerCase()]; if (it){ x.name = it.name; x.spec = it.spec || ""; x.unit = it.unit; } });
@@ -6476,7 +6478,8 @@ function docEditable(){
 const saleBillEdit = () => DOC.kind === "sale" && !!DOC.doc && DOC.doc.status === "已出貨" && PM().sales;
 const matEditable = () => DOC.kind === "quote" && PM().mat && DOC.doc && ["待資材確認","資材已回覆","已報價"].includes(DOC.doc.status);
 function openDoc(kind, no){
-  if (kind === "quote" && PM().cost && (!BC.d || BC.stale)) bcLoad().then(() => { if (DOC.kind === "quote" && $("docDlg").open) renderDocLines(); }).catch(() => {});  // 成本欄顯示 BOM 估算
+  // 成本欄顯示 BOM 估算：每次打開報價單都重新抓最新的材料單價（別人剛改過的單價也會反映）
+  if (kind === "quote" && PM().cost) bcLoad(true, true).then(() => { if (DOC.kind === "quote" && $("docDlg").open) renderDocLines(); }).catch(() => {});  // 成本欄顯示 BOM 估算
   DOC.kind = kind; DOC.no = no || null;
   const list = kind === "quote" ? SD().quotes : kind === "sale" ? (SD().sales || []) : SD().orders;
   DOC.doc = no ? list.find(x => x.no === no) : null;
@@ -6574,7 +6577,7 @@ function renderDocLines(){
   $("docLines").querySelectorAll("[data-dl]").forEach(el => {
     el.addEventListener("input", () => { const l = DOC.lines[Number(el.dataset.dl)]; l[el.dataset.k] = el.value;
       if (el.dataset.k === "qty" && l._max != null){ const m = $("docLines").querySelector(`[data-qmax="${el.dataset.dl}"]`); if (m) m.style.color = Number(el.value) > l._max ? "var(--bad)" : ""; }
-      if (el.dataset.k === "cost" || el.dataset.k === "price"){ const g = $("docLines").querySelector(`[data-gm="${el.dataset.dl}"]`); if (g) g.innerHTML = qGm(l); const f = $("docLines").querySelector(`[data-cfx="${el.dataset.dl}"]`); if (f) f.innerHTML = qCostFx(l.cost); }
+      if (el.dataset.k === "cost" || el.dataset.k === "price"){ const g = $("docLines").querySelector(`[data-gm="${el.dataset.dl}"]`); if (g) g.innerHTML = qGm(l); const f = $("docLines").querySelector(`[data-cfx="${el.dataset.dl}"]`); if (f) f.innerHTML = qCostFx(l.cost);  const bh = $("docLines").querySelector(`[data-bomhint="${el.dataset.dl}"]`); if (bh && el.dataset.k === "cost") bh.innerHTML = bomHint(l.itemCode, Number(el.dataset.dl), matEditable()); }
       if (el.dataset.k === "qty" || el.dataset.k === "price"){ const a = $("docLines").querySelector(`[data-amt="${el.dataset.dl}"]`); if (a && !l.free) a.textContent = money((Number(l.qty)||0)*(Number(l.price)||0), $("dCur").value); renderDocTotal(); } });
     if (el.dataset.k === "free") el.addEventListener("change", () => { DOC.lines[Number(el.dataset.dl)].free = el.value; renderDocLines(); });
     if (el.dataset.k === "itemCode") el.addEventListener("change", () => {
