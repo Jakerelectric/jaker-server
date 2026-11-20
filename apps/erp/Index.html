@@ -138,6 +138,7 @@ dialog::backdrop{background:rgba(10,15,30,.5)}
 .kpi-row{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px}@media(max-width:820px){.kpi-row{grid-template-columns:repeat(4,minmax(0,1fr))}}.kpi-row .kpi{min-width:0}.kpi-v{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sc-pk td{background:var(--bg);padding:10px 12px}.sc-pk-grid{display:grid;grid-template-columns:2fr 1.5fr 1fr;gap:8px}.sc-pk-grid .f{margin:0}
 @media (max-width:640px){.sc-pk-grid{grid-template-columns:1fr}.scan-tbl tbody tr.sc-pk{display:block;padding:0 0 10px;border-bottom:1px solid var(--line)}.scan-tbl tbody tr.sc-pk td{display:block;border-radius:6px}.sc-pk input{font-size:17px;height:46px}}
+.ver-banner{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:90;background:#1d4ed8;color:#fff;padding:10px 14px;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.25);display:flex;gap:10px;align-items:center;flex-wrap:wrap;width:min(560px,calc(100vw - 24px));font-size:14px}.ver-banner .btn{background:transparent;color:#fff;border-color:rgba(255,255,255,.6)}.ver-banner .btn.primary{background:#fff;color:#1d4ed8;border-color:#fff}
 .qty-step{display:flex;gap:4px;align-items:stretch;justify-content:flex-end}.qty-step input{width:80px;text-align:right;margin:0}.qty-step .btn{padding:0 10px;font-size:18px;line-height:1;min-width:36px}.sc-lbl{display:none}.mp-l{display:none}
 @media (max-width:640px){
   .scan-tbl,.scan-tbl tbody,.scan-tbl tfoot{display:block;width:100%}
@@ -4914,15 +4915,27 @@ document.querySelectorAll("input[data-scan]").forEach(el => {
 });
 
 
-/* ---------- 系統版本：頁尾和「功能開關」都顯示主機目前跑的版本 ---------- */
+/* ---------- 系統版本：頁尾和「功能開關」顯示主機目前的版本；主機更新後提醒大家重新整理 ---------- */
+let VER_LOADED = null;
 async function loadVer(){
   if (location.protocol === "file:" || (window.google && google.script && google.script.run)) return;
-  try{ const h = await (await fetch(new URL("/healthz", location.href), { cache:"no-store" })).json();
-    const t = `版本 ${h.version || "?"}　·　啟動 ${h.started || "?"}`;
-    $("verInfo").textContent = "傑克電機進銷存　" + t; if ($("verMods")) $("verMods").textContent = t;
-  }catch(e){}
+  let h; try{ h = await (await fetch(new URL("/healthz", location.href), { cache:"no-store" })).json(); }catch(e){ return; }
+  if (!h || !h.version) return;
+  const t = `版本 ${h.version}　·　啟動 ${h.started || "?"}`;
+  if (!VER_LOADED){ VER_LOADED = h.version; $("verInfo").textContent = "傑克電機進銷存　" + t; if ($("verMods")) $("verMods").textContent = t; return; }
+  if (h.version === VER_LOADED) return;
+  // 版本換了：還沒登入（在登入畫面）就直接重新整理；已經在用的人跳提醒，不打斷正在輸入的資料
+  const onLogin = [...document.querySelectorAll(".auth-box")].some(el => el.offsetParent !== null);
+  if (!S.user || onLogin){ location.reload(); return; }
+  let b = $("verBanner");
+  if (!b){ b = document.createElement("div"); b.id = "verBanner"; b.className = "ver-banner"; document.body.appendChild(b); }
+  b.innerHTML = `<span>系統已更新到新版本 <b class="mono">${esc(h.version)}</b>，請先把手上的資料存好，再按「重新整理」使用新版。</span><button type="button" class="btn sm primary" id="verReload">重新整理</button><button type="button" class="btn sm" id="verLater">稍後</button>`;
+  $("verReload").addEventListener("click", () => location.reload());
+  $("verLater").addEventListener("click", () => { b.hidden = true; setTimeout(() => { b.hidden = false; }, 10 * 60 * 1000); });
 }
 loadVer();
+setInterval(loadVer, 60 * 1000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) loadVer(); });
 /* ====================== 功能開關（管理員） ====================== */
 const MODS_REC_OFF = ["dash","report","wo","wr","pov","ops","codes"];
 let MD_OFF = null;
