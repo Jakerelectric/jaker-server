@@ -49,10 +49,10 @@ async function main() {
 
   app.get('/', (req, res) => res.redirect(cfg.apps.includes('pm') ? '/pm/' : '/erp/'));
   const startedAt = new Date(Date.now() + 8 * 3600e3).toISOString().replace('T', ' ').slice(0, 19);
-  let version = '';
-  try { version = fs.readFileSync(path.join(cfg.dataDir, 'version.txt'), 'utf8').trim(); } catch (e) {}
+  // 版本每次都重讀：update.ps1 是在新版啟動、確認正常之後才寫 version.txt，啟動當下讀到的會是舊版號
+  const version = () => { try { return fs.readFileSync(path.join(cfg.dataDir, 'version.txt'), 'utf8').trim(); } catch (e) { return ''; } };
   const sizes = {};
-  app.get('/healthz', (req, res) => res.json({ ok: true, apps: cfg.apps, sheets: Object.fromEntries(Object.entries(sizes).map(([k, f]) => [k, f()])), version, started: startedAt,
+  app.get('/healthz', (req, res) => res.set('Cache-Control', 'no-store').json({ ok: true, apps: cfg.apps, sheets: Object.fromEntries(Object.entries(sizes).map(([k, f]) => [k, f()])), version: version(), started: startedAt,
     line: cfg.lineEnabled ? (cfg.lineSecret ? 'on' : 'on-no-secret') : 'off' }));
   // ===== 專案儀表板（/pm） =====
   if (cfg.apps.includes('pm')) {
