@@ -4809,7 +4809,7 @@ function qFx(){ const cur = $("dCur").value || "TWD"; if (cur === "TWD") return 
 function qCostFx(c){ const cur = $("dCur").value || "TWD", r = qFx(); c = Number(c); return cur !== "TWD" && c && r ? `<span class="sub">≈ ${cur} ${fmt(c / r, 2)}（匯率 ${r}）</span>` : ""; }
 function bomHint(code, i, me){ const v = bomEst(code); if (v == null) return "";
   const c = Number((DOC.lines[i] || {}).cost), diff = c && Math.abs(c - v) >= 0.01;
-  return `<span class="sub" title="依 BOM 和今天的材料單價估算" ${diff ? 'style="color:var(--warn)"' : ""}>BOM 估算 TWD ${fmt(v, 2)}${diff ? "（跟填入的成本不同，材料單價可能有調整）" : ""}${me ? ` <a href="#" data-bomfill="${i}" data-v="${round(v)}">${diff ? "更新為估算值" : "帶入"}</a>` : ""}</span>`; }
+  return `<span class="sub" title="依 BOM 和今天的材料單價估算" ${diff ? 'style="color:var(--bad);font-weight:600"' : ""}>${diff ? "⚠ 材料單價有變動，最新 " : ""}BOM 估算 TWD ${fmt(v, 2)}${diff ? `（目前填 ${fmt(c, 2)}）` : ""}${me ? ` <a href="#" data-bomfill="${i}" data-v="${round(v)}">${diff ? "更新為估算值" : "帶入"}</a>` : ""}</span>`; }
 function bomEst(code){ try{ if (!BC.d || !code || !bcParents().includes(code)) return null; return bcCost(code, today()).total; }catch(e){ return null; } }
 $("docLines").addEventListener("click", e => { const a = e.target.closest("[data-bomfill]"); if (!a) return; e.preventDefault();
   const el = $("docLines").querySelector(`[data-dl="${a.dataset.bomfill}"][data-k="cost"]`); if (!el) return;
