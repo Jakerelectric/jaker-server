@@ -558,7 +558,7 @@ let COSTLOG_CACHE_ = null;
 function costOn_(item, date) {
   if (!COSTLOG_CACHE_) { COSTLOG_CACHE_ = {}; readAll_('costLog').forEach(x => (COSTLOG_CACHE_[x.itemCode] = COSTLOG_CACHE_[x.itemCode] || []).push(x)); }
   const d = String(date || today_()).slice(0, 10);
-  const L = (COSTLOG_CACHE_[item.code] || []).filter(x => String(x.effDate) <= d).sort((a, b) => String(a.effDate).localeCompare(String(b.effDate)) || String(a.at).localeCompare(String(b.at)));
+  const L = (COSTLOG_CACHE_[item.code] || []).filter(x => String(x.effDate) <= d).sort((a, b) => String(a.at).localeCompare(String(b.at)) || String(a.id).localeCompare(String(b.id), undefined, { numeric: true }));
   if (bomParents_()[item.code]) return round_(bomCostOn_(item.code, d));  // 有 BOM 的成品：用當天的 BOM 估算成本
   return L.length ? Number(L[L.length - 1].newCost) : (item.cost || '');
 }
@@ -1567,7 +1567,7 @@ function saveCodeRules_(u, p) {
 // ======================= 材料單價（採購） =======================
 const CURS_ = ['TWD', 'USD', 'EUR', 'JPY', 'CNY'];
 /** 品號目前的單價幣別：最後一筆已生效的單價紀錄，沒有就是台幣 */
-function curOf_(code, d) { const L = readAll_('costLog').filter(x => x.itemCode === code && String(x.effDate) <= d).sort((a, b) => String(a.effDate).localeCompare(String(b.effDate)) || String(a.at).localeCompare(String(b.at)));
+function curOf_(code, d) { const L = readAll_('costLog').filter(x => x.itemCode === code && String(x.effDate) <= d).sort((a, b) => String(a.at).localeCompare(String(b.at)) || String(a.id).localeCompare(String(b.id), undefined, { numeric: true }));
   return L.length ? (L[L.length - 1].currency || 'TWD') : 'TWD'; }
 /** 修改單位成本：品號（庫存）與成本資料庫有同一個編號就一起更新，並留下異動紀錄（生效日、原單價→新單價、供應商、說明）。
  *  未來生效的先記著，到那天以紀錄為準 */
@@ -1611,7 +1611,7 @@ function bomCtx_() {
   const ci = {}; readAll_('costItems').forEach(x => ci[x.code.toLowerCase()] = x);
   const it = {}; readAll_('items').forEach(x => it[String(x.code).toLowerCase()] = x);
   const log = {}; readAll_('costLog').forEach(x => (log[String(x.itemCode).toLowerCase()] = log[String(x.itemCode).toLowerCase()] || []).push(x));
-  Object.keys(log).forEach(k => log[k].sort((a, b) => String(a.effDate).localeCompare(String(b.effDate)) || String(a.at).localeCompare(String(b.at))));
+  Object.keys(log).forEach(k => log[k].sort((a, b) => String(a.at).localeCompare(String(b.at)) || String(a.id).localeCompare(String(b.id), undefined, { numeric: true })));
   const bom = {}; readAll_('bom').forEach(l => (bom[l.parent] = bom[l.parent] || []).push(l));
   BOMC_CACHE_ = { ci, it, log, bom, calc: calcSettings_() }; return BOMC_CACHE_;
 }
@@ -1621,7 +1621,7 @@ function priceOn_(code, d) {
   const C = bomCtx_(); const k = String(code).toLowerCase(); const c = C.ci[k], it = C.it[k]; if (!c && !it) return 0;
   const L = C.log[k] || []; const P = L.filter(x => String(x.effDate) <= d); let v, cur = 'TWD';
   if (P.length) { v = Number(P[P.length - 1].newCost); cur = P[P.length - 1].currency || 'TWD'; }
-  else if (L.length) { v = L[0].oldCost === '' ? 0 : Number(L[0].oldCost); cur = L[0].currency || 'TWD'; }
+  else if (L.length) { const f = L.slice().sort((a, b) => String(a.effDate).localeCompare(String(b.effDate)))[0]; v = f.oldCost === '' ? 0 : Number(f.oldCost); cur = f.currency || 'TWD'; }
   else { v = Number(c ? c.price : it.cost) || 0; cur = c ? (c.currency || 'TWD') : 'TWD'; }
   if (cur === 'TWD') return v; const r = cur === 'USD' ? Number(C.calc.fx) : Number((C.calc.rates || {})[cur]); return r ? v * r : 0;
 }

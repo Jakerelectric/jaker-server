@@ -4837,7 +4837,7 @@ async function costInit(){
   try{ await bcLoad(); }catch(err){ BC.d = null; CP.log = []; msg("cpMsg", err.message, "err"); }
   renderCost();
 }
-const costLogOf = code => (CP.log || []).filter(x => String(x.itemCode).toLowerCase() === String(code).toLowerCase()).sort((a,b) => String(a.effDate).localeCompare(String(b.effDate)) || String(a.at).localeCompare(String(b.at)));
+const costLogOf = code => (CP.log || []).filter(x => String(x.itemCode).toLowerCase() === String(code).toLowerCase()).sort((a,b) => String(a.at).localeCompare(String(b.at)) || String(a.id).localeCompare(String(b.id), undefined, { numeric: true }));
 /** 某日的成本：最後一筆生效日 ≤ 該日的紀錄；沒有紀錄就用目前單價 */
 function costAt(it, d){ const L = costLogOf(it.code).filter(x => String(x.effDate) <= d); if (L.length) return { v:Number(L[L.length-1].newCost), cur:L[L.length-1].currency }; const f = costLogOf(it.code)[0];
   return f ? { v: f.oldCost === "" ? null : Number(f.oldCost), cur:f.currency } : { v: Number(it.cost) || null, cur:"" }; }
@@ -4907,7 +4907,7 @@ async function bcLoad(force){
   d.costItems.forEach(x => { const it = itBy[String(x.code).toLowerCase()]; if (it){ x.name = it.name; x.spec = it.spec || ""; x.unit = it.unit; } });
   BC.d = d; BC.ci = {}; d.costItems.forEach(x => BC.ci[String(x.code).toLowerCase()] = x);
   BC.logBy = {}; d.costLog.forEach(x => (BC.logBy[String(x.itemCode).toLowerCase()] ||= []).push(x));
-  Object.values(BC.logBy).forEach(L => L.sort((a,b) => String(a.effDate).localeCompare(String(b.effDate)) || String(a.at).localeCompare(String(b.at))));
+  Object.values(BC.logBy).forEach(L => L.sort((a,b) => String(a.at).localeCompare(String(b.at)) || String(a.id).localeCompare(String(b.id), undefined, { numeric: true })));
   BC.used = {}; d.bom.forEach(l => { const k = String(l.code).toLowerCase(); (BC.used[k] ||= new Set()).add(l.parent); });
   CP.log = d.costLog;  // 材料單價頁共用同一份紀錄
 }
@@ -4931,13 +4931,13 @@ $("bcMode").querySelectorAll("button").forEach(b => b.addEventListener("click", 
 /** 成本項目：成本資料庫優先，沒有就用庫存品號 */
 function bcItem(code){ const k = String(code||"").toLowerCase(); const c = BC.ci[k]; if (c) return c;
   const it = S.items.find(i => String(i.code).toLowerCase() === k); return it ? { code:it.code, name:it.name, spec:it.spec, unit:it.unit, price:Number(it.cost)||0, cat:"材料", fromItems:true } : null; }
-/** 某日的單價：最後一筆生效日 ≤ 該日的修改紀錄；那天之前沒有紀錄就用第一筆的原單價；完全沒紀錄用目前單價。外幣依匯率換成台幣 */
+/** 某日的單價：生效日 ≤ 該日的修改紀錄中「最後登錄」的那筆（後登錄的蓋過先登錄的，例如重新匯入 Excel）；那天之前沒有紀錄就用第一筆的原單價；完全沒紀錄用目前單價。外幣依匯率換成台幣 */
 function bcPrice(code, date){
   const c = bcItem(code); if (!c) return { v:null, missing:true };
   const L = BC.logBy[String(code).toLowerCase()] || []; let v, cur = "TWD";
   const P = L.filter(x => String(x.effDate) <= date);
   if (P.length){ v = Number(P[P.length-1].newCost); cur = P[P.length-1].currency || "TWD"; }
-  else if (L.length){ v = L[0].oldCost === "" || L[0].oldCost == null ? null : Number(L[0].oldCost); cur = L[0].currency || "TWD"; }
+  else if (L.length){ const f = L.slice().sort((a,b) => String(a.effDate).localeCompare(String(b.effDate)))[0]; v = f.oldCost === "" || f.oldCost == null ? null : Number(f.oldCost); cur = f.currency || "TWD"; }
   else { v = Number(c.price) || 0; cur = c.currency || (c.fromItems ? cpCurOf(c.code) : "TWD"); }
   const rate = bcRate(cur); const orig = v;
   if (v != null && cur !== "TWD") v = rate ? v * rate : null;
