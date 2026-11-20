@@ -44,10 +44,11 @@ if (-not (Valid-Token $Token)) {
   if (-not (Valid-Token $Token)) { Done ('權杖格式不對（應該是 github_pat_ 開頭，目前讀到 ' + $Token.Length + ' 個字）。請重新複製後再執行一次。') Red }
   Set-EnvValue 'GITHUB_TOKEN' $Token
 }
-$H = @{ Authorization = "Bearer $Token"; 'User-Agent' = 'jaker-server-update'; Accept = 'application/vnd.github+json' }
+$H = @{ Authorization = "Bearer $Token"; 'User-Agent' = 'jaker-server-update'; Accept = 'application/vnd.github+json'; 'Cache-Control' = 'no-cache' }
 
 # 1. 看 GitHub 上的最新版本
-try { $c = Invoke-RestMethod "https://api.github.com/repos/$Repo/commits/main" -Headers $H }
+# 加時間參數避開 GitHub 的快取（剛推上去的新版有時要等一兩分鐘才查得到）
+try { $c = Invoke-RestMethod ("https://api.github.com/repos/$Repo/commits/main?t=" + [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()) -Headers $H }
 catch {
   $code = 0
   if ($_.Exception.Response) { $code = [int]$_.Exception.Response.StatusCode }
@@ -67,7 +68,8 @@ if ($Old -eq $New) { Done '已經是最新版，不用更新。' Green }
 $Tmp = Join-Path $env:TEMP ('jaker-update-' + [Guid]::NewGuid().ToString('N').Substring(0, 8))
 New-Item -ItemType Directory $Tmp | Out-Null
 Write-Host '下載中…'
-Invoke-WebRequest "https://api.github.com/repos/$Repo/zipball/main" -Headers $H -OutFile "$Tmp\src.zip" -UseBasicParsing
+# 下載「剛剛查到的那一版」，不是 main（避免查到新版、下載到舊版）
+Invoke-WebRequest "https://api.github.com/repos/$Repo/zipball/$($c.sha)" -Headers $H -OutFile "$Tmp\src.zip" -UseBasicParsing
 Expand-Archive "$Tmp\src.zip" "$Tmp\x"
 $Src = (Get-ChildItem "$Tmp\x" -Directory | Select-Object -First 1).FullName
 if (-not (Test-Path "$Src\src\server.js")) { Done '下載的檔案不完整，沒有更新。' Red }

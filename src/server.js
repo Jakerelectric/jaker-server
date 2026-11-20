@@ -228,12 +228,12 @@ async function main() {
     }
     let latestCache = { at: 0, v: null };
     async function latest() {
-      if (Date.now() - latestCache.at < 60000 && latestCache.v) return latestCache.v;
+      if (Date.now() - latestCache.at < 15000 && latestCache.v) return latestCache.v;
       const env = readEnvFile(path.join(ROOT, '.env'));
       const token = String(env.GITHUB_TOKEN || '').replace(/[^A-Za-z0-9_]/g, ''), repo = env.GITHUB_REPO || 'Jakerelectric/jaker-server';
       if (!token) return { error: '測試機還沒設定 GitHub 權杖' };
       try {
-        const r = await fetch('https://api.github.com/repos/' + repo + '/commits/main', { headers: { Authorization: 'Bearer ' + token, 'User-Agent': 'jaker-server', Accept: 'application/vnd.github+json' } });
+        const r = await fetch('https://api.github.com/repos/' + repo + '/commits/main?t=' + Date.now(), { headers: { Authorization: 'Bearer ' + token, 'User-Agent': 'jaker-server', Accept: 'application/vnd.github+json', 'Cache-Control': 'no-cache' }, cache: 'no-store' });
         if (!r.ok) return { error: 'GitHub 回應 ' + r.status + '（權杖可能過期）' };
         const c = await r.json();
         const v = { sha: c.sha.slice(0, 7), msg: String(c.commit.message).split('\n')[0], at: c.commit.committer && c.commit.committer.date };
