@@ -1639,7 +1639,9 @@ nav.tabs [data-tab].g-off{display:none}
     <div class="form-grid">
       <label class="f">員工ID<input id="usId" required></label>
       <label class="f">姓名<input id="usName" required></label>
-      <label class="f">單位<input id="usDept" list="deptOptions"></label>
+      <label class="f">部門<select id="usOrgDept"></select></label>
+      <label class="f" id="usUnitWrap">單位（課／組）<select id="usOrgUnit"></select></label>
+      <input type="hidden" id="usDept">
       <label class="f">角色<select id="usRole"><option value="user">一般</option><option value="viewer">檢視</option><option value="admin">管理員</option><option value="staff">刷卡人員（不能登入）</option></select></label>
       <label class="f">狀態<select id="usActive"><option value="是">啟用</option><option value="否">停用</option></select></label>
       <div class="f span2"><span>職能（決定看得到哪些分頁）</span><span class="row" style="gap:16px;margin-top:6px">
@@ -1696,7 +1698,25 @@ const REF_LABEL = { "採購入庫":"採購單號","生產入庫":"工單單號",
 const PARTY_LABEL = { "採購入庫":"供應商","託外加工入庫":"加工廠商","退回供應商":"供應商","客戶退回":"客戶","銷貨出庫":"客戶","借出":"借用人/單位","借出歸還":"借用人/單位" };
 const TYPE_LABEL = { in:"入庫", out:"出庫", xfer:"調撥", adj:"調整" };
 const ROLE_LABEL = { admin:"管理員", user:"一般", viewer:"檢視", staff:"刷卡人員" };
-const DEPTS = ["倉管","生產","組立課","品保","採購","業務","廠務"];
+const ORG = { "總經理室":[], "管理部":["人事行政課","財務課"], "生產部":["製造1課","製造2課","製造3課","組立課","廠務組"],
+  "資材部":["採購課","生管課","倉庫組"], "研發部":["設計課","品管課","高壓組","客戶服務組"], "業務部":["台電業務課","變壓器配件業務課","國外業務課","市售產品業務"] };
+const ORG_HEAD = { head:"部門主管", acting:"代理主管" };
+const DEPTS = [...new Set(["倉管","生產","組立課","品保","採購","業務","廠務", ...Object.keys(ORG), ...Object.values(ORG).flat()])];
+/** 帳號的單位：先選部門再選課／組；部門主管、代理主管只到部門（單位存部門名稱） */
+function orgOf(v){ v = String(v||"").trim();
+  if (ORG[v]) return { dept:v, unit:"head" };
+  for (const [d,us] of Object.entries(ORG)) if (us.includes(v)) return { dept:d, unit:v };
+  return { dept:"", unit:"", legacy:v }; }
+function usOrgUnits(sel){ const d = $("usOrgDept").value, us = ORG[d] || [];
+  $("usUnitWrap").hidden = !d || !us.length;
+  $("usOrgUnit").innerHTML = `<option value="">請選擇</option><option value="head">${ORG_HEAD.head}（不用選課／組）</option><option value="acting">${ORG_HEAD.acting}（不用選課／組）</option>` + us.map(u=>`<option>${esc(u)}</option>`).join("");
+  if (sel != null) $("usOrgUnit").value = sel; usOrgSync(); }
+function usOrgSync(){ const d = $("usOrgDept").value, u = $("usOrgUnit").value, us = ORG[d] || [];
+  $("usDept").value = !d ? (($("usOrgDept").selectedOptions[0]||{}).dataset||{}).legacy || "" : (!us.length || u==="head" || u==="acting" || !u ? d : u); }
+function usOrgSet(v, title){ const o = orgOf(v); if (o.unit==="head" && title==="代理主管") o.unit = "acting";
+  $("usOrgDept").innerHTML = `<option value="">${o.legacy ? "（原設定：" + esc(o.legacy) + "，請重新選擇）" : "請選擇"}</option>` + Object.keys(ORG).map(d=>`<option>${esc(d)}</option>`).join("");
+  if (o.legacy) $("usOrgDept").options[0].dataset.legacy = o.legacy;
+  $("usOrgDept").value = o.dept; usOrgUnits(o.unit); }
 const S = { token:null, user:null, items:[], whs:[], stock:[], txns:[], counts:[], users:[], people:[], tab:"dash", cat:"", mvType:"in", impMode:"item", impRows:null };
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -3349,8 +3369,9 @@ $("whAdd").addEventListener("click", async () => {
 async function loadUsers(){
   try{ S.users = await busy(() => call("listUsers")); renderUsers(); }catch(err){ msg("usMsg", err.message, "err"); }
 }
+function usDeptLabel(u){ const o = orgOf(u.dept); return o.legacy !== undefined ? (u.dept||"") : (o.unit==="head" ? o.dept : o.dept + "・" + o.unit) + (u.title ? "（" + u.title + "）" : ""); }
 function renderUsers(){
-  $("userRows").innerHTML = S.users.map(u => `<tr class="clickable" data-uid="${esc(u.id)}"><td class="mono">${esc(u.id)}</td><td>${esc(u.name)}${u.id===S.user.id?' <span class="chip wh">你</span>':""}</td><td>${esc(u.dept||"")}</td><td>${ROLE_LABEL[u.role]||u.role}${u.perms?`<span class="sub">${esc(u.perms.replace(/,/g,"、"))}</span>`:""}</td>
+  $("userRows").innerHTML = S.users.map(u => `<tr class="clickable" data-uid="${esc(u.id)}"><td class="mono">${esc(u.id)}</td><td>${esc(u.name)}${u.id===S.user.id?' <span class="chip wh">你</span>':""}</td><td>${esc(usDeptLabel(u))}</td><td>${ROLE_LABEL[u.role]||u.role}${u.perms?`<span class="sub">${esc(u.perms.replace(/,/g,"、"))}</span>`:""}</td>
     <td>${u.active==="是"?'<span class="chip in">啟用</span>':'<span class="chip low">停用</span>'}</td><td class="mono">${esc(u.lastLogin||"—")}</td><td><button class="btn sm">編輯</button></td></tr>`).join("");
   $("userRows").querySelectorAll("[data-uid]").forEach(tr => tr.addEventListener("click", () => openUser(tr.dataset.uid)));
 }
@@ -3358,7 +3379,7 @@ let editingUser = null;
 function openUser(id){
   const u = id ? S.users.find(x=>x.id===id) : null; editingUser = u;
   $("userDlgTitle").textContent = u ? `編輯帳號 ${u.id}` : "新增帳號";
-  $("usId").value = u?.id || ""; $("usId").readOnly = !!u; $("usName").value = u?.name || ""; $("usDept").value = u?.dept || "";
+  $("usId").value = u?.id || ""; $("usId").readOnly = !!u; $("usName").value = u?.name || ""; usOrgSet(u?.dept || "", u?.title || "");
   $("usRole").value = u?.role || "user"; $("usActive").value = u?.active || "是"; $("usPw").value = "";
   $("usPermSales").checked = String(u?.perms||"").includes("業務"); $("usPermMat").checked = /採購|資材/.test(String(u?.perms||""));
   $("usPermWh").checked = String(u?.perms||"").includes("倉庫"); $("usPermLead").checked = String(u?.perms||"").includes("生產主管"); $("usPermPlan").checked = String(u?.perms||"").includes("生管"); $("usPermProd").checked = String(u?.perms||"").replace("生產主管","").includes("生產");
@@ -3374,9 +3395,13 @@ function usPwText(){
 $("usRole").addEventListener("change", usPwText);
 $("btnNewUser").addEventListener("click", () => openUser(null));
 $("usCancel").addEventListener("click", () => $("userDlg").close());
+$("usOrgDept").addEventListener("change", () => usOrgUnits(""));
+$("usOrgUnit").addEventListener("change", usOrgSync);
 $("userForm").addEventListener("submit", async e => {
   e.preventDefault();
-  const p = { id:$("usId").value.trim(), name:$("usName").value.trim(), dept:$("usDept").value.trim(), role:$("usRole").value, active:$("usActive").value, pw:$("usPw").value, isNew:!editingUser,
+  if (!$("usOrgDept").value && !$("usDept").value) return msg("usDlgMsg","請選擇部門。","err");
+  if ($("usOrgDept").value && (ORG[$("usOrgDept").value]||[]).length && !$("usOrgUnit").value) return msg("usDlgMsg","請選擇課／組，或選「部門主管」「代理主管」。","err");
+  const p = { id:$("usId").value.trim(), name:$("usName").value.trim(), dept:$("usDept").value.trim(), title:({head:"部門主管",acting:"代理主管"})[$("usOrgUnit").value] && ORG[$("usOrgDept").value]?.length ? ({head:"部門主管",acting:"代理主管"})[$("usOrgUnit").value] : "", role:$("usRole").value, active:$("usActive").value, pw:$("usPw").value, isNew:!editingUser,
     perms:[$("usPermSales").checked?"業務":"", $("usPermMat").checked?"採購":"", $("usPermWh").checked?"倉庫":"", $("usPermProd").checked?"生產":"", $("usPermLead").checked?"生產主管":"", $("usPermPlan").checked?"生管":""].filter(Boolean).join(",") };
   if (!p.name) return msg("usDlgMsg","請輸入姓名。","err");
   try{ S.users = await busy(() => call("saveUser", p)); $("userDlg").close(); renderUsers(); msg("usMsg", p.isNew ? (p.role==="staff" ? `已新增刷卡人員 ${p.id}。` : `已新增帳號 ${p.id}，請把初始密碼告訴本人並請他登入後修改。`) : `已更新 ${p.id}。`); refresh(); }
