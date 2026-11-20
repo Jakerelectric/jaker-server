@@ -658,7 +658,8 @@ function moveOne_(u, p, ctx, rec, items, whs) {
     f.fillerId = per.id; f.filler = per.name; f.dept = per.dept;
   }
   let res;
-  if (type === 'in') { res = adjust_(ctx, item, p.whId, qty, { date }); f.balance = res.after; }
+  // 生產入庫可以入到任何庫別（例如生產單位把成品入到倉庫）：只會增加庫存；之後的修改、出庫還是要該庫別的人
+  if (type === 'in') { res = adjust_(ctx, item, p.whId, qty, { date, dest: p.purpose === '生產入庫' }); f.balance = res.after; }
   else if (type === 'out') { res = adjust_(ctx, item, p.whId, -qty, { date }); f.balance = res.after; }
   else {
     const a = adjust_(ctx, item, p.whId, -qty, { date }); const b = adjust_(ctx, item, p.toWhId, qty, { date, dest: true });

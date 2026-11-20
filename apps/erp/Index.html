@@ -1992,6 +1992,14 @@ function fillSelect(sel, opts){
   if (opts.some(o=>o[0]===v)) el.value = v;
 }
 let WH_DEF_APPLIED = null;
+/** 登記出入庫的庫別選單：有限制可異動庫別的帳號只列出自己的；但「生產入庫」可以入到任何庫別（例如入到倉庫） */
+function mvWhOpts(){
+  const list = S.whs.map(w => [w.id, `${w.code} ${w.name||""}`.trim()]);
+  const allow = S.user && S.user.role !== "admin" ? String(S.user.whAllow||"").split(",").filter(Boolean) : [];
+  const free = S.mvType === "in" && $("mvPurpose").value === "生產入庫";
+  const L = allow.length && !free ? list.filter(([id]) => allow.includes(id)) : list;
+  const cur = $("mvWh").value; fillSelect("mvWh", L.length ? L : [["","（請先建立庫別）"]]); if (L.some(([id]) => id === cur)) $("mvWh").value = cur;
+}
 function renderWhSelects(){
   const list = S.whs.map(w => [w.id, `${w.code} ${w.name||""}`.trim()]);
   const none = [["","（請先建立庫別）"]];
@@ -2002,7 +2010,7 @@ function renderWhSelects(){
   const allow = S.user && S.user.role !== "admin" ? String(S.user.whAllow||"").split(",").filter(Boolean) : [];
   const myList = allow.length ? list.filter(([id]) => allow.includes(id)) : list;
   fillSelect("ctWh", myList.length ? myList : none);
-  fillSelect("mvWh", myList.length ? myList : none);
+  mvWhOpts();
   fillSelect("mvToWh", list);
   // 帳號有設預設庫別：登入後第一次載入時，庫存、出入庫紀錄、登記、盤點都先選這個庫別
   const dw = S.user && (S.user.defWh || (allow.length ? allow[0] : ""));
@@ -2198,7 +2206,7 @@ function setMoveType(t){
   if (typeof SCAN !== "undefined" && SCAN.mode==="scan") renderScan();
 }
 function onPurpose(){
-  const p = $("mvPurpose").value;
+  const p = $("mvPurpose").value; if (S.whs) mvWhOpts();
   $("mvRefText").textContent = REF_LABEL[p] || "單號";
   $("mvPartyWrap").hidden = !PARTY_LABEL[p]; $("mvPartyText").textContent = PARTY_LABEL[p] || "";
   $("mvOrderWrap").hidden = !(p==="銷貨出庫" || p==="客戶退回"); if ($("mvOrderWrap").hidden){ $("mvOrder").value = ""; }
