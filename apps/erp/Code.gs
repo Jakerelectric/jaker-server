@@ -8,7 +8,7 @@
 const F = {
   users: [['id','員工ID','s'],['name','姓名','s'],['dept','單位','s'],['role','角色','s'],['active','啟用','s'],
           ['hash','密碼雜湊','s'],['salt','鹽','s'],['createdAt','建立時間','s'],['lastLogin','最後登入','s'],['perms','職能(業務/採購/倉庫/生管/生產)','s'],['title','職務(部門主管/代理主管/課長/組長)','s'],['defWh','預設庫別','s'],['whAllow','可異動庫別(空白=全部)','s']],
-  whs:   [['code','庫別代號','s'],['name','庫別名稱','s'],['type','類型','s']],  // 類型：倉庫 / 生產（生產地點）/ 委外（委外廠商）
+  whs:   [['code','庫別代號','s'],['name','庫別名稱','s'],['type','類型','s'],['kind','性質(正式倉・室內、暫放區…)','s']],  // 類型：倉庫 / 生產（生產地點）/ 委外（委外廠商）
   items: [['code','品號','s'],['name','品名','s'],['nameEn','英文品名','s'],['spec','規格','s'],['unit','庫存單位','s'],
           ['cat','類別','s'],['mainWh','主要庫別','s'],['safety','安全存量','n'],['cost','單位成本','n'],
           ['netWt','淨重','n'],['grossWt','毛重','n'],['note','備註','s'],['alias','舊料號/別名','s'],['specEn','英文規格','s'],['erpWh','鼎新庫別(指定)','s']],
@@ -997,13 +997,13 @@ function saveWh_(u, p) {
     if (!(pm.plan || pm.prodLead) || !okT(p.type || (ex && ex.type)) || (ex && !okT(ex.type))) throw new Error('倉庫庫別只有管理員可以修改；生管、生產主管可以新增生產地點和委外廠商。'); }
   if (p.isNew && ex) throw new Error('庫別 ' + code + ' 已存在。');
   const type = ['倉庫', '生產', '委外'].indexOf(p.type) >= 0 ? p.type : (ex && ex.type) || '倉庫';
-  if (ex) { if (p.name != null) ex.name = String(p.name || '').trim(); ex.type = type; update_('whs', ex); }
-  else append_('whs', [{ code, name: String(p.name || '').trim(), type }]);
+  if (ex) { if (p.name != null) ex.name = String(p.name || '').trim(); if (p.kind != null) ex.kind = String(p.kind || '').trim(); ex.type = type; update_('whs', ex); }
+  else append_('whs', [{ code, name: String(p.name || '').trim(), type, kind: String(p.kind || '').trim() }]);
   return true;
 }
 /** 庫別（倉庫、生產地點、委外廠商）改代號：庫存、異動紀錄、品號、工單、銷貨、報工等用到的地方全部一起換 */
 const WH_REFS_ = [['stock', 'whId'], ['txns', 'whCode'], ['txns', 'toWhCode'], ['counts', 'whCode'], ['items', 'mainWh'], ['wos', 'whIn'], ['wos', 'site'], ['woMats', 'whOut'],
-  ['woOps', 'vendor'], ['woOut', 'vendor'], ['woReports', 'site'], ['sales', 'whId'], ['salesLines', 'whId'], ['ops', 'site']];
+  ['woOps', 'vendor'], ['woOut', 'vendor'], ['woReports', 'site'], ['sales', 'whId'], ['salesLines', 'whId'], ['ops', 'site'], ['pallets', 'whId'], ['repacks', 'whId'], ['users', 'defWh']];
 function renameWh_(u, p) {
   const from = String(p.from || '').trim(), to = String(p.to || '').trim();
   if (!from || !to) throw new Error('請填新的代號。'); if (from === to) return { count: 0 };
@@ -1012,6 +1012,9 @@ function renameWh_(u, p) {
   const pm = perms_(u); const t = w.type || '倉庫';
   if (!pm.admin && !((pm.plan || pm.prodLead) && (t === '生產' || t === '委外'))) throw new Error('倉庫庫別只有管理員可以改代號。');
   let n = 0; WH_REFS_.forEach(([k, f]) => { n += replaceCol_(k, f, from, to); });
+  // 帳號的「可異動庫別」是逗號分隔的清單，逐一換
+  readAll_('users').forEach(x => { const L = String(x.whAllow || '').split(',').map(c => c.trim()).filter(Boolean);
+    if (L.includes(from)) { x.whAllow = L.map(c => c === from ? to : c).join(','); update_('users', x); n++; } });
   w.code = to; update_('whs', w);
   return { count: n };
 }

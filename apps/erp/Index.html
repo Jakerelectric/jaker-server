@@ -1311,12 +1311,14 @@ nav.tabs [data-tab].g-off{display:none}
       </div>
       <div class="panel">
         <h3>庫別</h3>
-        <div class="tbl-wrap"><table><thead><tr><th>庫別代號</th><th>庫別名稱</th><th>類型</th><th class="r">品號數</th><th class="r">庫存數量</th><th></th></tr></thead><tbody id="whRows"></tbody></table></div>
+        <div class="tbl-wrap"><table><thead><tr><th>庫別代號</th><th>庫別名稱</th><th>類型</th><th>性質</th><th class="r">品號數</th><th class="r">庫存數量</th><th></th></tr></thead><tbody id="whRows"></tbody></table></div>
         <div class="form-grid" style="margin-top:12px">
           <label class="f">庫別代號<input id="whCode" placeholder="例：A01"></label>
           <label class="f">庫別名稱<input id="whName" placeholder="例：原料倉"></label>
           <label class="f">類型<select id="whType"><option value="倉庫">倉庫</option><option value="生產">生產地點（產線、課別）</option><option value="委外">委外廠商</option></select></label>
+          <label class="f">性質（選填）<input id="whKind" list="whKindList" placeholder="例：正式倉・室內、暫放區"></label>
         </div>
+        <datalist id="whKindList"><option value="正式倉・室內"></option><option value="正式倉・戶外"></option><option value="收貨、檢驗區"></option><option value="戶外"></option><option value="暫放區"></option></datalist>
         <div class="row" style="margin-top:10px"><button class="btn primary" id="whAdd">新增庫別</button></div>
         <div id="whMsg"></div>
       </div>
@@ -3487,9 +3489,11 @@ function renderWhTable(){
   $("whRows").innerHTML = S.whs.length ? S.whs.map(w => {
     const st = S.stock.filter(s=>s.whId===w.id && Number(s.qty));
     return `<tr><td class="mono"><span class="row" style="flex-wrap:nowrap;gap:4px"><span data-whcodeview="${esc(w.id)}">${esc(w.code)}</span><button class="btn sm" data-whren="${esc(w.id)}" title="改代號">改代號</button></span></td><td><span class="row" style="flex-wrap:nowrap"><input id="whn-${esc(w.id)}" value="${esc(w.name||"")}" style="min-width:110px"><button class="btn sm" data-whsave="${esc(w.id)}">存</button></span></td>
-      <td><select data-whtype="${esc(w.id)}">${["倉庫","生產","委外"].map(t => `<option value="${t}" ${(w.type||"倉庫")===t?"selected":""}>${WH_TYPE_LABEL[t]}</option>`).join("")}</select></td><td class="r num">${fmt(st.length)}</td><td class="r num">${fmt(st.reduce((s,x)=>s+Number(x.qty),0))}</td>
+      <td><select data-whtype="${esc(w.id)}">${["倉庫","生產","委外"].map(t => `<option value="${t}" ${(w.type||"倉庫")===t?"selected":""}>${WH_TYPE_LABEL[t]}</option>`).join("")}</select></td><td><input data-whkind="${esc(w.id)}" value="${esc(w.kind||"")}" list="whKindList" style="min-width:120px" placeholder="—"></td><td class="r num">${fmt(st.length)}</td><td class="r num">${fmt(st.reduce((s,x)=>s+Number(x.qty),0))}</td>
       <td>${st.length || S.items.some(i=>i.mainWh===w.id) ? '<span class="muted" style="font-size:12px">使用中</span>' : `<button class="btn sm danger" data-whdel="${esc(w.id)}">刪除</button>`}</td></tr>`;
-  }).join("") : `<tr><td colspan="6"><div class="empty">尚未建立庫別。</div></td></tr>`;
+  }).join("") : `<tr><td colspan="7"><div class="empty">尚未建立庫別。</div></td></tr>`;
+  $("whRows").querySelectorAll("[data-whkind]").forEach(el => el.addEventListener("change", async () => {
+    try{ await busy(() => call("saveWh", { code:el.dataset.whkind, kind:el.value })); await refresh(); msg("whMsg", `${el.dataset.whkind} 的性質已更新。`); }catch(err){ msg("whMsg", err.message, "err"); } }));
   $("whRows").querySelectorAll("[data-whren]").forEach(b => b.addEventListener("click", () => {
     const id = b.dataset.whren; const cell = b.parentNode;
     cell.innerHTML = `<input value="${esc(id)}" style="width:130px" data-whnew><button class="btn sm primary" data-whok>確定</button><button class="btn sm" data-whcancel>取消</button>`;
@@ -3511,7 +3515,7 @@ function renderWhTable(){
 $("whAdd").addEventListener("click", async () => {
   const code = $("whCode").value.trim(), name = $("whName").value.trim();
   if (!code) return msg("whMsg","請輸入庫別代號。","err");
-  try{ await busy(() => call("saveWh", { code, name, type:$("whType").value, isNew:true })); $("whCode").value=""; $("whName").value=""; await refresh(); msg("whMsg",`已新增庫別 ${code}。`); }
+  try{ await busy(() => call("saveWh", { code, name, type:$("whType").value, kind:$("whKind").value.trim(), isNew:true })); $("whCode").value=""; $("whName").value=""; $("whKind").value=""; await refresh(); msg("whMsg",`已新增庫別 ${code}。`); }
   catch(err){ msg("whMsg", err.message, "err"); }
 });
 
