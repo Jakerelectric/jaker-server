@@ -116,6 +116,18 @@ dialog::backdrop{background:rgba(10,15,30,.5)}
 .bars .fill{height:100%;background:var(--accent)}
 .stack{display:flex;flex-direction:column;gap:24px}
 @media (prefers-reduced-motion:no-preference){.fill,.bar-meter span{transition:width .4s ease}}
+/* 手機：表頭不固定、縮小，分頁列貼齊上緣；表單勾選項目文字不要掉到下一行 */
+@media (max-width:640px){
+  header.top{position:static}
+  nav.tabs{top:env(safe-area-inset-top,0px)}
+  header .bar{gap:6px 10px;padding-block:8px}
+  .brand{font-size:17px}.brand small{font-size:11px;margin-left:6px;letter-spacing:.04em}
+  header .who{margin-left:0;width:100%;flex-wrap:nowrap;gap:6px}
+  header .who #who{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  main{padding-block:16px 48px}
+  .sec-head .tools{margin-left:0}
+}
+.f label.row{flex-wrap:nowrap;align-items:flex-start}.f label.row>input[type=checkbox]{flex:none;margin-top:4px}
 
 [hidden]{display:none!important}
 .auth-box{max-width:400px;margin:8vh auto;padding:28px;background:var(--surface);border:1px solid var(--line);border-radius:8px}
@@ -182,6 +194,7 @@ nav.tabs [data-tab].g-off{display:none}
 .scan-box{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;padding:14px;border:2px solid var(--accent);border-radius:6px;background:var(--accent-soft)}
 #scanInput:focus{outline:3px solid var(--accent)}
 </style>
+
 </head>
 <body>
 <!-- 登入 / 首次設定 -->
@@ -1641,7 +1654,9 @@ nav.tabs [data-tab].g-off{display:none}
       <label class="f">姓名<input id="usName" required></label>
       <label class="f">部門<select id="usOrgDept"></select></label>
       <label class="f" id="usUnitWrap">單位（課／組）<select id="usOrgUnit"></select></label>
+      <label class="f" id="usTitleWrap">職務<select id="usTitle"><option value="">一般人員</option><option>課長</option><option>組長</option></select></label>
       <input type="hidden" id="usDept">
+      <label class="f">預設庫別<select id="usDefWh"></select><span class="muted" style="font-size:12px">登入後庫存、出入庫、盤點先顯示這個庫別（還是可以切換）</span></label>
       <label class="f">角色<select id="usRole"><option value="user">一般</option><option value="viewer">檢視</option><option value="admin">管理員</option><option value="staff">刷卡人員（不能登入）</option></select></label>
       <label class="f">狀態<select id="usActive"><option value="是">啟用</option><option value="否">停用</option></select></label>
       <div class="f span2"><span>職能（決定看得到哪些分頁）</span><span class="row" style="gap:16px;margin-top:6px">
@@ -1651,7 +1666,7 @@ nav.tabs [data-tab].g-off{display:none}
         <label class="row" style="font-size:14px"><input type="checkbox" id="usPermProd"> 生產：開工單、領料、完工入庫、報工</label>
         <label class="row" style="font-size:14px"><input type="checkbox" id="usPermLead"> 生產主管：審核報工（自己報的直接核准）</label>
         <label class="row" style="font-size:14px"><input type="checkbox" id="usPermPlan"> 生管：開工單、指定生產地點與委外、登記委外送出／收回</label></span>
-        <span class="muted" style="font-size:12px;margin-top:4px">一個都沒勾的一般帳號視為「倉庫」。管理員不用勾，全部都看得到。</span></div>
+        <span class="muted" style="font-size:12px;margin-top:4px" id="usPermHint">選部門／課組／職務時會自動勾建議的職能，可以再自己調整。一個都沒勾的一般帳號視為「倉庫」。管理員不用勾，全部都看得到。</span></div>
       <label class="f"><span id="usPwLab">密碼</span><input id="usPw" type="password" autocomplete="new-password"></label>
     </div>
     <div id="usDlgMsg"></div>
@@ -1711,9 +1726,20 @@ function usOrgUnits(sel){ const d = $("usOrgDept").value, us = ORG[d] || [];
   $("usUnitWrap").hidden = !d || !us.length;
   $("usOrgUnit").innerHTML = `<option value="">請選擇</option><option value="head">${ORG_HEAD.head}（不用選課／組）</option><option value="acting">${ORG_HEAD.acting}（不用選課／組）</option>` + us.map(u=>`<option>${esc(u)}</option>`).join("");
   if (sel != null) $("usOrgUnit").value = sel; usOrgSync(); }
+function usTitleOf(){ const u = $("usOrgUnit").value; if (!(ORG[$("usOrgDept").value]||[]).length) return "";
+  return u==="head" ? "部門主管" : u==="acting" ? "代理主管" : (u ? $("usTitle").value : ""); }
+/** 依部門／課組／職務自動勾建議的職能（只有管理員手動改選時才套用，打開舊帳號不會動） */
+function usSuggestPerms(){ const d = $("usOrgDept").value, u = $("usOrgUnit").value, t = usTitleOf(), boss = !!t, set = new Set();
+  if (d==="業務部") set.add("Sales");
+  if (d==="資材部") { if (u==="採購課") set.add("Mat"); else if (u==="生管課") set.add("Plan"); else if (u==="倉庫組") set.add("Wh"); else if (u==="head"||u==="acting") ["Mat","Plan","Wh"].forEach(x=>set.add(x)); }
+  if (d==="生產部") { set.add("Prod"); if (boss) set.add("Lead"); }
+  ["Sales","Mat","Wh","Prod","Lead","Plan"].forEach(k => $("usPerm"+k).checked = set.has(k));
+  const lab = { Sales:"業務", Mat:"採購", Wh:"倉庫", Prod:"生產", Lead:"生產主管", Plan:"生管" };
+  $("usPermHint").textContent = d ? (set.size ? "已依「" + $("usDept").value + (t ? "・" + t : "") + "」勾選：" + [...set].map(k=>lab[k]).join("、") + "。可以再自己調整。" : "這個單位沒有預設職能，請依實際工作勾選；一個都沒勾的一般帳號視為「倉庫」。") : ""; }
 function usOrgSync(){ const d = $("usOrgDept").value, u = $("usOrgUnit").value, us = ORG[d] || [];
+  $("usTitleWrap").hidden = !(us.length && u && u!=="head" && u!=="acting");
   $("usDept").value = !d ? (($("usOrgDept").selectedOptions[0]||{}).dataset||{}).legacy || "" : (!us.length || u==="head" || u==="acting" || !u ? d : u); }
-function usOrgSet(v, title){ const o = orgOf(v); if (o.unit==="head" && title==="代理主管") o.unit = "acting";
+function usOrgSet(v, title){ const o = orgOf(v); if (o.unit==="head" && title==="代理主管") o.unit = "acting"; $("usTitle").value = ["課長","組長"].includes(title) ? title : "";
   $("usOrgDept").innerHTML = `<option value="">${o.legacy ? "（原設定：" + esc(o.legacy) + "，請重新選擇）" : "請選擇"}</option>` + Object.keys(ORG).map(d=>`<option>${esc(d)}</option>`).join("");
   if (o.legacy) $("usOrgDept").options[0].dataset.legacy = o.legacy;
   $("usOrgDept").value = o.dept; usOrgUnits(o.unit); }
@@ -1922,6 +1948,7 @@ function fillSelect(sel, opts){
   el.innerHTML = opts.map(([val,lab]) => `<option value="${esc(val)}">${esc(lab)}</option>`).join("");
   if (opts.some(o=>o[0]===v)) el.value = v;
 }
+let WH_DEF_APPLIED = null;
 function renderWhSelects(){
   const list = S.whs.map(w => [w.id, `${w.code} ${w.name||""}`.trim()]);
   const none = [["","（請先建立庫別）"]];
@@ -1931,6 +1958,11 @@ function renderWhSelects(){
   fillSelect("ctWh", list.length ? list : none);
   fillSelect("mvWh", list.length ? list : none);
   fillSelect("mvToWh", list);
+  // 帳號有設預設庫別：登入後第一次載入時，庫存、出入庫紀錄、登記、盤點都先選這個庫別
+  const dw = S.user && S.user.defWh;
+  if (dw && S.whs.some(w => w.id === dw) && WH_DEF_APPLIED !== S.user.id) {
+    WH_DEF_APPLIED = S.user.id; ["whFilter","mvWhFilter","mvWh","ctWh"].forEach(id => { $(id).value = dw; });
+  }
   fillSelect("itWh", [["","—"], ...list]);
 }
 const signed = t => { if (t.type==="xfer") return fmt(t.qty,2); const q = t.type==="out" ? -t.qty : t.qty; return (q>0?"+":"")+fmt(q,2); };
@@ -3379,7 +3411,7 @@ let editingUser = null;
 function openUser(id){
   const u = id ? S.users.find(x=>x.id===id) : null; editingUser = u;
   $("userDlgTitle").textContent = u ? `編輯帳號 ${u.id}` : "新增帳號";
-  $("usId").value = u?.id || ""; $("usId").readOnly = !!u; $("usName").value = u?.name || ""; usOrgSet(u?.dept || "", u?.title || "");
+  $("usId").value = u?.id || ""; $("usId").readOnly = !!u; $("usName").value = u?.name || ""; usOrgSet(u?.dept || "", u?.title || ""); fillSelect("usDefWh", [["","（不指定，看全部）"], ...S.whs.map(w => [w.id, `${w.code} ${w.name||""}`.trim()])]); $("usDefWh").value = u?.defWh || ""; $("usPermHint").textContent = "選部門／課組／職務時會自動勾建議的職能，可以再自己調整。一個都沒勾的一般帳號視為「倉庫」。管理員不用勾，全部都看得到。";
   $("usRole").value = u?.role || "user"; $("usActive").value = u?.active || "是"; $("usPw").value = "";
   $("usPermSales").checked = String(u?.perms||"").includes("業務"); $("usPermMat").checked = /採購|資材/.test(String(u?.perms||""));
   $("usPermWh").checked = String(u?.perms||"").includes("倉庫"); $("usPermLead").checked = String(u?.perms||"").includes("生產主管"); $("usPermPlan").checked = String(u?.perms||"").includes("生管"); $("usPermProd").checked = String(u?.perms||"").replace("生產主管","").includes("生產");
@@ -3395,13 +3427,14 @@ function usPwText(){
 $("usRole").addEventListener("change", usPwText);
 $("btnNewUser").addEventListener("click", () => openUser(null));
 $("usCancel").addEventListener("click", () => $("userDlg").close());
-$("usOrgDept").addEventListener("change", () => usOrgUnits(""));
-$("usOrgUnit").addEventListener("change", usOrgSync);
+$("usOrgDept").addEventListener("change", () => { $("usTitle").value = ""; usOrgUnits(""); usSuggestPerms(); });
+$("usOrgUnit").addEventListener("change", () => { $("usTitle").value = ""; usOrgSync(); usSuggestPerms(); });
+$("usTitle").addEventListener("change", usSuggestPerms);
 $("userForm").addEventListener("submit", async e => {
   e.preventDefault();
   if (!$("usOrgDept").value && !$("usDept").value) return msg("usDlgMsg","請選擇部門。","err");
   if ($("usOrgDept").value && (ORG[$("usOrgDept").value]||[]).length && !$("usOrgUnit").value) return msg("usDlgMsg","請選擇課／組，或選「部門主管」「代理主管」。","err");
-  const p = { id:$("usId").value.trim(), name:$("usName").value.trim(), dept:$("usDept").value.trim(), title:({head:"部門主管",acting:"代理主管"})[$("usOrgUnit").value] && ORG[$("usOrgDept").value]?.length ? ({head:"部門主管",acting:"代理主管"})[$("usOrgUnit").value] : "", role:$("usRole").value, active:$("usActive").value, pw:$("usPw").value, isNew:!editingUser,
+  const p = { id:$("usId").value.trim(), name:$("usName").value.trim(), dept:$("usDept").value.trim(), title:usTitleOf(), role:$("usRole").value, active:$("usActive").value, pw:$("usPw").value, defWh:$("usDefWh").value, isNew:!editingUser,
     perms:[$("usPermSales").checked?"業務":"", $("usPermMat").checked?"採購":"", $("usPermWh").checked?"倉庫":"", $("usPermProd").checked?"生產":"", $("usPermLead").checked?"生產主管":"", $("usPermPlan").checked?"生管":""].filter(Boolean).join(",") };
   if (!p.name) return msg("usDlgMsg","請輸入姓名。","err");
   try{ S.users = await busy(() => call("saveUser", p)); $("userDlg").close(); renderUsers(); msg("usMsg", p.isNew ? (p.role==="staff" ? `已新增刷卡人員 ${p.id}。` : `已新增帳號 ${p.id}，請把初始密碼告訴本人並請他登入後修改。`) : `已更新 ${p.id}。`); refresh(); }

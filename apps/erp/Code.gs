@@ -7,7 +7,7 @@
 // ---------- 分頁與欄位定義（key, 標題, 型別 s=文字 n=數字 d=日期文字） ----------
 const F = {
   users: [['id','員工ID','s'],['name','姓名','s'],['dept','單位','s'],['role','角色','s'],['active','啟用','s'],
-          ['hash','密碼雜湊','s'],['salt','鹽','s'],['createdAt','建立時間','s'],['lastLogin','最後登入','s'],['perms','職能(業務/採購/倉庫/生管/生產)','s'],['title','職務(部門主管/代理主管)','s']],
+          ['hash','密碼雜湊','s'],['salt','鹽','s'],['createdAt','建立時間','s'],['lastLogin','最後登入','s'],['perms','職能(業務/採購/倉庫/生管/生產)','s'],['title','職務(部門主管/代理主管/課長/組長)','s'],['defWh','預設庫別','s']],
   whs:   [['code','庫別代號','s'],['name','庫別名稱','s'],['type','類型','s']],  // 類型：倉庫 / 生產（生產地點）/ 委外（委外廠商）
   items: [['code','品號','s'],['name','品名','s'],['nameEn','英文品名','s'],['spec','規格','s'],['unit','庫存單位','s'],
           ['cat','類別','s'],['mainWh','主要庫別','s'],['safety','安全存量','n'],['cost','單位成本','n'],
@@ -459,7 +459,8 @@ function saveUser_(u, p) {
   if (ex && ex.id === u.id && (p.role !== 'admin' || p.active !== '是')) throw new Error('不能停用自己，或取消自己的管理員身分。');
   const rec = ex || { id, createdAt: nowStr_(), lastLogin: '' };
   rec.name = String(p.name || '').trim(); rec.dept = String(p.dept || '').trim(); rec.role = p.role; rec.active = p.active === '否' ? '否' : '是';
-  rec.title = ['部門主管', '代理主管'].includes(String(p.title || '')) ? String(p.title) : '';
+  rec.title = ['部門主管', '代理主管', '課長', '組長'].includes(String(p.title || '')) ? String(p.title) : '';
+  rec.defWh = String(p.defWh || '').trim();
   const pin = String(p.perms || '').replace(/資材/g, '採購');  // 舊名稱「資材」改叫「採購」
   rec.perms = ['業務', '採購', '倉庫', '生管', '生產主管', '生產'].filter(x => (x === '生產' ? pin.replace(/生產主管/g, '') : pin).indexOf(x) >= 0).join(',');
   if (!rec.name) throw new Error('請輸入姓名。');
