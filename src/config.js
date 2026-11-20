@@ -31,6 +31,7 @@ function loadConfig(root) {
     dataDir: path.resolve(root, env.DATA_DIR || 'data'),
     driveDir: env.DRIVE_DIR ? path.resolve(root, env.DRIVE_DIR) : '',   // 上傳檔案存放位置（預設 data\drive）
     lineEnabled: env.LINE_ENABLED === '1',
+    erpPublic: env.ERP_PUBLIC === '1',   // 進銷存預設只給內網；設 1 才開放經由通道從外網連
     lineSecret: env.LINE_CHANNEL_SECRET || '',   // 用來確認 Webhook 真的是 LINE 送來的
     curl: env.CURL || 'curl',
     adminApi: env.ADMIN_API || 'https://script.google.com/a/macros/jaker.com.tw/s/AKfycbzV_WQ7PIykmOIIF0Q-xrp_bxKaKiE195c_YB7qgvwvDINYWpKERU70uW__CpmgBbJV/exec',

@@ -16,6 +16,19 @@ const { loadErpSchema } = require('./erp-schema');
 
 async function setupErp(app, { cfg, ROOT, log, serial }) {
   const appDir = path.join(ROOT, 'apps', 'erp');
+
+  // 只給公司內網用：經由 Cloudflare 通道（work.jaker-ai.com）或其他外部轉址進來的請求一律擋掉
+  //   .env 設 ERP_PUBLIC=1 才會開放外網（目前決定不開）
+  const isPrivate = ip => { ip = String(ip || '').trim().replace(/^::ffff:/, '');
+    return ip === '::1' || /^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.)/.test(ip) || /^f[cd]/i.test(ip) || /^fe80:/i.test(ip); };
+  if (!cfg.erpPublic) {
+    app.use('/erp', (req, res, next) => {
+      const fwd = String(req.headers['x-forwarded-for'] || '').split(',').map(x => x.trim()).filter(Boolean);
+      const outside = req.headers['cf-connecting-ip'] || req.headers['cf-ray'] || !isPrivate(req.socket.remoteAddress) || fwd.some(ip => !isPrivate(ip));
+      if (outside) return res.status(403).type('text').send('進銷存系統只開放公司內網連線，請在公司用 http://主機IP:' + cfg.port + '/erp/ 開啟。');
+      next();
+    });
+  }
   const schema = loadErpSchema(appDir);
   const backupDir = path.join(cfg.dataDir, 'backups', 'erp');
   const store = cfg.store === 'file'

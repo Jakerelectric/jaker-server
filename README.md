@@ -86,6 +86,17 @@
 
 注意：系統寄信、自動翻譯在這個版本不會動作（只留紀錄）；`.env` 的 `APPS` 決定跑哪些系統（Mac 是 `erp`，公司 Windows 主機沒寫就是 `pm`）。
 
+## 進銷存放到公司主機（跟專案系統同一台、同一個服務）
+
+1. **筆電**：雙擊「**匯出進銷存資料.bat**」→ 桌面會出現「進銷存搬家資料-日期」資料夾（`erp-backup.json`＋附件）。
+   匯出後筆電的服務會停止，之後就不要再在筆電登錄資料。
+2. 把整個資料夾複製到公司主機。
+3. **公司主機**：先更新程式（網頁「系統更新」或 `update.bat`），再對「**啟用進銷存.bat**」按右鍵 →
+   「以系統管理員身分執行」，選 `erp-backup.json`。腳本會：`.env` 加 `APPS=pm,erp`、匯入資料到 MySQL（`erp_` 開頭的表）、
+   複製附件到 `data\erp-drive`、防火牆開放同網段、重新啟動 JakerServer，最後顯示同仁要輸入的網址 `http://主機IP:8080/erp/`。
+4. **只開放公司內網**：經由 Cloudflare 通道（work.jaker-ai.com）進來的 `/erp` 請求一律擋掉；
+   真的要開放外網才在 `.env` 加 `ERP_PUBLIC=1`（不建議）。專案系統 `/pm` 不受影響。
+
 ## 技術說明（給 IT）
 
 - Node.js（Express）＋ MySQL。原本 Apps Script 的程式碼（`apps\pm\Code.gs`、`Dashboard.html`）直接沿用，
