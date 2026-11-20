@@ -94,8 +94,9 @@
 3. **公司主機**：先更新程式（網頁「系統更新」或 `update.bat`），再對「**啟用進銷存.bat**」按右鍵 →
    「以系統管理員身分執行」，選 `erp-backup.json`。腳本會：`.env` 加 `APPS=pm,erp`、匯入資料到 MySQL（`erp_` 開頭的表）、
    複製附件到 `data\erp-drive`、防火牆開放同網段、重新啟動 JakerServer，最後顯示同仁要輸入的網址 `http://主機IP:8080/erp/`。
-4. **只開放公司內網**：經由 Cloudflare 通道（work.jaker-ai.com）進來的 `/erp` 請求一律擋掉；
-   真的要開放外網才在 `.env` 加 `ERP_PUBLIC=1`（不建議）。專案系統 `/pm` 不受影響。
+4. **外網**：腳本會問要不要開放外網。選「是」＝`.env` 寫 `ERP_PUBLIC=1`，跟專案系統一樣可以用
+   `https://work.jaker-ai.com/erp/` 從外面連；選「否」＝`ERP_PUBLIC=0`，經由 Cloudflare 通道進來的 `/erp` 一律擋掉，只限內網。
+   之後要改，直接改 `.env` 這一行再重新啟動 JakerServer 即可。專案系統 `/pm` 不受影響。
 
 ## 技術說明（給 IT）
 

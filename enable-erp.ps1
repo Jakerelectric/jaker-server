@@ -1,4 +1,4 @@
-﻿# 公司主機：開啟進銷存系統（跟專案系統同一個服務、同一個 MySQL）
+﻿# 公司主機：開啟進銷存系統（跟專案系統同一個服務、同一個 MySQL；可選擇是否開放外網）
 #   1. .env 加上 APPS=pm,erp     2. 匯入筆電匯出的 erp-backup.json（可略過，略過就是空白系統）
 #   3. 複製附件（erp-drive）       4. 防火牆允許同網段連線         5. 重新啟動 JakerServer
 #   用法：對「啟用進銷存.bat」按右鍵 →「以系統管理員身分執行」
@@ -22,9 +22,11 @@ Say '1/5 設定 .env（APPS=pm,erp）'
 $apps = @((Get-EnvValue 'APPS') -split '[,\s]+' | Where-Object { $_ })
 if (-not $apps.Count) { $apps = @('pm') }
 if ($apps -notcontains 'erp') { $apps += 'erp' }
-$new = @($lines | Where-Object { $_ -notmatch '^\s*APPS\s*=' }) + ('APPS=' + ($apps -join ','))
+$pub = Read-Host '要跟專案系統一樣開放外網（https://work.jaker-ai.com/erp/）嗎？(Y/n)'
+$pub = if ($pub -match '^[Nn]') { '0' } else { '1' }
+$new = @($lines | Where-Object { $_ -notmatch '^\s*(APPS|ERP_PUBLIC)\s*=' }) + ('APPS=' + ($apps -join ',')) + ('ERP_PUBLIC=' + $pub)
 [IO.File]::WriteAllLines($EnvFile, $new, (New-Object Text.UTF8Encoding $false))
-Write-Host ('APPS=' + ($apps -join ','))
+Write-Host ('APPS=' + ($apps -join ',') + '　ERP_PUBLIC=' + $pub + $(if ($pub -eq '1') { '（內網＋外網）' } else { '（只限內網）' }))
 
 Say '2/5 停止服務'
 Stop-ScheduledTask -TaskName 'JakerServer' -ErrorAction SilentlyContinue
@@ -64,8 +66,9 @@ for ($i = 0; $i -lt 30; $i++) {
 if (-not $ok) { Fail '服務沒有啟動，請把 data\logs\server.log 最後幾行傳給 Claude。' }
 $ips = @(Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.IPAddress -notmatch '^(127\.|169\.254\.)' -and $_.PrefixOrigin -ne 'WellKnown' } | Select-Object -ExpandProperty IPAddress)
 Write-Host ''
-Write-Host '完成！進銷存系統已開啟（只限公司內網）。' -ForegroundColor Green
-Write-Host '同仁在公司電腦的瀏覽器輸入：'
+Write-Host ('完成！進銷存系統已開啟' + $(if ($pub -eq '1') { '（內網＋外網）' } else { '（只限公司內網）' }) + '。') -ForegroundColor Green
+Write-Host '在公司：'
 foreach ($ip in $ips) { Write-Host "   http://${ip}:$port/erp/" -ForegroundColor Yellow }
+if ($pub -eq '1') { Write-Host '在外面（手機、家裡）：'; Write-Host '   https://work.jaker-ai.com/erp/' -ForegroundColor Yellow }
 Write-Host '用行政服務的員工編號＋密碼登入；第一次登入的同仁要先由管理員在「帳號」裡開權限。'
 Read-Host '按 Enter 結束'
