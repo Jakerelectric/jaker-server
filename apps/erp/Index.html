@@ -679,7 +679,7 @@ nav.tabs [data-tab].g-off{display:none}
       </div>
       <label class="row" style="font-size:14px;gap:6px;margin-top:8px"><input type="checkbox" id="wrNoWo" style="width:auto;margin:0"> 沒有工單（先記錄現在的生產情況：填品號和製程就能報工）</label>
       <datalist id="wrOpOptions"></datalist><datalist id="deptOptions"></datalist><datalist id="wrStationOptions"></datalist><datalist id="wrStOptions"></datalist>
-      <div class="muted" style="font-size:12px;margin-top:4px">前一站、下一站可以是同一個課／組，也可以是別的課／組；第一站的前一站可填「來料」或「倉庫組」，最後一站的下一站可填「入庫」或「出貨」。同一個品號＋製程報過一次，下次會自動帶入上次填的前後站。</div>
+      <div class="muted" style="font-size:12px;margin-top:4px">前一站、下一站可以是同一個課／組，也可以是別的課／組；送去外面加工時單位選「委外」、旁邊填廠商名稱；第一站的前一站可填「來料」或「倉庫組」，最後一站的下一站可填「入庫」或「出貨」。同一個品號＋製程報過一次，下次會自動帶入上次填的前後站。</div>
       <div class="muted" id="wrSplit" style="font-size:13px;margin-top:6px"></div>
       <div id="wrInfo" class="hint" hidden style="margin-top:10px"></div>
       <div class="row" style="margin-top:12px"><button class="btn primary" type="button" id="wrSubmit">送出報工</button>
@@ -4115,9 +4115,23 @@ $("wrWho").addEventListener("change", () => { const p = wrResolveWho(); if (p &&
 
 const ORG_UNITS = ["製造1課","製造2課","製造3課","組立課","廠務組","生管課","倉庫組","採購課","品管課","高壓組","設計課","客戶服務組"];
 function wrDeptOpts(){
-  $("deptOptions").innerHTML = [...new Set([...ORG_UNITS, ...S.people.map(p => p.dept), ...whOfType("生產").map(w => w.name || w.code), ...whOfType("委外").map(w => w.name || w.code), "來料", "入庫", "出貨"].filter(Boolean))]
-    .map(v => `<option value="${esc(v)}"></option>`).join("");
+  $("deptOptions").innerHTML = [...new Set([...ORG_UNITS, ...S.people.map(p => p.dept), ...whOfType("生產").map(w => w.name || w.code), "委外", "來料", "入庫", "出貨"].filter(Boolean))]
+    .map(v => `<option value="${esc(v)}">${v === "委外" ? "委外加工（下一格填廠商名稱）" : ""}</option>`).join("");
+  // 委外廠商：庫別裡的委外廠商＋以前報工填過的廠商名稱
+  const R = SD().woReports || [], vendorNames = new Set(whOfType("委外").map(w => w.name || w.code));
+  const used = R.flatMap(r => [r.prevDept === "委外" ? r.prevOp : "", r.nextDept === "委外" ? r.nextOp : "", vendorNames.has(r.prevDept) ? r.prevDept : "", vendorNames.has(r.nextDept) ? r.nextDept : ""]);
+  let dl = $("wrVendorOptions"); if (!dl){ dl = document.createElement("datalist"); dl.id = "wrVendorOptions"; document.body.appendChild(dl); }
+  dl.innerHTML = [...new Set([...vendorNames, ...used].filter(Boolean))].map(v => `<option value="${esc(v)}"></option>`).join("");
+  wrStSync();
 }
+/** 前一站／下一站：單位選「委外」時，旁邊那格改填委外廠商名稱；來料、入庫、出貨不用再填製程 */
+const WR_ST_FREE = ["來料", "入庫", "出貨"];
+function wrStSync(){
+  [["wrPrevDept","wrPrevOp"],["wrNextDept","wrNextOp"]].forEach(([d, o]) => { const v = $(d).value.trim(), el = $(o);
+    if (v === "委外"){ el.setAttribute("list", "wrVendorOptions"); el.placeholder = "委外廠商名稱（例：XX電鍍，可以直接打）"; }
+    else { el.setAttribute("list", "wrStOptions"); el.placeholder = WR_ST_FREE.includes(v) ? "（可以不填）" : "製程或工作站（填了單位就要填）"; } });
+}
+["wrPrevDept","wrNextDept"].forEach(id => ["input","change"].forEach(ev => $(id).addEventListener(ev, wrStSync)));
 /** 同一品號＋製程上次填的前後站、最終產品，自動帶入（只填空白的格子） */
 function wrRecall(){
   const w = wrWo(); const code = wrNoWo() ? (findItemFromInput($("wrItem").value)?.code || $("wrItem").value.trim().split(/\s+/)[0]) : w?.itemCode;
@@ -4126,6 +4140,7 @@ function wrRecall(){
   const last = (SD().woReports || []).filter(r => (r.itemCode || "") === (code || "") && (r.opName || "") === (op || "") && (!stn || r.station === stn) && (r.prevDept || r.prevOp || r.nextDept || r.nextOp || r.finalItem)).sort((a,b) => b.ts - a.ts)[0];
   if (!last) return;
   [["wrPrevDept","prevDept"],["wrPrevOp","prevOp"],["wrNextDept","nextDept"],["wrNextOp","nextOp"],["wrFinal","finalItem"]].forEach(([id, k]) => { if (!$(id).value && last[k]) $(id).value = last[k]; });
+  wrStSync();
 }
 ["wrItem","wrOpName","wrOp","wrWo","wrStation"].forEach(id => $(id).addEventListener("change", wrRecall));
 $("wrFinal").addEventListener("change", () => { const it = findItemFromInput($("wrFinal").value); if (it) $("wrFinal").value = `${it.code} ${it.name}`; });
@@ -4177,7 +4192,9 @@ $("wrSubmit").addEventListener("click", async () => {
   if (noWo && !$("wrItem").value.trim() && !$("wrOpName").value.trim() && !$("wrStation").value.trim() && !$("wrFinal").value.trim())
     return msg("wrMsg","沒有工單時，生產品號、製程、工作站、最終產品至少填一項，才知道做的是什麼。","err");
   for (const [d, o, lab] of [["wrPrevDept","wrPrevOp","前一站"],["wrNextDept","wrNextOp","下一站"]]){
-    if ($(d).value.trim() && !$(o).value.trim()) return msg("wrMsg", `${lab}填了單位，請再填製程或工作站（同一個課組裡可能有好幾站）。`, "err"); }
+    const dv = $(d).value.trim();
+    if (dv === "委外" && !$(o).value.trim()) return msg("wrMsg", `${lab}是委外，請填委外廠商名稱。`, "err");
+    if (dv && !WR_ST_FREE.includes(dv) && !$(o).value.trim()) return msg("wrMsg", `${lab}填了單位，請再填製程或工作站（同一個課組裡可能有好幾站）。`, "err"); }
   if (team.some(x => !x.id && !x.dept)) return msg("wrMsg","沒建檔的報工人員，請在名單上填他的單位（課／組）。","err");
   if (!noWo){
     if (!w) return msg("wrMsg","請選擇工單；還沒有工單的話，勾選下方「沒有工單」。","err");
