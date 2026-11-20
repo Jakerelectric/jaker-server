@@ -654,6 +654,17 @@ nav.tabs [data-tab].g-off{display:none}
   </dialog>
   <section id="tab-wr" hidden>
     <div class="sec-head"><h2>報工</h2></div>
+    <details class="hint" id="wrHelp" style="margin:0 0 12px">
+      <summary style="cursor:pointer;font-weight:600">使用說明（第一次用請看）</summary>
+      <ol style="margin:8px 0 4px;padding-left:20px;line-height:1.8">
+        <li><b>報工人員</b>：刷員工證，或打姓名後按 Enter。好幾個人一起做的，連續刷完再一起報。</li>
+        <li><b>有工單</b>：刷或輸入工單號，再從「製程」選這次做的是哪一道。<br><b>沒有工單</b>（目前大部分的情況）：勾下方「沒有工單」，改填<b>生產品號</b>和<b>製程</b>，系統沒有的可以直接打。</li>
+        <li><b>生產地點、工作站</b>：在哪一課哪一線、哪台機器做的（選填）。</li>
+        <li><b>前一站／下一站</b>：貨從哪裡來、做完送去哪裡。內部的選課組＋製程；送外面加工選「委外」＋廠商名稱；第一站可填「來料」，最後一站可填「入庫」或「出貨」。同一品號＋製程報過一次，下次會自動帶入。</li>
+        <li><b>工時、良品數、不良數</b>：有不良要選不良原因。這道製程整個做完了，勾「本製程完工」。</li>
+        <li>按<b>送出報工</b>。下方可以查這段期間的報工紀錄，生產一覽會自動畫出生產流程。</li>
+      </ol>
+    </details>
     <div class="panel" style="margin-bottom:18px">
       <div class="person-box" id="wrPerson"></div>
       <div class="form-grid">
@@ -4150,7 +4161,7 @@ opBind("wrOpName", { station:"wrStation", hint:"wrOpHint" }); opBind("wrStation"
 $("wrSite").addEventListener("change", () => { const w = siteFind($("wrSite").value); if (w){ $("wrSite").value = w.name || w.code; $("wrSite").dataset.code = w.code; } else delete $("wrSite").dataset.code; });
 $("wrSite").addEventListener("input", () => delete $("wrSite").dataset.code); opBind("wrPrevOp", { dept:"wrPrevDept" }); opBind("wrNextOp", { dept:"wrNextDept" });
 function wrModeUI(){ document.querySelectorAll("[data-wrwo]").forEach(el => el.hidden = wrNoWo()); document.querySelectorAll("[data-wrnowo]").forEach(el => el.hidden = !wrNoWo()); wrInfo(); }
-$("wrNoWo").addEventListener("change", wrModeUI);
+$("wrNoWo").addEventListener("change", () => { try{ localStorage.setItem("wr.noWo", wrNoWo() ? "1" : "0"); }catch(e){} wrModeUI(); });
 $("wrItem").addEventListener("change", () => { const it = findItemFromInput($("wrItem").value); if (it) $("wrItem").value = `${it.code} ${it.name}`; });
 function wrSiteOpts(){
   $("siteOptions").innerHTML = SITES().map(w => `<option value="${esc(w.code)} ${esc(w.name||"")}">${w.type === "委外" ? "委外廠商" : "生產地點"}</option>`).join("")
@@ -4164,7 +4175,7 @@ function wrWo(){ if (wrNoWo()) return null; const no = orderNoOf($("wrWo").value
 function wrFillOps(){
   const w = wrWo(); const ops = w ? woOpsOf(w.no) : [];
   const keep = $("wrOp").value;
-  $("wrOp").innerHTML = ops.length ? ops.map(o => `<option value="${esc(o.lid)}">${o.seq}. ${esc(o.name)}</option>`).join("") : `<option value="">${w ? "這張工單還沒設定製程" : "先選工單"}</option>`;
+  $("wrOp").innerHTML = ops.length ? ops.map(o => `<option value="${esc(o.lid)}">${o.seq}. ${esc(o.name)}</option>`).join("") : `<option value="">${w ? "這張工單還沒設定製程" : "先選工單（沒有工單請勾下方「沒有工單」）"}</option>`;
   if (ops.some(o => o.lid === keep)) $("wrOp").value = keep;
   if (w && w.site && !$("wrSite").value){ $("wrSite").value = siteName(w.site); $("wrSite").dataset.code = w.site; }
   wrInfo();
@@ -4245,8 +4256,13 @@ function renderWRRoutes(L){
         <td class="r num">${x.n}</td><td class="r num">${fmt(x.good,2)}</td><td class="r num">${yieldTxt(x.good, x.bad)}</td><td class="r num">${fmt(x.hours,2)} h</td><td class="r num">${x.hours ? fmt(x.good / x.hours, 1) : "—"}</td></tr>`).join("")}
       </tbody></table></div></div>`; }).join("") : `<div class="empty" style="padding:12px">這段期間還沒有報工。報工時填「前一站」「下一站」和「最終產品」，這裡就會整理出每個產品的生產路線。</div>`;
 }
+let WR_MODE_INIT = false;
 function renderWR(){
   if (!$("wrDate").value) $("wrDate").value = today();
+  if (!WR_MODE_INIT){ WR_MODE_INIT = true;   // 第一次打開：沒有進行中的工單就預設「沒有工單」；之後記住使用者上次的選擇
+    let saved = null; try{ saved = localStorage.getItem("wr.noWo"); }catch(e){}
+    const open = (SD().wos || []).some(w => ["未開工","生產中"].includes(w.status));
+    $("wrNoWo").checked = saved != null ? saved === "1" : !open; wrModeUI(); }
   if (!$("wrFrom").value){ const d = new Date(); d.setDate(d.getDate() - 6); $("wrFrom").value = d.toISOString().slice(0,10); $("wrTo").value = today(); }
   $("peopleOptions").innerHTML = S.people.map(p => `<option value="${esc(p.id)} ${esc(p.name)}">${esc(p.dept||"")}</option>`).join("");
   $("badReasons").innerHTML = [...new Set(["尺寸不良","外觀刮傷","螺牙不良","耐壓測試不良","組裝不良","材料不良", ...(SD().woReports||[]).map(r => r.badReason).filter(Boolean)])].map(x => `<option value="${esc(x)}"></option>`).join("");
