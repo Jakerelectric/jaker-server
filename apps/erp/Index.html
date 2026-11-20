@@ -136,7 +136,7 @@ dialog::backdrop{background:rgba(10,15,30,.5)}
 .toast{position:fixed;top:16px;left:50%;transform:translateX(-50%);background:#1e8e3e;color:#fff;padding:12px 22px;border-radius:6px;z-index:80;font-size:15px;font-weight:600;box-shadow:0 6px 20px rgba(0,0,0,.2)}
 .who{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .kpi-row{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px}@media(max-width:820px){.kpi-row{grid-template-columns:repeat(4,minmax(0,1fr))}}.kpi-row .kpi{min-width:0}.kpi-v{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.qty-step{display:flex;gap:4px;align-items:stretch;justify-content:flex-end}.qty-step input{width:80px;text-align:right;margin:0}.qty-step .btn{padding:0 10px;font-size:18px;line-height:1;min-width:36px}.sc-lbl{display:none}
+.qty-step{display:flex;gap:4px;align-items:stretch;justify-content:flex-end}.qty-step input{width:80px;text-align:right;margin:0}.qty-step .btn{padding:0 10px;font-size:18px;line-height:1;min-width:36px}.sc-lbl{display:none}.mp-l{display:none}
 @media (max-width:640px){
   .scan-tbl,.scan-tbl tbody,.scan-tbl tfoot{display:block;width:100%}
   .scan-tbl thead{display:none}
@@ -149,6 +149,12 @@ dialog::backdrop{background:rgba(10,15,30,.5)}
   .scan-tbl tbody tr:has(.empty){display:block}
   .scan-tbl tfoot tr{display:flex;gap:10px;align-items:baseline;padding:10px 4px}.scan-tbl tfoot th{border:0;padding:0}
   #scanStep,#mvQty{font-size:20px;height:50px}
+  .mp-tbl,.mp-tbl tbody,.mp-tbl tfoot{display:block;width:100%}.mp-tbl thead{display:none}
+  .mp-tbl tbody tr{display:grid;grid-template-columns:auto minmax(0,1fr) minmax(0,1fr);gap:6px 8px;padding:10px 4px;border-bottom:1px solid var(--line);align-items:center}
+  .mp-tbl tbody td{border:0;padding:0;text-align:left}.mp-tbl tbody td:nth-child(1){grid-row:span 3;font-size:16px;font-weight:600}
+  .mp-tbl tbody td:nth-child(1)::before{content:"第"}.mp-tbl tbody td:nth-child(1)::after{content:"板"}
+  .mp-tbl tbody td:nth-child(2){grid-column:span 2}.mp-tbl tbody td:nth-child(6){grid-column:2/4}
+  .mp-l{display:block;font-size:12px;color:var(--muted);margin-bottom:2px}.mp-tbl input{font-size:17px;height:46px;margin:0}.mp-tbl tfoot tr{display:flex;gap:10px;padding:10px 4px}.mp-tbl tfoot th{border:0;padding:0}
 }
 .scan-wrap{display:flex;gap:6px;align-items:stretch}.scan-wrap>input{flex:1;min-width:0}.scan-btn{padding:0 12px;font-size:18px;line-height:1;flex:none}
 .cam-dlg{width:min(520px,calc(100vw - 16px));padding:14px}.cam-view{width:100%;min-height:260px;background:#000;border-radius:8px;overflow:hidden}.cam-view video{width:100%!important;height:auto!important}
@@ -415,6 +421,18 @@ nav.tabs [data-tab].g-off{display:none}
               <thead><tr><th>來源庫別</th><th class="r">目前庫存</th><th class="r" style="width:130px">併入數量</th><th></th></tr></thead>
               <tbody id="mgRows"></tbody></table></div>
             <button type="button" class="btn sm" id="mgAdd" style="margin-top:8px">＋ 加入原有庫存</button>
+          </div>
+          <div id="mpWrap" style="margin-top:14px;border-top:1px dashed var(--line);padding-top:12px">
+            <div style="font-weight:500">同品號多板：同一個品號分好幾板入庫</div>
+            <p class="muted" style="font-size:13px;margin:4px 0 8px">上面填的是<b>第 1 板</b>（數量、包裝明細、棧板尺寸、重量）。其他板在這裡加，每一板各自一個批號、可以各自印標籤；包裝都一樣的話，用「照第 1 板再加」一次加好幾板。</p>
+            <div class="tbl-wrap" id="mpTbl" hidden><table class="mp-tbl">
+              <thead><tr><th>板</th><th style="width:190px">包裝明細（箱數×每箱）</th><th class="r" style="width:110px">數量</th><th style="width:150px">棧板尺寸</th><th class="r" style="width:100px">重量 kg</th><th></th></tr></thead>
+              <tbody id="mpRows"></tbody></table></div>
+            <div class="row" style="margin-top:8px;gap:8px;flex-wrap:wrap;align-items:center">
+              <button type="button" class="btn sm" id="mpAdd">＋ 加一板</button>
+              <span class="muted" style="font-size:13px">或</span>
+              <span class="row" style="gap:6px;align-items:center;flex-wrap:nowrap"><span style="font-size:13px">照第 1 板再加</span><input id="mpN" type="number" min="1" max="50" value="1" style="width:64px;margin:0"><span style="font-size:13px">板</span><button type="button" class="btn sm" id="mpCopy">加入</button></span>
+            </div>
           </div>
           <div id="mxWrap" style="margin-top:14px;border-top:1px dashed var(--line);padding-top:12px">
             <div style="font-weight:500">混裝板：同一個棧板上的其他品項</div>
@@ -2169,6 +2187,7 @@ function setMoveType(t){
   $("mvWhText").textContent = { in:"入庫庫別", out:"出庫庫別", xfer:"轉出庫別" }[t];
   $("mvToWrap").hidden = t!=="xfer";
   if ($("mxWrap")) $("mxWrap").hidden = t!=="in";
+  if ($("mpWrap")) $("mpWrap").hidden = t!=="in";
   if ($("mvLocWrap")) $("mvLocWrap").hidden = t==="out";
   $("mvLotWrap").hidden = t!=="out"; if (t!=="out") $("mvLotNo").value = ""; else mvLotOpts();
   onPurpose();
@@ -2334,6 +2353,34 @@ function renderMx(){
   MX.forEach((x,i) => mxName(i));
 }
 function mxName(i){ const it = findItemFromInput(MX[i].item), el = $("mxRows").querySelector(`[data-mxn="${i}"]`); if (el) el.textContent = it ? `${it.name||""}${it.spec?" · "+it.spec:""}` : (MX[i].item ? "找不到這個品號" : ""); }
+/* ---------- 同品號多板：每一板各自一筆入庫、各自一個批號 ---------- */
+const MP = [];
+function renderMp(){
+  $("mpTbl").hidden = !MP.length;
+  $("mpRows").innerHTML = MP.map((x,i) => `<tr><td class="mono">${i+2}</td>
+    <td><span class="mp-l">包裝明細</span><input data-mpp="${i}" value="${esc(x.pack)}" placeholder="例：10×18 + 1×7"></td>
+    <td class="r"><span class="mp-l">數量</span><input data-mpq="${i}" type="number" inputmode="decimal" min="0.0001" step="any" value="${esc(x.qty)}" style="text-align:right"></td>
+    <td><span class="mp-l">棧板尺寸</span><input data-mps="${i}" value="${esc(x.size)}" list="packOptions" placeholder="例：110*110*142"></td>
+    <td class="r"><span class="mp-l">重量 kg</span><input data-mpw="${i}" type="number" inputmode="decimal" min="0" step="any" value="${esc(x.wt)}" style="text-align:right"></td>
+    <td><button type="button" class="btn sm" data-mpd="${i}">移除</button></td></tr>`).join("");
+  const on = (k, f) => $("mpRows").querySelectorAll(`[data-${k}]`).forEach(el => el.addEventListener("input", () => f(MP[el.dataset[k]], el)));
+  on("mpp", (x, el) => { x.pack = el.value; const q = packQty(packParse(el.value)); if (q && (x.qty === "" || x.auto)){ x.qty = q; x.auto = true; $("mpRows").querySelector(`[data-mpq="${el.dataset.mpp}"]`).value = q; } mpSum(); });
+  on("mpq", (x, el) => { x.qty = el.value; x.auto = false; mpSum(); });
+  on("mps", (x, el) => { x.size = el.value; });
+  on("mpw", (x, el) => { x.wt = el.value; });
+  $("mpRows").querySelectorAll("[data-mpd]").forEach(b => b.addEventListener("click", () => { MP.splice(Number(b.dataset.mpd),1); renderMp(); }));
+  mpSum();
+}
+function mpSum(){ const box = $("mpTbl"); let f = box.querySelector("tfoot"); if (!MP.length){ if (f) f.remove(); return; }
+  const tot = round((Number($("mvQty").value)||0) + MP.reduce((s,x) => s + (Number(x.qty)||0), 0));
+  if (!f){ f = document.createElement("tfoot"); box.querySelector("table").appendChild(f); }
+  f.innerHTML = `<tr><th colspan="2">共 ${MP.length + 1} 板（含第 1 板）</th><th class="r num">${fmt(tot,2)}</th><th colspan="3"></th></tr>`; }
+const mpFirst = () => { const d = packData().d; return { pack:d.packLines || "", qty:$("mvQty").value || "", size:d.pack || "", wt:d.palletWt ?? "", auto:false }; };
+$("mpAdd").addEventListener("click", () => { MP.push({ pack:"", qty:"", size:mpFirst().size, wt:"", auto:false }); $("mvPack").open = true; renderMp(); const a = $("mpRows").querySelectorAll("[data-mpp]"); a[a.length-1].focus(); });
+$("mpCopy").addEventListener("click", () => { const n = Math.min(50, Math.max(1, Number($("mpN").value) || 1)), f = mpFirst();
+  if (!(Number(f.qty) > 0)) return msg("mvMsg", "請先填第 1 板的數量（和包裝明細），再照第 1 板加板。", "err");
+  for (let k = 0; k < n; k++) MP.push({ ...f }); $("mvPack").open = true; renderMp(); });
+$("mvQty").addEventListener("input", () => { if (MP.length) mpSum(); });
 $("mxAdd").addEventListener("click", () => { MX.push({ item:"", pack:"", qty:"", auto:false }); $("mvPack").open = true; renderMx(); const a = $("mxRows").querySelectorAll("[data-mxi]"); a[a.length-1].focus(); });
 $("moveForm").addEventListener("submit", async e => {
   e.preventDefault(); msg("mvMsg",""); $("mvLot").hidden = true;
@@ -2363,7 +2410,29 @@ $("moveForm").addEventListener("submit", async e => {
     const pk2 = packText(packParse(x.pack));
     extra.push(Object.assign({}, p, { itemId:it2.id, qty:q2, packLines:pk2, pack:"", palletWt:"", report:p.report||"" }));
   }
+  const mp = S.mvType==="in" ? MP.filter(x => String(x.pack).trim() || Number(x.qty)) : [];
   const mg = $("mgWrap").hidden ? [] : MG.filter(x => x.whId || Number(x.qty));
+  if (mp.length){
+    if (extra.length) return msg("mvMsg","「同品號多板」跟混裝板不能同時使用：混裝板請分開入庫。","err");
+    if (mg.length) return msg("mvMsg","「同品號多板」跟「一起包裝的原有庫存」不能同時使用。","err");
+    const plates = [p];
+    for (const [i,x] of mp.entries()){
+      const q2 = Number(x.qty); if (!(q2 > 0)) return msg("mvMsg",`第 ${i+2} 板請填數量。`,"err");
+      const o = Object.assign({}, p, { qty:q2, packLines: packText(packParse(x.pack)), pack: String(x.size||"").trim(), palletWt: x.wt === "" || x.wt == null ? "" : Number(x.wt) });
+      Object.keys(o).forEach(k => { if (o[k] === "") delete o[k]; }); plates.push(o);
+    }
+    const tot = round(plates.reduce((s,x) => s + Number(x.qty), 0));
+    if (!(await ask(`確認入庫 ${it.code} 共 ${plates.length} 板、合計 ${fmt(tot,2)} ${it.unit}（${plates.map(x => fmt(x.qty,2)).join(" ＋ ")}），入到 ${whLabel(whId)}？每一板各自一個批號。`))) return;
+    $("mvSubmit").disabled = true;
+    try{
+      const r = await busy(() => call("moveBatch", { moves: plates }));
+      $("mvQty").value=""; $("mvRef").value=""; $("mvNote").value=""; $("mvParty").value=""; $("mvLoc").value=""; locHint(); PK.forEach(id => $(id).value=""); setPack($("pkLines"), []); qtyAuto=false; $("pkHint").textContent="";
+      MP.length = 0; renderMp(); await refresh(); showMvLots(r.lots);
+      msg("mvMsg", `已入庫 ${it.code} 共 ${plates.length} 板、合計 ${fmt(tot,2)} ${it.unit}，${whLabel(whId)} 結存 ${fmt((r.results[r.results.length-1]||{}).after,2)}。`, "ok");
+    }catch(err){ msg("mvMsg", err.message, "err"); }
+    finally{ $("mvSubmit").disabled = !can("user"); }
+    return;
+  }
   if (mg.length){
     if (extra.length) return msg("mvMsg","「一起包裝的原有庫存」跟混裝板不能同時使用。","err");
     for (const x of mg){
