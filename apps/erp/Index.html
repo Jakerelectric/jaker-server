@@ -193,6 +193,11 @@ nav.tabs [data-tab].g-off{display:none}
 .person-box .btn{margin-left:auto}
 .scan-box{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;padding:14px;border:2px solid var(--accent);border-radius:6px;background:var(--accent-soft)}
 #scanInput:focus{outline:3px solid var(--accent)}
+.cam-view.cam-ok{animation:camOk .7s} .cam-view.cam-bad{animation:camBad .9s}
+@keyframes camOk{0%{box-shadow:0 0 0 6px #16a34a}100%{box-shadow:0 0 0 0 transparent}}
+@keyframes camBad{0%,60%{box-shadow:0 0 0 6px #dc2626}100%{box-shadow:0 0 0 0 transparent}}
+.cam-res{font-size:17px;font-weight:700;padding:10px 12px;border-radius:6px}
+.cam-res.ok{background:#dcfce7;color:#166534} .cam-res.bad{background:#fee2e2;color:#991b1b}
 </style>
 
 </head>
@@ -2428,13 +2433,18 @@ function parseScan(raw){
   const s = String(raw||"").trim().replace(/\s+/g,""); if (!s) return null;
   const m = s.match(/^(.+?)[*,;|](\d+(?:\.\d+)?)$/);
   const code = m ? m[1] : s, qty = m ? Number(m[2]) : null;
-  const it = itemByAny(code);
-  return { code, qty, it };
+  let it = itemByAny(code), lot = null;
+  if (!it){ const li = lotInfo(code) || lotInfo(code.toUpperCase()); if (li){ lot = li.lotNo; it = itemByAny(li.code); } }   // 批號標籤也能掃
+  return { code, qty, it, lot };
 }
+let BEEP_CTX = null;
+/** iPhone 只有在使用者點擊時建立的聲音才會響：按相機按鈕時先呼叫一次 */
+function beepUnlock(){ try{ BEEP_CTX ||= new (window.AudioContext||window.webkitAudioContext)(); if (BEEP_CTX.state === "suspended") BEEP_CTX.resume(); }catch(e){} }
 function beep(ok){
-  try{ const a = new (window.AudioContext||window.webkitAudioContext)(); const o = a.createOscillator(); const g = a.createGain();
-    o.frequency.value = ok ? 1200 : 300; g.gain.value = 0.08; o.connect(g); g.connect(a.destination); o.start(); o.stop(a.currentTime + (ok ? 0.08 : 0.3)); setTimeout(()=>a.close(), 500);
+  try{ beepUnlock(); const a = BEEP_CTX; const o = a.createOscillator(); const g = a.createGain();
+    o.frequency.value = ok ? 1200 : 300; g.gain.value = 0.15; o.connect(g); g.connect(a.destination); o.start(); o.stop(a.currentTime + (ok ? 0.12 : 0.35));
   }catch(e){}
+  try{ navigator.vibrate && navigator.vibrate(ok ? 80 : [60, 60, 60]); }catch(e){}
 }
 $("scanInput").addEventListener("keydown", e => {
   if (e.key !== "Enter") return;
@@ -2453,7 +2463,7 @@ $("scanInput").addEventListener("keydown", e => {
   const ex = SCAN.rows.find(x => x.itemId === r.it.id);
   if (ex){ ex.qty = round(ex.qty + step); SCAN.rows.splice(SCAN.rows.indexOf(ex),1); SCAN.rows.unshift(ex); }
   else SCAN.rows.unshift({ itemId:r.it.id, qty:step });
-  beep(true); msg("scanMsg", `${r.it.code} ${r.it.name}　+${fmt(step,2)}`);
+  beep(true); msg("scanMsg", `${r.it.code} ${r.it.name}　+${fmt(step,2)}${r.lot ? `（批號 ${r.lot}）` : ""}`);
   renderScan();
 });
 function renderScan(){
@@ -4733,19 +4743,29 @@ async function camStop(){ try{ if (CAM.qr && CAM.qr.isScanning) await CAM.qr.sto
 async function camStart(deviceId){
   await camStop();
   const F = window.Html5QrcodeSupportedFormats || {};
-  const fmts = ["QR_CODE","CODE_128","CODE_39","EAN_13","EAN_8","ITF","CODABAR","UPC_A","DATA_MATRIX"].map(k => F[k]).filter(v => v !== undefined);
+  // 只認公司用得到的格式（員工證 QR、品號／批號標籤 Code128、少數廠商條碼），格式越少辨識越快
+  const fmts = ["QR_CODE","CODE_128","CODE_39","EAN_13"].map(k => F[k]).filter(v => v !== undefined);
   CAM.qr = new Html5Qrcode("camView", { formatsToSupport: fmts.length ? fmts : undefined, verbose:false, experimentalFeatures:{ useBarCodeDetectorIfSupported:true } });
-  const w = Math.min(320, Math.round(($("camView").clientWidth || 320) * 0.8));
-  await CAM.qr.start(deviceId ? { deviceId:{ exact:deviceId } } : { facingMode:"environment" }, { fps:12, qrbox:{ width:w, height:Math.round(w * 0.7) }, aspectRatio:1.333 }, text => {
+  // 掃描框做寬一點（條碼是橫的），畫質提高、持續對焦，不做鏡像辨識（省一半時間）
+  const w = Math.min(420, Math.round(($("camView").clientWidth || 320) * 0.92));
+  const cam = deviceId ? { deviceId:{ exact:deviceId } } : { facingMode:"environment" };
+  await CAM.qr.start(cam, { fps:15, qrbox:{ width:w, height:Math.round(w * 0.55) }, aspectRatio:1.333, disableFlip:true,
+    videoConstraints:{ ...cam, width:{ ideal:1280 }, height:{ ideal:720 }, advanced:[{ focusMode:"continuous" }] } }, text => {
     const now = Date.now(); if (text === CAM.last && now - CAM.lastAt < 2000) return; CAM.last = text; CAM.lastAt = now; CAM.n++;
-    try{ navigator.vibrate && navigator.vibrate(80); }catch(e){}
-    camApply(CAM.target, String(text).trim());
-    $("camLog").innerHTML = `<span class="chip in">已讀取</span> <span class="mono">${esc(text)}</span>${CAM.n > 1 ? `　（本次共 ${CAM.n} 筆）` : ""}`;
-    if (!$("camCont").checked) setTimeout(() => $("camDlg").close(), 250);
+    text = String(text).trim();
+    const isScan = CAM.target && CAM.target.id === "scanInput";
+    camApply(CAM.target, text);
+    // 結果直接顯示在相機畫面上：綠＝已加入、紅＝找不到（出入庫掃描看「刷條碼」區的訊息）
+    const m = isScan ? $("scanMsg") : null, bad = !!(m && m.querySelector(".msg.err"));
+    const res = m && m.textContent.trim() ? m.textContent.trim() : "已讀取 " + text;
+    if (!isScan) beep(true);
+    $("camView").classList.remove("cam-ok", "cam-bad"); void $("camView").offsetWidth; $("camView").classList.add(bad ? "cam-bad" : "cam-ok");
+    $("camLog").innerHTML = `<div class="cam-res ${bad ? "bad" : "ok"}">${bad ? "✕" : "✓"} ${esc(res)}</div>` + (CAM.n > 1 ? `<div class="muted" style="margin-top:4px">本次已掃 ${CAM.n} 次</div>` : "");
+    if (!$("camCont").checked && !bad) setTimeout(() => $("camDlg").close(), 600);
   }, () => {});
 }
 async function openCam(target){
-  CAM.target = target; CAM.n = 0; CAM.last = ""; $("camLog").innerHTML = "";
+  beepUnlock(); CAM.target = target; CAM.n = 0; CAM.last = ""; $("camLog").innerHTML = "";
   $("camTitle").textContent = "掃描：" + ((target.closest("label")?.firstChild?.textContent || "").trim() || "條碼／QR Code");
   $("camCont").checked = target.id === "scanInput";   // 出入庫的刷條碼欄預設連續掃
   $("camMsg").textContent = "鏡頭啟動中…（第一次使用請允許瀏覽器使用相機）";
