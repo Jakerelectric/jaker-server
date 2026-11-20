@@ -591,6 +591,8 @@ nav.tabs [data-tab].g-off{display:none}
   <section id="tab-mods" hidden>
     <div class="sec-head"><h2>功能開關</h2><div class="tools"><button class="btn" id="mdDefault" type="button">恢復建議設定</button><button class="btn primary" id="mdSave" type="button">儲存</button></div></div>
     <p class="muted" style="margin-top:-8px">這套系統用來輔助鼎新 ERP：庫存、訂單、銷貨、生產以鼎新為準，不必在這裡重複輸入。用不到的功能在這裡關掉，所有人的畫面上就不會出現；資料和程式都還在，需要時再打開。</p>
+    <div class="panel" style="margin-bottom:12px"><b>系統版本</b>　<span id="verMods" class="mono">讀取中…</span>
+      <div class="muted" style="font-size:12px;margin-top:4px">要更新：用專案系統管理員打開 <a href="/pm/admin/update" target="_blank" rel="noopener">系統更新頁</a>，最新版本跟這裡不一樣時按「更新」。</div></div>
     <div id="mdMsg"></div>
     <div id="mdBody" class="md-grid"></div>
   </section>
@@ -1336,6 +1338,7 @@ nav.tabs [data-tab].g-off{display:none}
     <div id="usMsg"></div>
   </section>
 </main>
+<footer id="verInfo" class="muted" style="text-align:center;font-size:12px;padding:0 16px 24px"></footer>
 </div>
 
 <!-- 條碼標籤 -->
@@ -4911,6 +4914,15 @@ document.querySelectorAll("input[data-scan]").forEach(el => {
 });
 
 
+/* ---------- 系統版本：頁尾和「功能開關」都顯示主機目前跑的版本 ---------- */
+async function loadVer(){
+  if (location.protocol === "file:" || (window.google && google.script && google.script.run)) return;
+  try{ const h = await (await fetch(new URL("/healthz", location.href), { cache:"no-store" })).json();
+    const t = `版本 ${h.version || "?"}　·　啟動 ${h.started || "?"}`;
+    $("verInfo").textContent = "傑克電機進銷存　" + t; if ($("verMods")) $("verMods").textContent = t;
+  }catch(e){}
+}
+loadVer();
 /* ====================== 功能開關（管理員） ====================== */
 const MODS_REC_OFF = ["dash","report","wo","wr","pov","ops","codes"];
 let MD_OFF = null;
