@@ -4275,8 +4275,9 @@ function renderWRRoutes(L){
   L.filter(r => r.status !== "退回").forEach(r => {
     const key = r.finalItem || r.itemCode || "（未填品號）"; const g = by[key] || (by[key] = { key, items:new Set(), st:{} });
     if (r.itemCode) g.items.add(r.itemCode);
-    const sk = [r.itemCode, r.dept || "", r.opName, r.station || ""].join("|"); const x = g.st[sk] || (g.st[sk] = { code:r.opCode || OPS().find(o => o.name === r.opName)?.code || "", item:r.itemCode, dept:r.dept || "", op:[r.opName, r.station].filter(Boolean).join("｜") || "—", prev:{}, next:{}, good:0, bad:0, hours:0, n:0, sites:new Set() });
-    x.good += Number(r.good)||0; x.bad += Number(r.bad)||0; x.hours += Number(r.hours)||0; x.n++; if (r.site) x.sites.add(whById(r.site)?.name || r.site);
+    const un = povUnit(r);   // 本站單位＝生產地點（有填的話），沒填才用報工人員的單位
+    const sk = [r.itemCode, un, r.opName, r.station || ""].join("|"); const x = g.st[sk] || (g.st[sk] = { code:r.opCode || OPS().find(o => o.name === r.opName)?.code || "", item:r.itemCode, dept:un, op:[r.opName, r.station].filter(Boolean).join("｜") || "—", prev:{}, next:{}, good:0, bad:0, hours:0, n:0, sites:new Set() });
+    x.good += Number(r.good)||0; x.bad += Number(r.bad)||0; x.hours += Number(r.hours)||0; x.n++; if (r.dept && r.dept !== un) x.sites.add("報工人員單位：" + r.dept);
     const pv = stTxt(r.prevDept, r.prevOp), nx = stTxt(r.nextDept, r.nextOp); if (pv) x.prev[pv] = (x.prev[pv]||0) + 1; if (nx) x.next[nx] = (x.next[nx]||0) + 1;
   });
   const rq = ($("wrRouteQ").value || "").trim().toLowerCase();
