@@ -141,6 +141,8 @@ dialog::backdrop{background:rgba(10,15,30,.5)}
 .flow-group+.flow-group{margin-top:16px;padding-top:14px;border-top:1px dashed var(--line)}.flow-gh{margin-bottom:8px;font-size:14px}
 .pov-prods{display:flex;flex-wrap:wrap;gap:6px}.pov-prod{border:1px solid var(--line);background:var(--card,#fff);border-radius:999px;padding:5px 12px;font-size:13px;cursor:pointer;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:inherit}
 .pov-prod span{margin-left:6px;font-size:11px;color:var(--muted)}.pov-prod[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}.pov-prod[aria-pressed="true"] span{color:#fff;opacity:.85}
+/* 深色模式：下拉選單的選項（Windows 的 Chrome/Edge 預設白底）跟著主題 */
+select option, select optgroup{background-color:var(--surface);color:var(--fg)}
 .ver-banner{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:90;background:#1d4ed8;color:#fff;padding:10px 14px;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.25);display:flex;gap:10px;align-items:center;flex-wrap:wrap;width:min(560px,calc(100vw - 24px));font-size:14px}.ver-banner .btn{background:transparent;color:#fff;border-color:rgba(255,255,255,.6)}.ver-banner .btn.primary{background:#fff;color:#1d4ed8;border-color:#fff}
 .qty-step{display:flex;gap:4px;align-items:stretch;justify-content:flex-end}.qty-step input{width:80px;text-align:right;margin:0}.qty-step .btn{padding:0 10px;font-size:18px;line-height:1;min-width:36px}.sc-lbl{display:none}.mp-l{display:none}
 @media (max-width:640px){
@@ -545,7 +547,7 @@ nav.tabs [data-tab].g-off{display:none}
   <section id="tab-wo" hidden>
     <div class="sec-head"><h2>工單</h2>
       <div class="tools">
-        <input id="woSearch" type="search" placeholder="搜尋工單號、品號、訂單" style="width:220px">
+        <input id="woSearch" type="search" placeholder="搜尋工單號、品號、品名、訂單、課組（看板和清單一起篩）" style="width:320px">
         <button class="btn primary" id="woNew" data-prodbtn hidden>開立工單</button>
       </div>
     </div>
@@ -3750,9 +3752,10 @@ $("woStatusF").querySelectorAll("button").forEach(b => b.addEventListener("click
 $("woSearch").addEventListener("input", () => renderWOs());
 function renderWOs(){
   renderFlowAll();
-  const q = $("woSearch").value.trim().toLowerCase(); const td = today();
+  const q = $("woSearch").value.trim().toLowerCase(); const td = today(); const unit = $("flowUnit").value;
   const rows = (SD().wos || []).filter(w => (!WOF.st || (WOF.st === "open" ? ["未開工","生產中"].includes(w.status) : w.status === WOF.st)) &&
-      (!q || [w.no, w.itemCode, w.name, w.orderNo, w.note].some(v => String(v||"").toLowerCase().includes(q))))
+      (!unit || (w.site ? siteName(w.site) : "") === unit) &&
+      (!q || [w.no, w.itemCode, w.name, w.orderNo, w.note, w.site ? siteName(w.site) : ""].some(v => String(v||"").toLowerCase().includes(q))))
     .sort((a,b) => String(b.date).localeCompare(String(a.date)) || String(b.no).localeCompare(String(a.no)));
   $("woRows").innerHTML = rows.map(w => {
     const done = woDone(w.no), pct = Math.min(100, Math.round(done / (Number(w.qty)||1) * 100));
@@ -4051,7 +4054,8 @@ function renderFlowAll(){
   const unitOf = w => w.site ? siteName(w.site) : "";
   const units = [...new Set(base.map(unitOf).filter(Boolean))], keepU = $("flowUnit").value;
   $("flowUnit").innerHTML = `<option value="">全部課／組</option>` + units.map(u => `<option>${esc(u)}</option>`).join(""); if (units.includes(keepU)) $("flowUnit").value = keepU;
-  const unit = $("flowUnit").value, wos = base.filter(w => !unit || unitOf(w) === unit);
+  const q = $("woSearch").value.trim().toLowerCase();   // 上方的搜尋也套用到看板
+  const unit = $("flowUnit").value, wos = base.filter(w => (!unit || unitOf(w) === unit) && (!q || [w.no, w.itemCode, w.name, w.orderNo, w.note, unitOf(w)].some(v => String(v||"").toLowerCase().includes(q))));
   // 依成品分組：這張工單的報工有填「最終產品」就歸到那個成品（半成品工單也會跟成品放一起），沒有才用工單品號
   const fin = {}; (SD().woReports || []).forEach(r => { if (r.woNo && r.finalItem && r.status !== "退回"){ const m = fin[r.woNo] ||= {}; m[r.finalItem] = (m[r.finalItem] || 0) + 1; } });
   const prodOf = w => { const m = fin[w.no]; return m ? Object.entries(m).sort((a, b) => b[1] - a[1])[0][0] : (w.itemCode || "（未填品號）"); };
@@ -4066,7 +4070,7 @@ function renderFlowAll(){
   $("flowAll").innerHTML = !show.length ? flowHtml([], { empty: unit ? `${unit} 目前沒有進行中、且設定了製程的工單。` : "目前沒有進行中、且設定了製程的工單。" })
     : show.map(c => `<div class="flow-group"><div class="flow-gh"><b>${esc(lab(c))}</b><span class="muted">　${fmt(G[c].length)} 張工單：${G[c].slice(0, 6).map(w => esc(w.no)).join("、")}${G[c].length > 6 ? "…" : ""}</span></div>${flowHtml(flowStations(G[c], { from }), {})}</div>`).join("");
 }
-$("flowDays").addEventListener("change", renderFlowAll); $("flowUnit").addEventListener("change", () => { FLOW.prod = null; renderFlowAll(); });
+$("flowDays").addEventListener("change", renderFlowAll); $("flowUnit").addEventListener("change", () => { FLOW.prod = null; renderWOs(); });
 function renderFlowWo(){
   if (!WO.no || !woOpsOf(WO.no).length){ $("flowWo").innerHTML = ""; return; }
   $("flowWo").innerHTML = `<h3 style="margin:0 0 8px">流程圖</h3>` + flowHtml(flowStations([WO.doc]), {});
