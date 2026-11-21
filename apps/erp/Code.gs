@@ -390,6 +390,7 @@ const HANDLERS = {
   updateTxn:   ['admin', updateTxn_, true],
   setSafety:   ['admin', setSafety_, true],
   mergeItem:   ['admin', mergeItem_, true],
+  recalcBal:   ['admin', recalcBalH_, true],
   renameItems: ['admin', renameItems_, true],
   saveEnglish: ['admin', saveEnglish_, true],
   salesLoad:   ['viewer', salesLoad_],
@@ -921,8 +922,27 @@ function mergeItem_(u, p) {
   const cis = readAll_('costItems'); const cf = cis.find(x => x.code === from.code);
   if (cf) { if (cis.some(x => x.code === into.code)) deleteRow_('costItems', cf); else { cf.code = into.code; update_('costItems', cf); } }
   syncCostItems_(); BOMC_CACHE_ = null; syncBomCosts_();
+  recalcBalances_(into.code);   // 兩個品號的紀錄合在一起後，結存要重算
   return { into: into.code, alias: into.alias };
 }
+/** 重算某品號異動紀錄的「結存」快照：以目前庫存為準，依日期、建立時間從最新一筆往回推（合併品號後舊紀錄的結存會亂掉） */
+function recalcBalances_(code) {
+  const stock = readAll_('stock').filter(r => r.itemId === code); const cur = {};
+  stock.forEach(r => { cur[r.whId] = round_((cur[r.whId] || 0) + (Number(r.qty) || 0)); });
+  const T = readAll_('txns').filter(t => t.itemCode === code)
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)) || (Number(b.ts) || 0) - (Number(a.ts) || 0) || String(b.id).localeCompare(String(a.id)));
+  let n = 0;
+  T.forEach(t => {
+    const q = Number(t.qty) || 0, w = t.whCode, tw = t.toWhCode; const bal = cur[w] || 0; let tbal = '';
+    // 這筆之後的結存＝目前推回來的值；再把這筆的影響扣回去，得到這筆之前的結存
+    if (t.typeLabel === '調撥') { tbal = cur[tw] || 0; cur[w] = round_(bal + q); cur[tw] = round_(tbal - q); }
+    else if (t.typeLabel === '出庫') cur[w] = round_(bal + q);
+    else cur[w] = round_(bal - q);   // 入庫、調整（調整的數量本身有正負）
+    if (Number(t.balance) !== bal || (t.typeLabel === '調撥' && Number(t.toBalance) !== tbal)) { t.balance = bal; if (t.typeLabel === '調撥') t.toBalance = tbal; update_('txns', t); n++; }
+  });
+  return { code, changed: n, total: T.length };
+}
+function recalcBalH_(u, p) { const code = String(p.code || '').trim(); if (!readAll_('items').some(i => i.code === code)) throw new Error('找不到品號 ' + code); return recalcBalances_(code); }
 /** 料號對照整批換號：rows = [{ old, new }]。新料號不存在 → 改號並把舊料號放進別名；新料號已是另一個品號 → 合併 */
 function renameItems_(u, p) {
   const rows = (p.rows || []).map(r => ({ o: String(r.old || '').trim(), n: String(r.new || '').trim() })).filter(r => r.o && r.n);

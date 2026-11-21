@@ -1434,6 +1434,7 @@ nav.tabs [data-tab].g-off{display:none}
     <div class="row" style="margin-top:16px">
       <button class="btn primary" type="submit" id="itSave">儲存</button>
       <button class="btn" type="button" id="itCancel">關閉</button>
+      <button class="btn" type="button" id="itRecalc" data-admin title="以目前庫存為準，重新推算這個品號每筆異動的結存（合併品號後用）">重算結存</button>
       <span style="flex:1"></span>
       <button class="btn danger" type="button" id="itDel" hidden>刪除品號</button>
     </div>
@@ -2753,6 +2754,11 @@ const LABEL_CSS = `.lbl-lot .ll-top{display:flex;justify-content:space-between;g
 
 /* ---------- item dialog ---------- */
 let editingId = null;
+$("itRecalc").addEventListener("click", async () => {
+  const it = editingId ? itemById(editingId) : null; if (!it) return;
+  try{ const r = await busy(() => call("recalcBal", { code: it.code })); await refresh(); msg("itMsg", `已重算 ${it.code} 的結存：共 ${r.total} 筆紀錄，修正 ${r.changed} 筆。`, "ok"); }
+  catch(err){ msg("itMsg", err.message, "err"); }
+});
 function openItem(id){
   setTimeout(() => presCtx(id ? "item:"+id : ""), 0);
   editingId = id || null;
@@ -2780,7 +2786,7 @@ function openItem(id){
     const h = S.txns.filter(t=>t.itemId===it.id).slice(0,10);
     $("itemHist").innerHTML = h.length ? h.map(t=>`<tr><td class="mono">${esc(t.date)}</td><td><span class="chip ${t.type}">${esc(t.purpose||TYPE_LABEL[t.type])}</span></td><td>${whCell(t)}</td><td class="r num">${signed(t)}</td><td class="r num">結存 ${fmt(t.balance,2)}</td><td class="mono">${esc(t.ref||"")}</td></tr>`).join("") : `<tr><td class="muted">尚無異動。</td></tr>`;
   }
-  msg("itMsg",""); $("itemDlg").showModal();
+  msg("itMsg",""); $("itRecalc").hidden = !id || !can("admin"); $("itemDlg").showModal();
 }
 $("btnNewItem").addEventListener("click", () => openItem(null));
 $("itCancel").addEventListener("click", () => $("itemDlg").close());
