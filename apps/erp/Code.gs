@@ -371,6 +371,7 @@ const HANDLERS = {
   woStatus:    ['user', woStatus_, true],
   woMove:      ['user', woMove_, true],
   woReport:    ['user', woReport_, true],
+  syncReportDept: ['admin', syncReportDeptAll_, true],
   delReport:   ['user', delReport_, true],
   reviewReports:['user', reviewReports_, true],
   txnsQuery:   ['viewer', txnsQuery_],
@@ -467,6 +468,7 @@ function saveUser_(u, p) {
   if (!p.isNew && !ex) throw new Error('找不到這個帳號。');
   if (ex && ex.id === u.id && (p.role !== 'admin' || p.active !== '是')) throw new Error('不能停用自己，或取消自己的管理員身分。');
   const rec = ex || { id, createdAt: nowStr_(), lastLogin: '' };
+  const oldDept = ex ? String(ex.dept || '') : '';
   rec.name = String(p.name || '').trim(); rec.dept = String(p.dept || '').trim(); rec.role = p.role; rec.active = p.active === '否' ? '否' : '是';
   rec.title = ['部門主管', '代理主管', '課長', '組長'].includes(String(p.title || '')) ? String(p.title) : '';
   rec.defWh = String(p.defWh || '').trim();
@@ -477,6 +479,8 @@ function saveUser_(u, p) {
   if (p.pw) { checkPw_(p.pw); rec.salt = Utilities.getUuid(); rec.hash = hash_(p.pw, rec.salt); }
   else if (p.role !== 'staff' && !rec.hash) throw new Error('可以登入的帳號要設定密碼（至少 6 個字元）。');
   if (ex) update_('users', rec); else append_('users', [rec]);
+  // 改了單位：這個人以前的報工也改到新單位（報工上記的是報工人員的單位，設錯時要一起更正）
+  if (ex && oldDept && rec.dept && oldDept !== rec.dept) syncReportDept_(rec.id, rec.dept);
   return listUsers_();
 }
 function deleteUser_(u, p) {
@@ -1896,6 +1900,11 @@ function delReport_(u, p) {
   if (!perms_(u).prodLead && !(r.byId === u.id && st !== '已核准')) throw new Error('已核准的報工只有生產主管可以刪除；別人登記的報工也只有主管能刪。');
   deleteRow_('woReports', r); return true;
 }
+function syncReportDept_(workerId, dept) {
+  let n = 0; readAll_('woReports').forEach(r => { if (r.workerId === workerId && r.dept !== dept) { r.dept = dept; update_('woReports', r); n++; } }); return n;
+}
+/** 管理員：把所有報工的單位對齊到報工人員目前帳號的單位 */
+function syncReportDeptAll_(u, p) { let n = 0; readAll_('users').forEach(x => { if (x.dept) n += syncReportDept_(x.id, x.dept); }); return { changed: n }; }
 /** 主管審核：可以先修改數字再核准，或整批退回（要寫原因） */
 function reviewReports_(u, p) {
   if (!perms_(u).prodLead) throw new Error('只有生產主管可以審核報工。');
