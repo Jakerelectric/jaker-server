@@ -3777,6 +3777,10 @@ const WO = { no:null, doc:null, mats:[] };
 const woEditable = () => (PM().prod || PM().plan) && (!WO.doc || ["未開工","生產中","已完工"].includes(WO.doc.status));
 const woActable = () => (PM().prod || PM().wh || PM().plan) && WO.doc && ["未開工","生產中","已完工"].includes(WO.doc.status);
 const whOptsWh = sel => S.whs.filter(w => (w.type || "倉庫") === "倉庫" || w.code === sel).map(w => `<option value="${esc(w.code)}" ${w.code===sel?"selected":""}>${esc(whLabel(w.code))}</option>`).join("");  // 工單的領料、入庫只列倉庫
+/** 工單入庫庫別：倉庫＋生產地點（課組自己的空間，例如組立課做完先放在組立課） */
+const whOptsIn = sel => { const o = w => `<option value="${esc(w.code)}" ${w.code===sel?"selected":""}>${esc(whLabel(w.code))}</option>`;
+  const W = S.whs.filter(w => (w.type || "倉庫") === "倉庫"), P = S.whs.filter(w => w.type === "生產"), X = S.whs.filter(w => w.code === sel && !W.includes(w) && !P.includes(w));
+  return `<optgroup label="倉庫">${W.map(o).join("")}</optgroup>` + (P.length ? `<optgroup label="生產地點（課組）">${P.map(o).join("")}</optgroup>` : "") + X.map(o).join(""); };
 const whOpts = sel => S.whs.map(w => `<option value="${esc(w.code)}" ${w.code===sel?"selected":""}>${esc(whLabel(w.code))}</option>`).join("");
 function openWO(no){
   WO.no = no || null; WO.doc = no ? (SD().wos || []).find(w => w.no === no) : null;
@@ -3789,10 +3793,10 @@ function openWO(no){
   $("woMeta").textContent = no ? `開單 ${d.createdBy||""} ${d.createdAt||""}　更新 ${d.updatedAt||""}` : "";
   $("wNo").value = no || ""; $("wNo").readOnly = !!no; $("wDate").value = d.date || today();
   $("wItem").value = d.itemCode ? `${d.itemCode} ${d.name||""}` : ""; $("wQty").value = d.qty || ""; $("wDue").value = d.dueDate || ""; $("wOrder").value = d.orderNo || ""; $("wNote").value = d.note || "";
-  $("wWhIn").innerHTML = whOptsWh(d.whIn || "");
+  $("wWhIn").innerHTML = whOptsIn(d.whIn || "");
   $("wSite").innerHTML = `<option value="">（不指定：領料直接從倉庫扣帳）</option>` + whOfType("生產").map(w => `<option value="${esc(w.code)}">${esc(whLabel(w.code))}</option>`).join("")
     + (whOfType("委外").length ? `<optgroup label="整個品項委外（生管設定）">${whOfType("委外").map(w => `<option value="${esc(w.code)}" ${PM().plan || d.site === w.code ? "" : "disabled"}>委外：${esc(whLabel(w.code))}</option>`).join("")}</optgroup>` : "");
-  $("wSite").value = d.site || ""; wSiteHint(); if (!d.whIn){ const it = d.itemCode && itemByAny(d.itemCode); if (it?.mainWh) $("wWhIn").value = it.mainWh; }
+  $("wSite").value = d.site || ""; wSiteHint(); if (!d.whIn){ const it = d.itemCode && itemByAny(d.itemCode); if (d.site && whById(d.site)?.type === "生產") $("wWhIn").value = d.site; else if (it?.mainWh) $("wWhIn").value = it.mainWh; }
   // 從訂單帶入：列出進行中訂單裡尚未出完的品項
   const opts = [];
   SD().orders.filter(o => o.status === "進行中").forEach(o => { const pg = orderProgress(o); pg.open.forEach(l => { if (!l.itemCode) return; const rem = round((Number(l.qty)||0) - (pg.sh[l.lid]||0)); opts.push({ v:o.no + "|" + l.lid, t:`${o.no} ${o.customer}｜${l.itemCode} ${l.name||""} 未出 ${fmt(rem,2)}${l.dueDate?"（預交 "+l.dueDate+"）":""}`, o, l, rem }); }); });
@@ -3803,7 +3807,7 @@ function openWO(no){
   $("woHead").querySelectorAll("input,select").forEach(el => { if (el.id !== "wNo") el.disabled = !ed; }); if (!no) $("wNo").disabled = false;
   $("wAddMat").hidden = !ed; $("wCopyMats").hidden = !ed;
   document.querySelectorAll("#woDlg [data-woact]").forEach(el => el.hidden = !woActable());
-  $("wRecvWh").innerHTML = whOptsWh(d.whIn || ""); $("wRecvDate").value = today(); $("wRecvQty").value = ""; $("wRecvNote").value = "";
+  $("wRecvWh").innerHTML = whOptsIn(d.whIn || ""); $("wRecvDate").value = today(); $("wRecvQty").value = ""; $("wRecvNote").value = "";
   $("wRecvInfo").textContent = no ? `已完工入庫 ${fmt(woDone(no),2)} / ${fmt(d.qty,2)} ${d.unit||""}，還差 ${fmt(Math.max(0, round(Number(d.qty) - woDone(no))),2)}` : "";
   $("wAddOp").hidden = !ed;
   msg("woMsg",""); renderWOMats(); renderWOOps(); renderFlowWo(); renderWOHist(); renderWOBtns();
@@ -3816,7 +3820,10 @@ $("woFrom").addEventListener("change", () => {
   $("wItem").value = it ? `${it.code} ${it.name}` : x.l.itemCode; $("wQty").value = x.rem; $("wOrder").value = x.o.no;
   if (x.l.dueDate) $("wDue").value = x.l.dueDate; if (it?.mainWh) $("wWhIn").value = it.mainWh;
 });
-$("wSite").addEventListener("change", wSiteHint);
+$("wSite").addEventListener("change", () => { wSiteHint();
+  // 生產地點選了課組：入庫庫別還沒選、或原本選的也是某個課組，就跟著改成這個課組（之後要入倉庫再自己改）
+  const st = whById($("wSite").value), cur = whById($("wWhIn").value);
+  if (st?.type === "生產" && (!cur || cur.type === "生產")) $("wWhIn").value = st.code; });
 $("wItem").addEventListener("change", () => { const it = findItemFromInput($("wItem").value); if (it){ $("wItem").value = `${it.code} ${it.name}`; if (it.mainWh && !WO.no) $("wWhIn").value = it.mainWh; } });
 function renderWOMats(){
   const ed = woEditable(), act = woActable();
