@@ -5789,13 +5789,15 @@ $("povItem").addEventListener("change", () => { const it = findItemFromInput($("
 const povKey = (d, o) => `${d || ""}|${o || ""}`;
 /** 報工屬於哪個產品：有填最終產品用最終產品，再來看工單的品號，最後才用這站做的品號 */
 const POV_NONE = "（未填產品）";
+/** 報工算在哪個單位：有填「生產地點」就用生產地點（例如在組立課做），沒填才用報工人員自己的單位 */
+const povUnit = r => (r.site ? siteName(r.site) : "") || r.dept || "";
 function povProdOf(r){ if (r.finalItem) return r.finalItem; if (r.woNo){ const w = (SD().wos || []).find(x => x.no === r.woNo); if (w?.itemCode) return w.itemCode; } return r.itemCode || POV_NONE; }
 function povProdLabel(c){ if (c === POV_NONE) return c; const it = itemByAny(c); return it ? `${it.code} ${it.name || ""}`.trim() : c; }
 function povScope(){   // 還沒依產品篩選前的報工（用來列出產品選項）
   const f = $("povFrom").value, t = $("povTo").value; const inR = d => (!f || d >= f) && (!t || d <= t);
   const R = (SD().woReports || []).filter(r => r.status !== "退回" && inR(String(r.date)));
   if (POV.mode !== "dept") return R;
-  const dept = $("povDept").value; return R.filter(r => r.dept === dept || r.prevDept === dept || r.nextDept === dept);
+  const dept = $("povDept").value; return R.filter(r => povUnit(r) === dept || r.prevDept === dept || r.nextDept === dept);
 }
 function povProds(){
   const cnt = {}; povScope().forEach(r => { const c = povProdOf(r); cnt[c] = (cnt[c] || 0) + 1; });
@@ -5817,8 +5819,8 @@ function povData(){
   let rows, focus, wos;
   if (POV.mode === "dept"){
     const dept = $("povDept").value; focus = x => x === dept; const pf = r => !POV.prod || povProdOf(r) === POV.prod;
-    rows = R.filter(r => (r.dept === dept || r.prevDept === dept || r.nextDept === dept) && pf(r));
-    const mine = rows.filter(r => r.dept === dept);
+    rows = R.filter(r => (povUnit(r) === dept || r.prevDept === dept || r.nextDept === dept) && pf(r));
+    const mine = rows.filter(r => povUnit(r) === dept);
     wos = WOS.filter(w => mine.some(r => r.woNo === w.no) || (w.site && whById(w.site)?.name === dept));
     return { rows, mine, focus, wos, label: dept + (POV.prod ? "｜" + povProdLabel(POV.prod) : "") };
   }
@@ -5834,7 +5836,7 @@ function povGraph(D){
   const node = (dept, op, kind) => { const k = povKey(dept, op); return N[k] || (N[k] = { k, dept: dept || "", op: op || "", kind, good:0, bad:0, hours:0, n:0, people:new Set(), stations:new Set(), code:"", reps:[] }); };
   const edge = (a, b) => { if (!a || !b || a === b) return; const k = a + ">" + b; E[k] = (E[k] || 0) + 1; };
   D.rows.forEach(r => {
-    const x = node(r.dept, r.opName || r.station || "（未填製程）", "st");
+    const x = node(povUnit(r), r.opName || r.station || "（未填製程）", "st");
     if (D.mine.includes(r)){ x.good += Number(r.good)||0; x.bad += Number(r.bad)||0; x.hours += Number(r.hours)||0; x.n++; x.people.add(r.worker); if (r.station) x.stations.add(r.station); x.reps.push(r); }
     if (r.opCode) x.code = r.opCode; else if (!x.code) x.code = OPS().find(o => o.name === r.opName)?.code || "";
     if (r.prevDept || r.prevOp) edge(node(r.prevDept, r.prevOp, "ref").k, x.k);
@@ -5843,7 +5845,7 @@ function povGraph(D){
   // 工單上的製程順序也畫進去（沒有填前後站的報工）
   D.wos.forEach(w => { const ops = woOpsOf(w.no); let prev = null;
     ops.forEach(o => { const rs = D.rows.filter(r => r.woNo === w.no && r.opName === o.name);
-      const dept = rs[0]?.dept || Object.values(N).find(x => x.op === o.name && x.n)?.dept || OPS().find(x => x.name === o.name)?.dept || "";
+      const dept = (rs[0] && povUnit(rs[0])) || Object.values(N).find(x => x.op === o.name && x.n)?.dept || OPS().find(x => x.name === o.name)?.dept || "";
       let k; if (o.vendor){ const v = whById(o.vendor); k = node(v?.name || o.vendor, o.name, "vendor").k; const sm = opSum(w.no, o.lid); const x = N[k]; x.good += sm.good || 0; x.bad += sm.bad || 0; }
       else k = (rs.length || POV.mode === "item") ? node(dept, o.name, "st").k : null;
       if (k){ if (prev) edge(prev, k); prev = k; } }); });
@@ -5853,8 +5855,8 @@ function povGraph(D){
 async function renderPov(){
   if (!$("povFrom").value){ povRange("30"); return; }
   const R = SD().woReports || [];
-  const depts = [...new Set([...ORG_UNITS, ...R.map(r => r.dept), ...S.people.map(p => p.dept)].filter(Boolean))];
-  const keep = $("povDept").value; const cnt = d => R.filter(r => r.dept === d).length;
+  const depts = [...new Set([...ORG_UNITS, ...R.map(r => povUnit(r)), ...S.people.map(p => p.dept)].filter(Boolean))];
+  const keep = $("povDept").value; const cnt = d => R.filter(r => povUnit(r) === d).length;
   $("povDept").innerHTML = depts.sort((a,b) => cnt(b) - cnt(a)).map(d => `<option value="${esc(d)}">${esc(d)}${cnt(d) ? `（${cnt(d)} 筆）` : ""}</option>`).join("");
   if (depts.includes(keep)) $("povDept").value = keep;
   povProds();
