@@ -4031,7 +4031,7 @@ function flowHtml(L, opt){
     (bn ? `<div class="hint warn" style="margin-top:10px">瓶頸在「${esc(bn.name)}」：${bn.wip ? `有 ${fmt(bn.wip,2)} 個在製品等著處理` : `還有 ${fmt(bn.backlog,2)} 個尚未投入生產`}${bn.uph ? `，目前每小時產出約 ${fmt(bn.uph,1)}，消化完大約需要 ${fmt(bn.wait / bn.uph,1)} 小時` : ""}。</div>` : "");
 }
 /* 製程看板：依產品（工單的品號）分開畫，不同產品的製程不混在一起；可以只看某課／組（工單的生產地點）的工單 */
-const FLOW = { prod: "" };
+const FLOW = { prod: null };
 function renderFlowAll(){
   const days = Number($("flowDays").value) || 7; const d = new Date(); d.setDate(d.getDate() - days + 1); const from = d.toISOString().slice(0,10);
   const base = (SD().wos || []).filter(w => w.status !== "作廢" && woOpsOf(w.no).length && (["未開工","生產中"].includes(w.status) || String(w.updatedAt||w.date).slice(0,10) >= from));
@@ -4039,9 +4039,12 @@ function renderFlowAll(){
   const units = [...new Set(base.map(unitOf).filter(Boolean))], keepU = $("flowUnit").value;
   $("flowUnit").innerHTML = `<option value="">全部課／組</option>` + units.map(u => `<option>${esc(u)}</option>`).join(""); if (units.includes(keepU)) $("flowUnit").value = keepU;
   const unit = $("flowUnit").value, wos = base.filter(w => !unit || unitOf(w) === unit);
-  const G = {}; wos.forEach(w => (G[w.itemCode || "（未填品號）"] ||= []).push(w));
+  // 依成品分組：這張工單的報工有填「最終產品」就歸到那個成品（半成品工單也會跟成品放一起），沒有才用工單品號
+  const fin = {}; (SD().woReports || []).forEach(r => { if (r.woNo && r.finalItem && r.status !== "退回"){ const m = fin[r.woNo] ||= {}; m[r.finalItem] = (m[r.finalItem] || 0) + 1; } });
+  const prodOf = w => { const m = fin[w.no]; return m ? Object.entries(m).sort((a, b) => b[1] - a[1])[0][0] : (w.itemCode || "（未填品號）"); };
+  const G = {}; wos.forEach(w => (G[prodOf(w)] ||= []).push(w));
   const keys = Object.keys(G).sort((a, b) => G[b].length - G[a].length);
-  if (FLOW.prod && !G[FLOW.prod]) FLOW.prod = "";
+  if (FLOW.prod == null || (FLOW.prod && !G[FLOW.prod])) FLOW.prod = keys.length > 1 ? keys[0] : "";   // 預設先看工單最多的成品，要全部再按「全部產品」
   const lab = c => { const it = itemByAny(c); return it ? `${it.code} ${it.name || ""}`.trim() : c; };
   const chip = (c, n, t) => `<button type="button" class="pov-prod" aria-pressed="${FLOW.prod === c}" data-fp="${esc(c)}" title="${esc(t)}">${esc(t)}<span>${fmt(n)} 張</span></button>`;
   $("flowProds").innerHTML = keys.length > 1 ? chip("", wos.length, "全部產品（分開顯示）") + keys.map(c => chip(c, G[c].length, lab(c))).join("") : "";
@@ -4050,7 +4053,7 @@ function renderFlowAll(){
   $("flowAll").innerHTML = !show.length ? flowHtml([], { empty: unit ? `${unit} 目前沒有進行中、且設定了製程的工單。` : "目前沒有進行中、且設定了製程的工單。" })
     : show.map(c => `<div class="flow-group"><div class="flow-gh"><b>${esc(lab(c))}</b><span class="muted">　${fmt(G[c].length)} 張工單：${G[c].slice(0, 6).map(w => esc(w.no)).join("、")}${G[c].length > 6 ? "…" : ""}</span></div>${flowHtml(flowStations(G[c], { from }), {})}</div>`).join("");
 }
-$("flowDays").addEventListener("change", renderFlowAll); $("flowUnit").addEventListener("change", () => { FLOW.prod = ""; renderFlowAll(); });
+$("flowDays").addEventListener("change", renderFlowAll); $("flowUnit").addEventListener("change", () => { FLOW.prod = null; renderFlowAll(); });
 function renderFlowWo(){
   if (!WO.no || !woOpsOf(WO.no).length){ $("flowWo").innerHTML = ""; return; }
   $("flowWo").innerHTML = `<h3 style="margin:0 0 8px">流程圖</h3>` + flowHtml(flowStations([WO.doc]), {});
