@@ -103,7 +103,15 @@ async function setupErp(app, { cfg, ROOT, log, serial }) {
     }
   }
 
+  // 整批換號、合併品號這類大量改動，執行前先存一份備份（data/backups/erp/before-*.json）
+  const RISKY = new Set(['renameItems', 'mergeItem', 'importStock']);
   const callApi = raw => run('api', () => {
+    try { const b = JSON.parse(raw || '{}'); if (b && RISKY.has(b.action)) {
+      fs.mkdirSync(backupDir, { recursive: true });
+      const f = path.join(backupDir, 'before-' + b.action + '-' + new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 19).replace(/[-:T]/g, '') + '.json');
+      fs.writeFileSync(f, JSON.stringify({ at: new Date().toISOString(), sheets: Object.fromEntries(store.sheets), props: Object.fromEntries(store.props || []), docs: Object.fromEntries(store.docs || []) }));
+      log('進銷存 ' + b.action + ' 前已備份 ' + f);
+    } } catch (e) { log('進銷存 執行前備份失敗', e); }
     const out = rt.call('doPost', { postData: { contents: raw, type: 'text/plain' }, parameter: {} });
     return out && out.getContent ? out.getContent() : '{}';
   });
