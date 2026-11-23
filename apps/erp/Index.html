@@ -5975,21 +5975,27 @@ const canOpEdit = () => PM().prodLead || PM().plan || PM().admin;
 /* ---- 編碼原則 ---- */
 /* 編碼原則：預設值如下，管理員可以在「設定 › 編碼原則」修改（存在「設定」分頁） */
 const CR_DEF = {
-  opPrefix:"P", opStep:10, sitePrefix:"L", siteDigits:2, stnDigits:2, vendorPrefix:"V", vendorDigits:3,
+  opPrefix:"", opDigits:4, opStep:10, sitePrefix:"L", siteDigits:2, stnDigits:2, vendorPrefix:"V", vendorDigits:3,
   units:[["製造1課","M1"],["製造2課","M2"],["製造3課","M3"],["組立課","AS"],["廠務組","FA"],["生管課","PC"],["倉庫組","WH"],["採購課","PU"],["品管課","QC"],["高壓組","HV"],["設計課","RD"],["客戶服務組","CS"],["總經理室","GM"]],
-  stages:[["0","備料、裁切、下料","裁,備料,下料,切"],["1","成形：沖壓、車削、射出、鑄造","沖,車削,車床,射出,成形,鑄,鍛"],["2","機械加工：研磨、鑽孔、銑、攻牙","研磨,磨,鑽,銑,攻牙,加工,毛邊"],
-    ["3","表面處理：電鍍、噴塗、熱處理","鍍,噴,塗,烤漆,熱處理,陽極,拋光"],["4","組立、焊接、鉚合","組立,組裝,焊,鉚,裝配"],["5","灌注、封膠、膠合","灌,封膠,膠,含浸"],["6","測試：耐壓、電氣測試","測試,耐壓,試驗"],
-    ["7","檢驗：進料、製程、成品檢驗","檢驗,品檢,檢查,全檢,抽檢"],["8","包裝、標示","包裝,貼標,標示,裝箱"],["9","其他",""]],
+  // 製程類別：代號＝類別字母＋4 位數（例：A0010、T0020），每次加 opStep，中間留空方便插入
+  stages:[["C","備料、裁切、下料","裁,備料,下料,切"],["F","成形：沖壓、車削、射出、鑄造","沖,車削,車床,射出,成形,鑄,鍛"],["M","機械加工：研磨、鑽孔、銑、攻牙","研磨,磨,鑽,銑,攻牙,加工,毛邊"],
+    ["S","表面處理：電鍍、噴塗、熱處理、清洗","鍍,噴,塗,烤漆,熱處理,陽極,拋光,洗"],["A","組立、焊接、鉚合、黏合","組立,組裝,焊,鉚,裝配,黏合,穿,繞,蓋"],["P","灌注、封膠、膠合","灌,封膠,膠,含浸"],["T","測試：耐壓、電氣測試、氣密","測,耐壓,試驗,氣密"],
+    ["Q","檢驗：進料、製程、成品檢驗","檢驗,品檢,檢查,全檢,抽檢"],["K","包裝、標示","包裝,貼標,標示,裝箱"],["X","其他",""]],
   machines:[["PR","沖床","沖"],["LT","車床","車"],["CN","CNC／加工中心","CNC,加工中心"],["IJ","射出機","射出"],["GR","研磨機","磨"],["DR","鑽床","鑽"],["WD","焊接台","焊"],
     ["AS","組立台／組立線","組"],["PT","灌注機","灌,膠"],["TS","測試台","測試,耐壓"],["QC","檢驗站","檢"],["PK","包裝站","包裝"],["WS","其他工作站",""]] };
-const CR = () => { const r = SD().codeRules; return r && r.units ? Object.assign({}, CR_DEF, r) : CR_DEF; };
+const CR = () => { const r = SD().codeRules; if (!(r && r.units)) return CR_DEF;
+  const o = Object.assign({}, CR_DEF, r);
+  // 舊版存的是「0～9 階段」：改用新的類別字母（關鍵字保留原本存的再補上新的）
+  if (o.stages.some(x => /^[0-9]$/.test(String(x[0])))){ o.stages = CR_DEF.stages.map((d, i) => { const old = (r.stages || [])[i]; return [d[0], d[1], [...new Set([...String(old?.[2] || "").split(/[,，、\s]+/), ...d[2].split(",")].filter(Boolean))].join(",")]; }); o.opPrefix = ""; o.opDigits = 4; }
+  return o; };
 const kwMatch = (kw, name) => String(kw || "").split(/[,，、\s]+/).filter(Boolean).some(k => String(name || "").toLowerCase().includes(k.toLowerCase()));
 const unitCode = d => (CR().units.find(u => u[0] === String(d || "").trim()) || [])[1] || "XX";
 const stageOf = name => CR().stages.find(x => x[2] && kwMatch(x[2], name)) || CR().stages[CR().stages.length - 1];
 const machineOf = name => CR().machines.find(x => x[2] && kwMatch(x[2], name)) || CR().machines[CR().machines.length - 1];
-function suggestOpCode(name, used){ const R = CR(); const st = Number(stageOf(name)[0]) || 0; const step = Number(R.opStep) || 10; const taken = new Set([...(SD().ops || []).map(o => o.code), ...(used || [])]);
-  for (let n = st * 100 + step; n < st * 100 + 100; n += step){ const c = R.opPrefix + String(n).padStart(3, "0"); if (!taken.has(c)) return c; }
-  for (let n = st * 100 + 1; n < st * 100 + 100; n++){ const c = R.opPrefix + String(n).padStart(3, "0"); if (!taken.has(c)) return c; } return ""; }
+function suggestOpCode(name, used){ const R = CR(); const pre = (R.opPrefix || "") + stageOf(name)[0]; const dg = Number(R.opDigits) || 4, step = Number(R.opStep) || 10, max = 10 ** dg;
+  const taken = new Set([...(SD().ops || []).map(o => o.code), ...(used || [])]);
+  for (let n = step; n < max; n += step){ const c = pre + String(n).padStart(dg, "0"); if (!taken.has(c)) return c; }
+  for (let n = 1; n < max; n++){ const c = pre + String(n).padStart(dg, "0"); if (!taken.has(c)) return c; } return ""; }
 function suggestStnCode(name, dept, used){ const R = CR(); const m = machineOf(name)[0]; const pre = `${unitCode(dept)}-${m}`; const dg = Number(R.stnDigits) || 2; const taken = new Set([...(SD().ops || []).map(o => o.code), ...(used || [])]);
   const num = String(name).match(/(\d+)\s*號?/); if (num){ const c = pre + String(num[1]).padStart(dg, "0"); if (!taken.has(c)) return c; }
   for (let n = 1; n < 10 ** dg; n++){ const c = pre + String(n).padStart(dg, "0"); if (!taken.has(c)) return c; } return ""; }
@@ -6001,8 +6007,8 @@ function opRuleHtml(){
   return `<div class="row" style="align-items:center"><h3 style="margin:0">編碼原則</h3><span style="flex:1"></span>${PM().admin ? `<button type="button" class="btn sm" id="opRuleEdit">到設定修改</button>` : '<span class="muted" style="font-size:12px">要修改請洽管理員（設定 › 編碼原則）</span>'}</div>
   <p class="muted" style="margin:4px 0 10px">代號只用英文大寫、數字和「-」。建立時系統會依下面的原則自動給建議代號，可以再修改；代號建立後盡量不要再改。</p>
   <div class="grid-3">
-    <div><b>1. 製程　${esc(R.opPrefix)}＋3 位數</b><div class="muted" style="font-size:13px;margin:4px 0">百位數＝製程階段，後兩位每次加 ${esc(R.opStep)}（中間留空，日後插入新製程）</div>
-      <table class="mini"><tbody>${R.stages.map(x => `<tr><td class="mono">${esc(R.opPrefix)}${esc(x[0])}xx</td><td>${esc(x[1])}</td></tr>`).join("")}</tbody></table></div>
+    <div><b>1. 製程　類別字母＋${esc(R.opDigits || 4)} 位數</b><div class="muted" style="font-size:13px;margin:4px 0">字母＝製程類別（不是生產順序），數字每次加 ${esc(R.opStep)}（中間留空，日後插入新製程）；生產順序看工單的製程順序</div>
+      <table class="mini"><tbody>${R.stages.map(x => `<tr><td class="mono">${esc(R.opPrefix || "")}${esc(x[0])}${"0".repeat(Math.max(0,(Number(R.opDigits)||4)-2))}10</td><td>${esc(x[1])}</td></tr>`).join("")}</tbody></table></div>
     <div><b>2. 工作站／機台　單位碼－機種碼＋${esc(R.stnDigits)} 位流水號</b><div class="muted" style="font-size:13px;margin:4px 0">機台本身有編號就沿用，例如「沖床3號」→ ${"3".padStart(Number(R.stnDigits)||2,"0")}</div>
       <table class="mini"><tbody>${R.machines.map(x => `<tr><td class="mono">${esc(x[0])}</td><td>${esc(x[1])}</td></tr>`).join("")}</tbody></table></div>
     <div><b>3. 生產地點　單位碼－${esc(R.sitePrefix)}＋${esc(R.siteDigits)} 位流水號；委外廠商　${esc(R.vendorPrefix)}＋${esc(R.vendorDigits)} 位數</b>
@@ -6017,13 +6023,13 @@ function renderCodeRules(){
     <button type="button" class="btn sm" data-cradd="${key}" style="margin-top:6px">＋ 新增一列</button>`;
   $("crBody").innerHTML = `
     <div class="form-grid" style="margin-bottom:14px">
-      <label class="f">製程代號開頭<input data-crf="opPrefix" value="${esc(CRE.opPrefix)}"></label><label class="f">製程流水號間隔<input data-crf="opStep" type="number" min="1" value="${esc(CRE.opStep)}"></label>
+      <label class="f">製程流水號位數<input data-crf="opDigits" type="number" min="2" max="6" value="${esc(CRE.opDigits || 4)}"></label><label class="f">製程流水號間隔<input data-crf="opStep" type="number" min="1" value="${esc(CRE.opStep)}"></label>
       <label class="f">工作站流水號位數<input data-crf="stnDigits" type="number" min="1" max="4" value="${esc(CRE.stnDigits)}"></label>
       <label class="f">生產地點代號中間字<input data-crf="sitePrefix" value="${esc(CRE.sitePrefix)}"></label><label class="f">生產地點流水號位數<input data-crf="siteDigits" type="number" min="1" max="4" value="${esc(CRE.siteDigits)}"></label>
       <label class="f">委外廠商代號開頭<input data-crf="vendorPrefix" value="${esc(CRE.vendorPrefix)}"></label><label class="f">委外廠商流水號位數<input data-crf="vendorDigits" type="number" min="1" max="5" value="${esc(CRE.vendorDigits)}"></label>
     </div>
     <div class="cr-sec"><h3>單位碼</h3><div class="muted cr-note">用在工作站和生產地點的代號開頭，例如製造1課 → M1</div><div style="max-width:420px">${tbl("units", ["單位名稱","單位碼"], ["例：製造1課","例：M1"], [220, 100])}</div></div>
-    <div class="cr-sec"><h3>製程階段（代號的百位數）</h3><div class="muted cr-note">關鍵字用逗號分隔；製程名稱含關鍵字就歸到這個階段，最後一列當「其他」</div>${tbl("stages", ["階段","說明","關鍵字"], ["0-9","", "例：沖,車削"], [70, 280, 420])}</div>
+    <div class="cr-sec"><h3>製程類別（代號開頭的字母）</h3><div class="muted cr-note">關鍵字用逗號分隔；製程名稱含關鍵字就歸到這個類別，最後一列當「其他」。字母建立後盡量不要改</div>${tbl("stages", ["字母","說明","關鍵字"], ["例：A","", "例：組立,焊"], [70, 280, 420])}</div>
     <div class="cr-sec"><h3>機種碼</h3><div class="muted cr-note">關鍵字用逗號分隔；工作站名稱含關鍵字就用這個機種碼，最後一列當「其他」</div>${tbl("machines", ["機種碼","說明","關鍵字"], ["例：PR","","例：沖"], [90, 220, 420])}</div>`;
   $("crBody").querySelectorAll("[data-crf]").forEach(el => el.addEventListener("input", () => CRE[el.dataset.crf] = el.value.trim()));
   $("crBody").querySelectorAll("[data-cr]").forEach(el => el.addEventListener("input", () => CRE[el.dataset.cr][Number(el.dataset.i)][Number(el.dataset.j)] = el.value.trim()));
@@ -6033,8 +6039,10 @@ function renderCodeRules(){
 $("crSave").addEventListener("click", async () => {
   const bad = CRE.units.find(u => u[0] && !/^[A-Z0-9]{1,4}$/.test(String(u[1]).toUpperCase())) || CRE.machines.find(m => m[0] && !/^[A-Z0-9]{1,4}$/.test(String(m[0]).toUpperCase()));
   if (bad) return msg("crMsg", `代碼只能用 1～4 個英文或數字：${bad.join(" ")}`, "err");
-  const st = CRE.stages.filter(x => x[0] !== "" || x[1]); if (st.some(x => !/^[0-9]$/.test(String(x[0])))) return msg("crMsg", "製程階段要是 0～9 的數字。", "err");
-  const rules = { ...CRE, opPrefix:String(CRE.opPrefix||"P").toUpperCase(), sitePrefix:String(CRE.sitePrefix||"L").toUpperCase(), vendorPrefix:String(CRE.vendorPrefix||"V").toUpperCase(),
+  const st = CRE.stages.filter(x => x[0] !== "" || x[1]).map(x => [String(x[0]).toUpperCase(), x[1], x[2]]);
+  if (st.some(x => !/^[A-Z]{1,2}$/.test(x[0]))) return msg("crMsg", "製程類別的代號要是 1～2 個英文字母。", "err");
+  if (new Set(st.map(x => x[0])).size !== st.length) return msg("crMsg", "製程類別的字母不能重複。", "err");
+  const rules = { ...CRE, opPrefix:String(CRE.opPrefix||"").toUpperCase(), opDigits: Number(CRE.opDigits) || 4, sitePrefix:String(CRE.sitePrefix||"L").toUpperCase(), vendorPrefix:String(CRE.vendorPrefix||"V").toUpperCase(),
     units: CRE.units.filter(u => u[0] && u[1]).map(u => [u[0], String(u[1]).toUpperCase()]), stages: st, machines: CRE.machines.filter(m => m[0]).map(m => [String(m[0]).toUpperCase(), m[1], m[2]]) };
   try{ await busy(() => call("saveCodeRules", { rules })); await refresh(true); CRE = null; renderCodeRules(); msg("crMsg", "✓ 編碼原則已儲存。之後新增代號會照新的原則產生；已經建立的代號不會自動改。"); }
   catch(err){ msg("crMsg", err.message, "err"); }
@@ -6107,7 +6115,7 @@ function opDlgFields(){ const site = OPK === "地點";
   $("opDeptWrap").firstChild.textContent = site ? "所屬單位（產生代號用）" : "單位（課／組）"; }
 function opSuggestNow(){ const n = $("opName").value, d = $("opDept").value;
   const c = OPK === "製程" ? suggestOpCode(n) : OPK === "工作站" ? suggestStnCode(n, d) : suggestSiteCode(n, d, $("opType").value);
-  $("opCode").value = c; $("opCodeHint").textContent = OPK === "製程" ? `依製程階段：${stageOf(n)[1]}` : OPK === "工作站" ? `單位碼 ${unitCode(d)}＋機種碼` : $("opType").value === "委外" ? "委外廠商 V＋3 位數" : `單位碼 ${unitCode(d)}＋L＋流水號`; }
+  $("opCode").value = c; $("opCodeHint").textContent = OPK === "製程" ? `製程類別 ${stageOf(n)[0]}：${stageOf(n)[1]}` : OPK === "工作站" ? `單位碼 ${unitCode(d)}＋機種碼` : $("opType").value === "委外" ? "委外廠商 V＋3 位數" : `單位碼 ${unitCode(d)}＋L＋流水號`; }
 function openOp(code){
   const site = OPK === "地點";
   const o = code ? (site ? SITES().find(w => w.code === code) : (SD().ops || []).find(x => x.code === code)) : null; OP_EDIT = o;
