@@ -52,6 +52,7 @@ const F = {
           ['qty','數量','n'],['balance','結存','n'],['toBalance','轉入結存','n'],['ref','單號','s'],['party','供應商/客戶','s'],
           ['boxes','箱數','n'],['spb','每箱數量','n'],['mb','尾箱數','n'],['m','尾箱數量','n'],['pack','包裝/棧板尺寸','s'],
           ['palletWt','棧板重量','n'],['report','測試報告','s'],['fillerId','填寫人ID','s'],['filler','填寫人','s'],['dept','填寫單位','s'],
+          ['pending','收貨狀態(待收/已收/拒收)','s'],['backWh','未收退回庫別','s'],['recvBy','收貨人','s'],['recvAt','收貨時間','s'],
           ['note','備註','s'],['cost','單位成本','n'],['ts','建立時間','n'],['synced','已同步鼎新','s'],['byId','登記帳號','s'],['edited','修改紀錄','s'],['packLines','包裝明細(箱數×每箱數量)','s'],['orderNo','訂單單號','s'],['woNo','工單單號','s'],['lotNo','入庫批號','s'],['pltNo','同板批號','s'],['loc','庫位','s'],['merged','併入原有庫存','n']],
   counts:[['date','盤點日','d'],['whCode','庫別','s'],['cat','類別','s'],['total','盤點品號數','n'],['diffCount','差異品號數','n'],
           ['diffAmt','差異金額','n'],['filler','盤點人','s'],['lines','明細JSON','s'],['ts','建立時間','n']],
@@ -329,6 +330,7 @@ const HANDLERS = {
   ping:        ['viewer', ping_],
   changePw:    ['viewer', changePw_, true],
   move:        ['user', whOnly_(move_), true],
+  rcptConfirm: ['user', whOnly_(rcptConfirm_), true],
   moveBatch:   ['user', whOnly_(moveBatch_), true],
   stocktake:   ['user', whOnly_(stocktake_), true],
   saveLoc:     ['user', whOnly_(saveLoc_), true],
@@ -515,7 +517,8 @@ function load_(u) {
   if (!pm.cost) { txns.forEach(t => delete t.cost); counts.forEach(c => delete c.diffAmt); }
   const me = clean_(u); me.perm = pm;
   const repacks = readAll_('repacks', { tail: 200 }).map(r => { delete r._row; return r; }).sort((a, b) => b.ts - a.ts);
-  return { user: me, items, whs, stock, txns, counts, people, repacks, modsOff: modsOff_(), ver: CacheService.getScriptCache().get('dataVer') || '' };
+  const rcpts = readAll_('txns').filter(t => t.pending === '待收').map(t => { const o = txnOut_(Object.assign({}, t)); if (!pm.cost) delete o.cost; return o; });
+  return { user: me, items, whs, stock, txns, counts, people, repacks, rcpts, modsOff: modsOff_(), ver: CacheService.getScriptCache().get('dataVer') || '' };
 }
 /** 線上狀態：每個人約 30 秒回報一次所在分頁；75 秒內有回報的算在線上 */
 function ping_(u, p) {
@@ -584,6 +587,33 @@ function itemByAny_(items, code) {
 function itemOf_(code) { const it = readAll_('items').find(i => i.code === code); if (!it) throw new Error('找不到品號 ' + code + '。'); return it; }
 function whOf_(code) { const w = readAll_('whs').find(x => x.code === code); if (!w) throw new Error('找不到庫別 ' + code + '。'); return w; }
 
+/** 待收貨確認：負責該庫別的人（可異動庫別有它，或管理員）確認實收數量；少收的部分、或整批拒收，入回生產單位自己的庫別 */
+function rcptConfirm_(u, p) {
+  const all = readAll_('txns'); const t = all.find(x => x.id === p.id); if (!t) throw new Error('找不到這筆入庫。');
+  if (t.pending !== '待收') throw new Error('這筆已經處理過了（' + (t.pending || '已入帳') + '）。');
+  const items = readAll_('items'); const item = itemByAny_(items, t.itemCode); if (!item) throw new Error('找不到品號 ' + t.itemCode + '。');
+  const orig = Number(t.qty) || 0; const reject = !!p.reject; const q = reject ? 0 : round_(Number(p.qty));
+  if (!reject && !(q > 0)) throw new Error('實收數量要大於 0；整批不收請按「拒收」。');
+  if (q > orig) throw new Error('實收數量不能大於送來的數量（' + orig + '）。多出來的請另外登記入庫。');
+  const reason = String(p.reason || '').trim(); if ((reject || q < orig) && !reason) throw new Error('少收或拒收請填原因。');
+  const ctx = stockCtx_(); const rec = []; const date = today_(); const back = t.backWh || t.whCode;
+  const stamp = u.name + ' ' + nowStr_();
+  if (reject) {   // 整批退回生產單位：這筆改記在生產單位自己的庫別
+    const r = adjust_(ctx, item, back, orig, { date, dest: true });
+    t.note = (t.note ? t.note + '；' : '') + '倉庫拒收（' + t.whCode + '）：' + reason; t.whCode = back; t.balance = r.after; t.pending = '拒收';
+  } else {
+    const r = adjust_(ctx, item, t.whCode, q, { date }); t.balance = r.after; t.pending = '已收';
+    if (q < orig) {   // 少收：差額入回生產單位自己的庫別，另記一筆
+      const d = round_(orig - q); const r2 = adjust_(ctx, item, back, d, { date, dest: true });
+      t.note = (t.note ? t.note + '；' : '') + '實收 ' + q + '（送 ' + orig + '）：' + reason; t.qty = q;
+      rec.push(txnRec_(u, item, { type: 'in', qty: d, date, whCode: back, purpose: '生產入庫', ref: t.ref || '', woNo: t.woNo || '', orderNo: t.orderNo || '',
+        note: '收貨差異退回（原批號 ' + (t.lotNo || '') + '）：' + reason, balance: r2.after, filler: t.filler, dept: t.dept, fillerId: t.fillerId || '' }));
+    }
+  }
+  t.recvBy = u.name; t.recvAt = nowStr_();
+  flushStock_(ctx); update_('txns', t); if (rec.length) append_('txns', rec);
+  return { ok: true, lotNo: t.lotNo, pending: t.pending };
+}
 function move_(u, p) {
   const ctx = stockCtx_(); const rec = [];
   const res = moveOne_(u, p, ctx, rec, readAll_('items'), readAll_('whs'));
@@ -664,7 +694,12 @@ function moveOne_(u, p, ctx, rec, items, whs) {
   }
   let res;
   // 生產入庫可以入到任何庫別（例如生產單位把成品入到倉庫）：只會增加庫存；之後的修改、出庫還是要該庫別的人
-  if (type === 'in') { res = adjust_(ctx, item, p.whId, qty, { date, dest: p.purpose === '生產入庫' }); f.balance = res.after; }
+  // 生產單位入到「別人負責的庫別」：先記「待收貨」（在途，不算進對方庫存），由該庫別的負責人確認收貨後才入帳
+  if (type === 'in' && p.purpose === '生產入庫' && WH_GUARD_ && !WH_GUARD_.has(p.whId)) {
+    const L = [...WH_GUARD_]; f.pending = '待收'; f.backWh = (u.defWh && WH_GUARD_.has(u.defWh)) ? u.defWh : L[0]; f.balance = '';
+    res = { after: '', pending: true };
+  }
+  else if (type === 'in') { res = adjust_(ctx, item, p.whId, qty, { date, dest: p.purpose === '生產入庫' }); f.balance = res.after; }
   else if (type === 'out') { res = adjust_(ctx, item, p.whId, -qty, { date }); f.balance = res.after; }
   else {
     const a = adjust_(ctx, item, p.whId, -qty, { date }); const b = adjust_(ctx, item, p.toWhId, qty, { date, dest: true });
@@ -726,6 +761,7 @@ function txnKeys_(t) {
 }
 function updateTxn_(u, p) {
   const t = txnById_(p.id); const ch = p.changes || {}; const log = [];
+  if (t.pending === '待收' && (ch.qty !== undefined || ch.itemCode !== undefined || ch.whCode !== undefined)) throw new Error('這筆還在「待收貨」，數量、品號、庫別請等倉庫確認後再改，或先刪除重登。');
   if (ch.packLines !== undefined) ch.packLines = packNorm_(ch.packLines).text;
   const type = LABEL_TYPE[t.typeLabel];
   const pick = k => ch[k] !== undefined ? String(ch[k]).trim() : t[k];
@@ -785,6 +821,7 @@ function updateTxn_(u, p) {
 }
 function deleteTxn_(u, p) {
   const t = txnById_(p.id);
+  if (t.pending === '待收') { deleteRow_('txns', t); return true; }   // 待收貨還沒入帳，刪掉就好，不動庫存
   if (!p.force && LABEL_TYPE[t.typeLabel] !== 'adj') {
     const hits = countedAfter_(t, txnKeys_(t));
     if (hits.length) throw new Error('COUNTED:' + hits.join('；'));
@@ -1147,7 +1184,7 @@ function stockLots_(codes, sc, opt) {
   Object.keys(U.reserved).forEach(k => { if (want(k)) cap[k] = (cap[k] || 0) - U.reserved[k]; });
   if (U.scOut) Object.keys(U.ownK).forEach(k => { if (want(k)) cap[k] = (cap[k] || 0) + U.ownK[k]; });
   const names = {}; readAll_('items').forEach(i => names[i.code] = i.name);
-  const ins = readAll_('txns').map(txnOut_).filter(t => (t.type === 'in' && cap[t.itemCode + '__' + t.whCode] > 0) || (t.type === 'xfer' && cap[t.itemCode + '__' + t.toWhCode] > 0))
+  const ins = readAll_('txns').map(txnOut_).filter(t => t.pending !== '待收').filter(t => (t.type === 'in' && cap[t.itemCode + '__' + t.whCode] > 0) || (t.type === 'xfer' && cap[t.itemCode + '__' + t.toWhCode] > 0))
     .sort((a, b) => (U.own[b.id] ? 1 : 0) - (U.own[a.id] ? 1 : 0) || String(b.date).localeCompare(String(a.date)) || (Number(b.ts) || 0) - (Number(a.ts) || 0));
   const out = [];
   ins.forEach(t => {

@@ -281,7 +281,7 @@ nav.tabs [data-tab].g-off{display:none}
   <button role="tab" data-tab="items" data-g="mat" data-vis="all">品號<span class="count" id="lowCount" hidden>0</span></button>
   <button role="tab" data-tab="report" data-g="mat" data-vis="all">統計報表</button>
   <button role="tab" data-tab="ship" data-g="mat" data-vis="wh">待出貨<span class="count" id="shipCount" hidden>0</span></button>
-  <button role="tab" data-tab="move" data-g="mat" data-vis="wh">出入庫登記</button>
+  <button role="tab" data-tab="move" data-g="mat" data-vis="wh">出入庫登記<span class="count" id="rcvCount" hidden>0</span></button>
   <button role="tab" data-tab="count" data-g="mat" data-vis="wh">盤點</button>
   <button role="tab" data-tab="repack" data-g="mat" data-vis="wh">包裝</button>
   <button role="tab" data-tab="wo" data-g="prod" data-vis="prod,wh,plan">工單<span class="count" id="woCount" hidden>0</span></button>
@@ -360,6 +360,12 @@ nav.tabs [data-tab].g-off{display:none}
   <!-- 出入庫登記 -->
   <section id="tab-move" hidden>
     <div class="sec-head"><h2>出入庫登記</h2></div>
+    <div class="panel" id="rcptPanel" hidden style="margin-bottom:18px;border-color:var(--warn)">
+      <h3 style="margin:0 0 4px">待收貨確認</h3>
+      <p class="muted" style="font-size:13px;margin:0 0 8px">生產單位入到你負責的庫別，要你點收後才算進庫存。數量不對就改「實收」並填原因，差額會退回生產單位；整批不收按「拒收」。</p>
+      <div class="tbl-wrap"><table><thead><tr><th>日期</th><th>品號 / 品名</th><th class="r">送來數量</th><th>送到</th><th>批號 / 包裝</th><th>送貨人</th><th style="width:240px">實收 / 原因</th><th></th></tr></thead><tbody id="rcptRows"></tbody></table></div>
+      <div id="rcptMsg"></div>
+    </div>
     <div class="panel" style="margin-bottom:24px">
       <form id="moveForm" autocomplete="off">
         <div class="row" style="margin-bottom:12px">
@@ -1920,7 +1926,7 @@ async function refresh(quiet){
   await run(async () => {
     const d = await call("load"); PRES.ver = d.ver || ""; $("presUpd").hidden = true;
     S.user = d.user; S.items = d.items.sort((a,b)=>String(a.code).localeCompare(String(b.code))); S.whs = d.whs.sort((a,b)=>String(a.code).localeCompare(String(b.code)));
-    S.stock = d.stock; S.txns = d.txns; S.counts = d.counts; S.people = d.people || []; S.repacks = d.repacks || []; S.modsOff = d.modsOff || [];
+    S.stock = d.stock; S.txns = d.txns; S.counts = d.counts; S.people = d.people || []; S.repacks = d.repacks || []; S.rcpts = d.rcpts || []; S.modsOff = d.modsOff || [];
     try{ if (BC.d) BC.stale = true; }catch(e){}  // BOM 成本資料下次打開時重新載入（品號可能改過）
     try{ S.sd = await call("salesLoad"); }catch(e){ S.sd = S.sd || null; }
     applyRole(); renderAll();
@@ -1974,7 +1980,7 @@ function paintGroups(){
   document.querySelectorAll("#grpBar [data-grp]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.grp === g)));
   document.querySelectorAll("nav.tabs [data-tab]").forEach(b => b.classList.toggle("g-off", b.dataset.g !== g));
   const n = id => { const e = $(id); return e && !e.hidden && !e.closest("[data-tab]")?.hidden ? Number(e.textContent)||0 : 0; };
-  const biz = n("qtCount"), mat = n("mqCount") + n("shipCount") + n("lowCount"), prod = n("woCount") + n("wrCount");
+  const biz = n("qtCount"), mat = n("mqCount") + n("shipCount") + n("lowCount") + n("rcvCount"), prod = n("woCount") + n("wrCount");
   $("gcProd").hidden = !prod; $("gcProd").textContent = prod; $("gcBiz").hidden = !biz; $("gcBiz").textContent = biz; $("gcMat").hidden = !mat; $("gcMat").textContent = mat;
 }
 document.querySelectorAll("#grpBar [data-grp]").forEach(b => b.addEventListener("click", () => showGroup(b.dataset.grp)));
@@ -2007,7 +2013,7 @@ function renderAll(){
   if (S.tab==="report") renderReportStatic();
   renderSalesAll();
   const low = S.items.filter(isLow).length;
-  $("lowCount").hidden = !low; $("lowCount").textContent = low; paintGroups();
+  $("lowCount").hidden = !low; $("lowCount").textContent = low; renderRcpts(); paintGroups();
   updateMoveHint();
 }
 function fillSelect(sel, opts){
@@ -2138,13 +2144,37 @@ const packCell = t => { const p = [];
   const pl = packOf(t); if (pl.length) p.push(pl.map(l => `${fmt(l[0])}箱×${fmt(l[1],2)}`).join(" + "));
   if (t.pack) p.push(esc(t.pack)); if (t.palletWt) p.push(`${fmt(t.palletWt,2)} kg`); if (t.lotNo) p.unshift(`批號 ${esc(t.lotNo)}`); if (t.pltNo && t.pltNo !== t.lotNo) p.push(`與 ${esc(t.pltNo)} 同板`); if (t.loc) p.push(`庫位 ${esc(t.loc)}`);
   return (p.length ? `<span class="mono" style="font-size:12px">${p.join(" · ")}</span>` : "") + (t.report ? `<span class="sub">報告：${esc(t.report)}</span>` : ""); };
+/* ---------- 待收貨確認：生產單位入到別人負責的庫別，由該庫別的負責人點收 ---------- */
+function rcptMine(t){ const U = S.user || {}; if (U.role === "admin") return true; const L = String(U.whAllow || "").split(",").filter(Boolean); return L.length ? L.includes(t.whId) : !!PM().wh; }
+function renderRcpts(){
+  const all = S.rcpts || [], mine = all.filter(rcptMine), sent = all.filter(t => !rcptMine(t) && t.fillerId === S.user?.id);
+  $("rcvCount").hidden = !mine.length; $("rcvCount").textContent = mine.length;
+  $("rcptPanel").hidden = !mine.length && !sent.length;
+  const row = (t, act) => `<tr><td class="mono">${esc(t.date)}</td><td><span class="mono">${esc(t.itemCode)}</span><span class="sub">${esc(t.itemName||"")}</span></td>
+    <td class="r num">${fmt(t.qty,2)} ${esc(t.unit||"")}</td><td>${esc(whLabel(t.whId))}</td><td class="wrap-cell"><span class="mono">${esc(t.lotNo||"")}</span>${t.packLines?`<span class="sub">${esc(t.packLines)}</span>`:""}</td>
+    <td>${esc(t.filler||"")}${t.dept?`<span class="sub">${esc(t.dept)}</span>`:""}</td>
+    ${act ? `<td><input type="number" inputmode="decimal" min="0" step="any" data-rq="${esc(t.id)}" value="${esc(t.qty)}" style="width:90px;text-align:right"> <input data-rr="${esc(t.id)}" placeholder="少收或拒收的原因" style="width:140px"></td>
+      <td><button class="btn sm primary" data-rok="${esc(t.id)}">確認收貨</button> <button class="btn sm" data-rno="${esc(t.id)}">拒收</button></td>`
+      : `<td colspan="2" class="muted">等 ${esc(whLabel(t.whId))} 負責人確認收貨</td>`}</tr>`;
+  $("rcptRows").innerHTML = mine.map(t => row(t, true)).join("") + sent.map(t => row(t, false)).join("");
+  const go = async (id, reject) => {
+    const q = $("rcptRows").querySelector(`[data-rq="${id}"]`)?.value, reason = $("rcptRows").querySelector(`[data-rr="${id}"]`)?.value || "";
+    const t = all.find(x => x.id === id); if (!t) return;
+    if (reject && !(await ask(`拒收 ${t.itemCode} ${fmt(t.qty,2)} ${t.unit||""}？整批會退回生產單位（${whLabel(t.backWh||"")}）。`))) return;
+    try{ const r = await busy(() => call("rcptConfirm", { id, qty: Number(q), reject, reason })); await refresh();
+      msg("rcptMsg", reject ? `已拒收 ${t.itemCode}，退回 ${whLabel(t.backWh||"")}。` : `已確認收貨 ${t.itemCode} ${fmt(q,2)} ${t.unit||""}，入 ${whLabel(t.whId)}${Number(q) < Number(t.qty) ? `；差額 ${fmt(round(t.qty - q),2)} 退回 ${whLabel(t.backWh||"")}` : ""}。`, "ok"); }
+    catch(err){ msg("rcptMsg", err.message, "err"); }
+  };
+  $("rcptRows").querySelectorAll("[data-rok]").forEach(b => b.addEventListener("click", () => go(b.dataset.rok, false)));
+  $("rcptRows").querySelectorAll("[data-rno]").forEach(b => b.addEventListener("click", () => go(b.dataset.rno, true)));
+}
 function renderMoves(){
   const f = $("mvFilter").value, wh = $("mvWhFilter").value, q = $("mvSearch").value.trim().toLowerCase();
   const rows = S.txns.filter(t => (!f || t.type===f) && (!wh || t.whId===wh || t.toWhId===wh) &&
     (!q || [t.itemCode,t.itemName,t.ref,t.party,t.report,t.filler,t.dept].some(v=>String(v||"").toLowerCase().includes(q))));
   if (!rows.length){ $("moveRows").innerHTML = `<tr><td colspan="11"><div class="empty">${S.txns.length?"沒有符合條件的異動。":"尚無異動紀錄。"}</div></td></tr>`; return; }
   const adm = can("admin");
-  $("moveRows").innerHTML = rows.map(t => `<tr${adm?` class="clickable" data-tid="${esc(t.id)}"`:""}><td class="mono">${esc(t.date)}${t.edited?`<span class="sub" title="${esc(t.edited)}">已修改</span>`:""}</td><td><span class="chip ${t.type}">${TYPE_LABEL[t.type]}</span> ${esc(t.purpose||"")}</td>
+  $("moveRows").innerHTML = rows.map(t => `<tr${adm?` class="clickable" data-tid="${esc(t.id)}"`:""}><td class="mono">${esc(t.date)}${t.edited?`<span class="sub" title="${esc(t.edited)}">已修改</span>`:""}</td><td><span class="chip ${t.type}">${TYPE_LABEL[t.type]}</span> ${esc(t.purpose||"")}${t.pending==="待收"?' <span class="chip low">待收貨</span>':t.pending==="拒收"?' <span class="chip low">倉庫拒收</span>':""}</td>
     <td><span class="mono">${esc(t.itemCode)}</span><span class="sub">${esc(t.itemName)}</span></td><td>${whCell(t)}</td>
     <td class="r num">${signed(t)} ${esc(t.unit||"")}</td><td class="r num">${t.balance!=null?fmt(t.balance,2):"—"}${t.type==="xfer"&&t.toBalance!=null?` / ${fmt(t.toBalance,2)}`:""}</td>
     <td class="mono">${esc(t.ref||"")}</td><td class="wrap-cell">${packCell(t)}</td><td>${esc(t.party||"")}</td><td>${esc(t.filler||"")}${t.dept?`<span class="sub">${esc(t.dept)}</span>`:""}</td><td class="wrap-cell">${esc(t.note||"")}</td></tr>`).join("");
@@ -2464,7 +2494,7 @@ $("moveForm").addEventListener("submit", async e => {
       const r = await busy(() => call("moveBatch", { moves: plates }));
       $("mvQty").value=""; $("mvRef").value=""; $("mvNote").value=""; $("mvParty").value=""; $("mvLoc").value=""; locHint(); PK.forEach(id => $(id).value=""); setPack($("pkLines"), []); qtyAuto=false; $("pkHint").textContent="";
       MP.length = 0; renderMp(); await refresh(); showMvLots(r.lots);
-      msg("mvMsg", `已入庫 ${it.code} 共 ${plates.length} 板、合計 ${fmt(tot,2)} ${it.unit}，${whLabel(whId)} 結存 ${fmt((r.results[r.results.length-1]||{}).after,2)}。`, "ok");
+      msg("mvMsg", `已入庫 ${it.code} 共 ${plates.length} 板、合計 ${fmt(tot,2)} ${it.unit}${(r.results[0]||{}).pending ? `，已送到 ${whLabel(whId)}，等負責人確認收貨後才算進庫存` : `，${whLabel(whId)} 結存 ${fmt((r.results[r.results.length-1]||{}).after,2)}`}。`, "ok");
     }catch(err){ msg("mvMsg", err.message, "err"); }
     finally{ $("mvSubmit").disabled = !can("user"); }
     return;
@@ -2484,7 +2514,7 @@ $("moveForm").addEventListener("submit", async e => {
       const r = await busy(() => call("moveBatch", { moves:[p], merge: mg.map(x => ({ whId:x.whId, qty:Number(x.qty) })) }));
       $("mvQty").value=""; $("mvRef").value=""; $("mvNote").value=""; $("mvParty").value=""; $("mvLoc").value=""; locHint(); PK.forEach(id => $(id).value=""); setPack($("pkLines"), []); qtyAuto=false; $("pkHint").textContent="";
       MG.length = 0; renderMg(); await refresh(); showMvLots(r.lots);
-      msg("mvMsg", `已入庫 ${it.code} 整批 ${fmt(round(qty+add),2)} ${it.unit}（新完成 ${fmt(qty,2)}＋原有 ${fmt(add,2)}），${whLabel(whId)} 結存 ${fmt((r.results[0]||{}).after,2)}。`, "ok");
+      msg("mvMsg", `已入庫 ${it.code} 整批 ${fmt(round(qty+add),2)} ${it.unit}（新完成 ${fmt(qty,2)}＋原有 ${fmt(add,2)}）${(r.results[0]||{}).pending ? `，已送到 ${whLabel(whId)}，等負責人確認收貨後才算進庫存` : `，${whLabel(whId)} 結存 ${fmt((r.results[0]||{}).after,2)}`}。`, "ok");
     }catch(err){ msg("mvMsg", err.message, "err"); }
     finally{ $("mvSubmit").disabled = !can("user"); }
     return;
@@ -2501,6 +2531,7 @@ $("moveForm").addEventListener("submit", async e => {
     }
     const r = await busy(() => call("move", p));
     let t = S.mvType==="xfer" ? `已調撥 ${it.code} ${fmt(qty,2)} ${it.unit}：${whLabel(whId)} 結存 ${fmt(r.after,2)}，${whLabel(toWhId)} 結存 ${fmt(r.toAfter,2)}。`
+      : r.pending ? `已送出 ${it.code} ${fmt(qty,2)} ${it.unit} 到 ${whLabel(whId)}，等該庫別的負責人確認收貨後才會算進庫存。`
       : `已${TYPE_LABEL[S.mvType]} ${it.code} ${fmt(qty,2)} ${it.unit}，${whLabel(whId)} 結存 ${fmt(r.after,2)}。`;
     $("mvQty").value=""; $("mvRef").value=""; $("mvLotNo").value=""; if (typeof PA !== "undefined") PA.loaded = false; $("mvNote").value=""; $("mvParty").value=""; $("mvLoc").value=""; locHint(); PK.forEach(id => $(id).value=""); setPack($("pkLines"), []); qtyAuto=false; $("pkHint").textContent="";
     await refresh(); showMvLots(r.lotNo ? [r.lotNo] : []);
