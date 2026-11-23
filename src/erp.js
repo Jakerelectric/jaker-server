@@ -140,7 +140,8 @@ async function setupErp(app, { cfg, ROOT, log, serial }) {
       res.set('Cache-Control', 'no-store').type('application/json').send(out);
     } catch (e) {
       log('進銷存 API 錯誤', e);
-      res.status(500).json({ ok: false, error: '伺服器發生錯誤，請稍後再試。' });
+      // 寫入資料庫失敗時整批不算數；把原因帶回畫面，方便判斷（不含密碼等設定）
+      res.status(500).json({ ok: false, error: '伺服器發生錯誤，這次的修改沒有存進去。原因：' + String((e && e.message) || e).slice(0, 300) });
     }
   });
 
