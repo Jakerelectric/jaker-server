@@ -959,7 +959,7 @@ function mergeItem_(u, p) {
   update_('items', into);
   deleteRow_('items', readAll_('items').find(i => i.code === from.code));
   // BOM、單價紀錄改用合併後的品號；成本資料庫若兩個都有，留下合併後的那筆
-  ['code', 'parent'].forEach(f => replaceCol_('bom', f, from.code, into.code)); replaceCol_('bomHeads', 'parent', from.code, into.code); replaceCol_('costLog', 'itemCode', from.code, into.code);
+  renameRefs_({ [from.code]: into.code });   // BOM、單價紀錄、報價、訂單、工單、銷貨、報工一起換
   const cis = readAll_('costItems'); const cf = cis.find(x => x.code === from.code);
   if (cf) { if (cis.some(x => x.code === into.code)) deleteRow_('costItems', cf); else { cf.code = into.code; update_('costItems', cf); } }
   syncCostItems_(); BOMC_CACHE_ = null; syncBomCosts_();
@@ -984,6 +984,22 @@ function recalcBalances_(code) {
   return { code, changed: n, total: T.length };
 }
 function recalcBalH_(u, p) { const code = String(p.code || '').trim(); if (!readAll_('items').some(i => i.code === code)) throw new Error('找不到品號 ' + code); return recalcBalances_(code); }
+/** 換號／合併時，其他表單裡的品號一起換：plan = { 舊品號: 新品號 } */
+const ITEM_REF_COLS_ = [['quoteLines', 'itemCode'], ['orderLines', 'itemCode'], ['wos', 'itemCode'], ['woMats', 'itemCode'], ['salesLines', 'itemCode'],
+  ['woReports', 'itemCode'], ['repacks', 'itemCode'], ['bom', 'code'], ['bom', 'parent'], ['bomHeads', 'parent'], ['bomLog', 'parent'], ['costLog', 'itemCode']];
+function renameRefs_(plan) {
+  const keys = Object.keys(plan); if (!keys.length) return 0; let total = 0;
+  ITEM_REF_COLS_.forEach(([k, field]) => {
+    const i = F[k] ? F[k].findIndex(f => f[0] === field) : -1; if (i < 0) return;
+    const sh = sh_(k); const last = sh.getLastRow(); if (last < 2) return;
+    const rg = sh.getRange(2, i + 1, last - 1, 1); const v = rg.getValues(); let n = 0;
+    v.forEach(r => { const nw = plan[String(r[0])]; if (nw) { r[0] = nw; n++; } });
+    if (n) { rg.setValues(v); READ_MEMO_ = {}; total += n; }
+  });
+  const cis = readAll_('costItems');
+  cis.forEach(ci => { const nw = plan[ci.code]; if (!nw) return; if (cis.some(x => x.code === nw)) return; ci.code = nw; update_('costItems', ci); });
+  COSTLOG_CACHE_ = null; BOMC_CACHE_ = null; return total;
+}
 /** 料號對照整批換號：rows = [{ old, new }]。新料號不存在 → 改號並把舊料號放進別名；新料號已是另一個品號 → 合併 */
 function renameItems_(u, p) {
   const rows = (p.rows || []).map(r => ({ o: String(r.old || '').trim(), n: String(r.new || '').trim() })).filter(r => r.o && r.n);
@@ -1016,6 +1032,7 @@ function renameItems_(u, p) {
     }
     const walk = o => { if (Array.isArray(o)) return o.map(walk); if (o && typeof o === 'object') { Object.keys(o).forEach(k => o[k] = walk(o[k])); return o; } return (typeof o === 'string' && plan[o]) ? plan[o] : o; };
     readAll_('packings').forEach(pk => { if (!olds.some(c => (pk.json || '').indexOf(JSON.stringify(c)) >= 0)) return; pk.json = JSON.stringify(walk(JSON.parse(pk.json))); update_('packings', pk); });
+    res.refs = renameRefs_(plan);   // 報價、訂單、工單、用料、銷貨、報工、包裝、BOM、單價紀錄
   }
   // 2. 合併（新料號已經是另一個品號）
   merges.forEach(m => { const into = plan[m[1]] || m[1]; mergeItem_(u, { from: plan[m[0]] || m[0], into }); res.merged++; });
