@@ -77,7 +77,12 @@ const raw = r => r ? Object.entries(r).filter(([, v]) => t(v) !== '').map(([k, v
     log(`會新增：${add.length}　已一致：${same}　名稱或單位不同（不覆蓋，只列出）：${diff.length}　只有系統有：${onlySys.length}`);
     list('品號 會新增（前 60）', add, m => `${t(m.MB001)}　${t(m.MB002)}　${t(m.MB003)}　${t(m.MB004)}`);
     list('品號 名稱或單位不同', diff, x => `${x.code}：${x.why.join('；')}`);
-    list('品號 只有系統有', onlySys, i => `${i.code}　${i.name}`);
+    // 系統舊料號少了開頭的類別碼（例如系統 JM1C003-D2、鼎新 4JM1C003-D2）
+    const byTail = {}; MB.forEach(m => { const c = t(m.MB001); const mm = c.match(/^\d(.+)$/); if (mm) (byTail[U(mm[1])] = byTail[U(mm[1])] || []).push(m); });
+    const pref = [], lone = []; onlySys.forEach(i => { const hit = byTail[U(i.code)]; (hit ? pref : lone).push({ i, hit }); });
+    log(`只有系統有的 ${onlySys.length} 個裡：鼎新有「前面多一碼」的同名品號 ${pref.length} 個（很可能是同一個料）、真的只有系統有 ${lone.length} 個`);
+    list('可能是同一個料（系統少了開頭碼）', pref, x => `系統 ${x.i.code}　${x.i.name}　↔　鼎新 ${x.hit.map(m => t(m.MB001) + ' ' + t(m.MB002)).join('、')}`);
+    list('真的只有系統有', lone, x => `${x.i.code}　${x.i.name}`);
   }
 
   // ===== 2. 客戶 =====

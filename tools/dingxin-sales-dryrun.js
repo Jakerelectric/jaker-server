@@ -72,13 +72,16 @@ const sheetObjs = (store, schema, key) => { const d = store.sheets.get(schema.TA
     if (!s) { if (d.confirm === 'V') voidInDx.push(d); else add.push(d); return; }
     const why = [];
     if (t(s.custCode) && t(s.custCode) !== d.custCode) why.push(`客戶 ${s.custCode}→${d.custCode}`);
-    if (t(s.currency) && t(s.currency) !== d.currency) why.push(`幣別 ${s.currency}→${d.currency}`);
+    if (t(s.currency) && cur(s.currency) !== d.currency) why.push(`幣別 ${s.currency}→${d.currency}`);
     if (d.confirm === 'V' && s.status !== '作廢') why.push(`鼎新已作廢（系統：${s.status}）`);
     const key = l => `${t(l.itemCode).toUpperCase()}`;
     const sum = (arr, f) => arr.reduce((m, l) => { m[key(l)] = n((m[key(l)] || 0) + Number(f(l) || 0)); return m; }, {});
     const qs = sum(s.lines, l => l.qty), qd = sum(d.lines, l => l.qty);
     [...new Set([...Object.keys(qs), ...Object.keys(qd)])].forEach(k => { if (n(qs[k]) !== n(qd[k])) why.push(`${k} 數量 系統 ${n(qs[k])}／鼎新 ${n(qd[k])}`); });
-    const ps = {}; s.lines.forEach(l => { if (s.lines.length) ps[key(l)] = n(l.price); }); d.lines.forEach(l => { if (ps[key(l)] != null && ps[key(l)] !== n(l.price) && !(String(s.lines.find(x => key(x) === key(l))?.free || '') )) why.push(`${key(l)} 單價 系統 ${ps[key(l)]}／鼎新 ${n(l.price)}`); });
+    // 單價：同一品號可能有好幾行（例如 Z99 費用），比「價格組合」而不是一個一個比
+    const pset = arr => { const m = {}; arr.forEach(l => { if (String(l.free || '')) return; const k = key(l); (m[k] = m[k] || []).push(n(l.price)); }); Object.values(m).forEach(v => v.sort((a, b) => a - b)); return m; };
+    const pS = pset(s.lines), pD = pset(d.lines);
+    Object.keys(pD).forEach(k => { if (pS[k] && pS[k].join('/') !== pD[k].join('/')) why.push(`${k} 單價 系統 ${pS[k].join('/')}／鼎新 ${pD[k].join('/')}`); });
     (why.length ? diff : same).push({ d, s, why });
   });
   const onlySys = S.filter(x => !dx[t(x.no)] && String(x.date || '').replace(/-/g, '').slice(0, 8) >= since);
