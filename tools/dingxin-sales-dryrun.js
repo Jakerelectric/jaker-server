@@ -79,7 +79,7 @@ const sheetObjs = (store, schema, key) => { const d = store.sheets.get(schema.TA
     const qs = sum(s.lines, l => l.qty), qd = sum(d.lines, l => l.qty);
     [...new Set([...Object.keys(qs), ...Object.keys(qd)])].forEach(k => { if (n(qs[k]) !== n(qd[k])) why.push(`${k} 數量 系統 ${n(qs[k])}／鼎新 ${n(qd[k])}`); });
     // 單價：同一品號可能有好幾行（例如 Z99 費用），比「價格組合」而不是一個一個比
-    const pset = arr => { const m = {}; arr.forEach(l => { if (String(l.free || '')) return; const k = key(l); (m[k] = m[k] || []).push(n(l.price)); }); Object.values(m).forEach(v => v.sort((a, b) => a - b)); return m; };
+    const pset = arr => { const m = {}; arr.forEach(l => { if (String(l.free || '')) return; const k = key(l); (m[k] = m[k] || []).push(n(l.price)); }); Object.keys(m).forEach(k => { m[k] = [...new Set(m[k])].sort((a, b) => a - b); }); return m; };
     const pS = pset(s.lines), pD = pset(d.lines);
     Object.keys(pD).forEach(k => { if (pS[k] && pS[k].join('/') !== pD[k].join('/')) why.push(`${k} 單價 系統 ${pS[k].join('/')}／鼎新 ${pD[k].join('/')}`); });
     (why.length ? diff : same).push({ d, s, why });
