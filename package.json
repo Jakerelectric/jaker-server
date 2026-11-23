@@ -9,9 +9,12 @@
     "import": "node tools/import-xlsx.js",
     "test": "node tools/selftest.js"
   },
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
     "express": "4.21.2",
+    "mssql": "11.0.1",
     "mysql2": "3.11.5",
     "node-cron": "3.0.3",
     "xlsx": "0.18.5"
