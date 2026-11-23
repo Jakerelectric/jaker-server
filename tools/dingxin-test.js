@@ -7,7 +7,9 @@
  */
 const path = require('path');
 const fs = require('fs');
-const sql = require('mssql');
+let sql; try { sql = require('mssql'); } catch (e) {
+  const msg = '這台主機還沒有安裝連鼎新用的套件（mssql）。請先執行「系統更新」或 update.bat，再重新執行這個檔案。';
+  console.log(msg); try { const D = path.join(path.resolve(__dirname, '..'), 'data'); fs.mkdirSync(D, { recursive: true }); fs.writeFileSync(path.join(D, 'dingxin-test.txt'), msg, 'utf8'); } catch (_) {} process.exit(1); }
 const ROOT = path.resolve(__dirname, '..');
 const { readEnvFile } = require('../src/config');
 const DATA = path.join(ROOT, 'data');
