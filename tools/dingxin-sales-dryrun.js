@@ -28,6 +28,10 @@ const n = v => Math.round((Number(v) || 0) * 10000) / 10000;
 const ymd = v => { v = t(v); return /^\d{8}$/.test(v) ? `${v.slice(0, 4)}-${v.slice(4, 6)}-${v.slice(6)}` : v; };
 const cur = v => (t(v).toUpperCase() === 'NTD' ? 'TWD' : t(v).toUpperCase());
 const toObjs = d => { if (!d || !d.length) return []; const [h, ...r] = d; return r.map(x => Object.fromEntries(h.map((k, i) => [k, x[i]]))); };
+// 系統資料表的表頭是中文（例如「品號」），換成程式欄位名（code）
+const sheetObjs = (store, schema, key) => { const d = store.sheets.get(schema.TAB[key]); if (!d || !d.length) return [];
+  const lab = {}; (schema.F[key] || []).forEach(f => { lab[String(f[1]).trim()] = f[0]; });
+  const [h, ...r] = d; const ks = h.map(x => lab[String(x == null ? '' : x).trim()] || String(x)); return r.map(x => Object.fromEntries(ks.map((k, i) => [k, x[i]]))); };
 
 (async () => {
   const env = Object.assign(readEnvFile(path.join(ROOT, '.env')), process.env);
@@ -56,7 +60,7 @@ const toObjs = d => { if (!d || !d.length) return []; const [h, ...r] = d; retur
   const cfg = loadConfig(ROOT); const schema = loadErpSchema(path.join(ROOT, 'apps', 'erp'));
   const store = new Store(cfg.db, { prefix: 'erp_', tableName: schema.tableName, defFor: schema.defFor });
   await store.open();
-  const S = toObjs(store.sheets.get('銷貨單')), SL = toObjs(store.sheets.get('銷貨單身'));
+  const S = sheetObjs(store, schema, 'sales'), SL = sheetObjs(store, schema, 'salesLines');
   await store.close();
   const sys = {}; S.forEach(x => { sys[t(x.no)] = { ...x, lines: [] }; }); SL.forEach(l => { const s = sys[t(l.saleNo)]; if (s) s.lines.push(l); });
   log(`系統：${S.length} 張銷貨單（全部期間）`);

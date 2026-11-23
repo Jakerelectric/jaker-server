@@ -32,6 +32,10 @@ const n = v => Math.round((Number(v) || 0) * 10000) / 10000;
 const ymd = v => { v = t(v); return /^\d{8}$/.test(v) ? `${v.slice(0, 4)}-${v.slice(4, 6)}-${v.slice(6)}` : v; };
 const cur = v => (t(v).toUpperCase() === 'NTD' ? 'TWD' : t(v).toUpperCase());
 const toObjs = d => { if (!d || !d.length) return []; const [h, ...r] = d; return r.map(x => Object.fromEntries(h.map((k, i) => [k, x[i]]))); };
+// 系統資料表的表頭是中文（例如「品號」），換成程式欄位名（code）
+const sheetObjs = (store, schema, key) => { const d = store.sheets.get(schema.TAB[key]); if (!d || !d.length) return [];
+  const lab = {}; (schema.F[key] || []).forEach(f => { lab[String(f[1]).trim()] = f[0]; });
+  const [h, ...r] = d; const ks = h.map(x => lab[String(x == null ? '' : x).trim()] || String(x)); return r.map(x => Object.fromEntries(ks.map((k, i) => [k, x[i]]))); };
 const U = s => t(s).toUpperCase();
 const MAX = 60;  // 每個清單最多列幾筆，其餘只算數量
 const list = (title, arr, fmt) => { log(`\n--- ${title}（${arr.length}）---`); arr.slice(0, MAX).forEach(x => log(fmt(x))); if (arr.length > MAX) log(`…其餘 ${arr.length - MAX} 筆略`); };
@@ -51,7 +55,7 @@ const raw = r => r ? Object.entries(r).filter(([, v]) => t(v) !== '').map(([k, v
   const cfg = loadConfig(ROOT); const schema = loadErpSchema(path.join(ROOT, 'apps', 'erp'));
   const store = new Store(cfg.db, { prefix: 'erp_', tableName: schema.tableName, defFor: schema.defFor });
   await store.open();
-  const sheet = k => toObjs(store.sheets.get(k));
+  const sheet = k => sheetObjs(store, schema, { '品號': 'items', '庫存': 'stock', '訂單': 'orders', '訂單單身': 'orderLines', '客戶': 'customers' }[k]);
   const sItems = sheet('品號'), sStock = sheet('庫存'), sOrders = sheet('訂單'), sOL = sheet('訂單單身'), sCust = sheet('客戶');
   await store.close();
   const itemSet = new Map(); sItems.forEach(i => { itemSet.set(U(i.code), i); String(i.alias || '').split(/[,，;；、\s]+/).filter(Boolean).forEach(a => itemSet.has(U(a)) || itemSet.set(U(a), i)); });
