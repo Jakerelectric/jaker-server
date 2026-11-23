@@ -1173,11 +1173,11 @@ nav.tabs [data-tab].g-off{display:none}
   </section>
   <section id="tab-stmt" hidden>
     <div class="sec-head"><h2>月結明細</h2><div class="tools"><button class="btn primary" id="stExcel" type="button">匯出 Excel</button></div></div>
-    <p class="muted" style="margin-top:-8px">依出貨日整理每個月已出貨的銷貨單：每張的金額（不含不計價的樣品、補料）、出口報單號碼，依客戶、幣別小計。出口報單號碼可以直接在表上補填；要改單價或計價，點銷貨單號打開修改，系統會留下修改紀錄。</p>
+    <p class="muted" style="margin-top:-8px">依出貨日整理每個月已出貨的銷貨單：每張的金額（不含不計價的樣品、補料）、外銷的出口報單號碼／內銷的發票號碼，依客戶、幣別小計。號碼可以直接在表上補填；要改單價或計價，點銷貨單號打開修改，系統會留下修改紀錄。</p>
     <div class="row" style="gap:10px;margin-bottom:10px;flex-wrap:wrap">
       <input id="stMonth" type="month" style="width:auto" aria-label="月份">
       <select id="stCust" style="width:auto"><option value="">全部客戶</option></select>
-      <label class="row" style="font-size:13px;gap:4px"><input type="checkbox" id="stMissing" style="width:auto"> 只看缺出口報單號碼</label>
+      <label class="row" style="font-size:13px;gap:4px"><input type="checkbox" id="stMissing" style="width:auto"> 只看缺出口報單／發票號碼</label>
       <span style="flex:1"></span><span class="muted" id="stStat"></span>
     </div>
     <div id="stMsg"></div>
@@ -1520,7 +1520,7 @@ nav.tabs [data-tab].g-off{display:none}
       <label class="f" data-saonly>出貨庫別<select id="dWh"></select></label>
       <label class="f" data-saonly>預計出貨日<input id="dShip" type="date"></label>
       <details class="span2" id="dEditLog" hidden style="grid-column:1/-1"></details>
-      <label class="f" data-saonly>出口報單號碼<input id="dExport" placeholder="出貨後補填，例：AA/ /14/525/E0132"><span class="muted" style="font-size:12px" id="dExportHint"></span></label>
+      <label class="f" data-saonly><span id="dExportLab">出口報單號碼</span><input id="dExport" placeholder="出貨後補填"><span class="muted" style="font-size:12px" id="dExportHint"></span></label>
       <label class="f span2">交易條件<input id="dTerms" placeholder="例：FOB Taiwan、月結 30 天、交貨地點"></label>
       <label class="f span2">備註<input id="dNote"></label>
       <label class="f span2" data-odonly style="grid-column:1/-1">客戶額外需求（會印在給資材的訂單上）<textarea id="dReq" rows="2" placeholder="例：需附測試報告、外箱貼客戶料號、指定包裝方式、分批交貨"></textarea></label>
@@ -5466,6 +5466,8 @@ $("biGo").addEventListener("click", async () => { const P = BC.imp; if (!P) retu
     $("bcImpDlg").close(); await bcReload(); flash("匯入完成：" + done.join("；")); bcRender();
   }catch(err){ msg("biMsg", (done.length ? "已完成：" + done.join("；") + "。" : "") + err.message, "err"); } });
 /* ====================== 月結明細：每月已出貨銷貨單的金額與出口報單號碼 ====================== */
+/** 同一個欄位：外銷（外幣）填出口報單號碼，內銷（台幣）填統一發票號碼 */
+const exLabel = (cur, en) => String(cur || "TWD").toUpperCase() === "TWD" ? (en ? "GUI Invoice No." : "發票號碼") : (en ? "Export Decl. No." : "出口報單號碼");
 const shipDay = x => String(x.shippedAt || x.date || "").slice(0, 10);
 function stmtData(){
   const m = $("stMonth").value, cust = $("stCust").value, miss = $("stMissing").checked;
@@ -5605,7 +5607,7 @@ const billT = en => en ? {
   note:"請確認以上金額並安排付款；匯款後煩請回傳匯款單據，以利入帳，謝謝。", sign:"客戶確認（簽章）", dt:"日期" };
 const billFile = (D, ext) => `${D.en ? "Statement" : "對帳單"}_${D.b.no}_${(D.b.custCode || "").replace(/[\\/:*?"<>|\s]+/g, "_")}.${ext}`;
 function billPdf(no){
-  const D = billDoc(no); if (!D) return; const { b, rows, c, cur, en } = D, T = billT(en);
+  const D = billDoc(no); if (!D) return; const { b, rows, c, cur, en } = D, T = billT(en); T.cols = T.cols.map((x, i) => i === 3 ? exLabel(cur, en) : x);
   const co = en ? CO.en : CO.zh, who = en ? (c.nameEn || c.full || b.customer) : (c.full || b.customer), m = v => money(v, cur);
   const css = `<style>.bl th,.bl td{white-space:normal;padding:1.6pt 4pt;font-size:9pt;line-height:1.25;position:static;vertical-align:top}.bl th{font-size:8.5pt;padding:3pt 4pt}.bl .s{font-size:7.5pt;color:#555;margin-top:1pt}
     .bl .sub td{font-weight:bold;background:#f3f6fb;border-bottom:0.8pt solid #999}.bl .tot td{font-weight:bold;border:0;padding:1.5pt 4pt;font-size:9.5pt}.bl .kv td{border:0;padding:0.5pt 6pt 0.5pt 0;font-size:9.5pt}.bl .cont td{color:#777;font-style:italic}</style>`;
@@ -5646,7 +5648,7 @@ function billPdf(no){
 }
 async function billXlsx(no){
   const D = billDoc(no); if (!D) return; if (typeof ExcelJS === "undefined") return msg("bMsg", "Excel 元件還沒載入，請稍候再按一次。", "err");
-  const { b, rows, c, cur, en } = D, T = billT(en), co = en ? CO.en : CO.zh, font = { name:"Arial", size:10 }, N = 10;
+  const { b, rows, c, cur, en } = D, T = billT(en); T.cols = T.cols.map((x, i) => i === 3 ? exLabel(cur, en) : x); const co = en ? CO.en : CO.zh, font = { name:"Arial", size:10 }, N = 10;
   const wb = new ExcelJS.Workbook(); const ws = wb.addWorksheet(en ? "Statement" : "對帳單", { pageSetup:{ paperSize:9, orientation:"landscape", fitToPage:true, fitToWidth:1, fitToHeight:0 }, views:[{ showGridLines:false }] });
   ws.columns = [5, 11, 18, 20, 15, 34, 9, 6, 11, 13].map(w => ({ width:w }));
   const put = (r, v, f) => { ws.mergeCells(r, 1, r, N); Object.assign(ws.getCell(r, 1), { value:v, font:{ ...font, ...f } }); };
@@ -5725,22 +5727,22 @@ function renderStmt(){
   $("stCust").innerHTML = `<option value="">全部客戶</option>` + Object.entries(cs).map(([k, v]) => `<option value="${esc(k)}" ${k===keep?"selected":""}>${esc(v)}</option>`).join("");
   const D = stmtData(); const by = {}; D.forEach(r => (by[r.x.customer + "｜" + (r.x.currency || "")] ||= []).push(r));
   const miss = D.filter(r => !r.x.exportNo).length;
-  $("stStat").textContent = `${D.length} 張銷貨單` + (miss ? `，${miss} 張缺出口報單號碼` : "");
+  $("stStat").textContent = `${D.length} 張銷貨單` + (miss ? `，${miss} 張缺出口報單／發票號碼` : "");
   const c = $("stmtCount"); c.hidden = !miss; c.textContent = miss;
   $("stBody").innerHTML = D.length ? Object.entries(by).map(([k, rows]) => { const [cn, cur] = k.split("｜"); const sum = f => rows.reduce((s, r) => s + r.t[f], 0);
     return `<div class="panel" style="margin-bottom:14px"><div class="row" style="align-items:baseline"><h3 style="margin:0">${esc(cn)}</h3><span class="muted">${esc(rows[0].x.custCode || "")}　${esc(cur)}</span><span style="flex:1"></span>
       <span>小計 <b class="num">${esc(cur)} ${money(sum("sub"), cur)}</b>${sum("tax") ? `　稅額 ${money(sum("tax"), cur)}　合計 <b class="num">${money(sum("total"), cur)}</b>` : ""}</span></div>
-      <div class="tbl-wrap" style="margin-top:8px"><table><thead><tr><th>出貨日</th><th>銷貨單號</th><th>訂單 / 客戶 PO</th><th>出口報單號碼</th><th class="r">計價品項</th><th class="r">金額</th><th>不計價</th></tr></thead><tbody>
+      <div class="tbl-wrap" style="margin-top:8px"><table><thead><tr><th>出貨日</th><th>銷貨單號</th><th>訂單 / 客戶 PO</th><th>${exLabel(cur)}</th><th class="r">計價品項</th><th class="r">金額</th><th>不計價</th></tr></thead><tbody>
       ${rows.map(r => `<tr><td class="mono">${esc(shipDay(r.x))}</td><td class="mono"><a href="#" data-stsa="${esc(r.x.no)}">${esc(r.x.no)}</a>${r.x.imported === "是" ? '<span class="sub">舊資料</span>' : ""}${r.x.editLog ? '<span class="sub" style="color:var(--warn)">已修改</span>' : ""}</td>
         <td class="mono" style="font-size:12px">${r.ords.map(esc).join("<br>")}${r.pos.length ? `<span class="sub">PO ${r.pos.map(esc).join("、")}</span>` : ""}</td>
-        <td><span class="row" style="gap:4px;flex-wrap:nowrap"><input data-stex="${esc(r.x.no)}" value="${esc(r.x.exportNo || "")}" placeholder="補填" style="min-width:170px;${r.x.exportNo ? "" : "border-color:var(--bad)"}"><button type="button" class="btn sm" data-stexs="${esc(r.x.no)}" hidden>存</button></span></td>
+        <td><span class="row" style="gap:4px;flex-wrap:nowrap"><input data-stex="${esc(r.x.no)}" value="${esc(r.x.exportNo || "")}" placeholder="補填${exLabel(cur)}" style="min-width:170px;${r.x.exportNo ? "" : "border-color:var(--bad)"}"><button type="button" class="btn sm" data-stexs="${esc(r.x.no)}" hidden>存</button></span></td>
         <td class="r num">${r.L.filter(l => !l.free && Number(l.qty) > 0).length}</td><td class="r num">${money(r.t.sub, cur)}</td>
         <td style="font-size:12px">${r.fr.map(l => `${esc(l.itemCode)} ×${fmt(l.qty, 2)}（${esc(l.free)}）`).join("<br>")}</td></tr>`).join("")}
       </tbody></table></div></div>`; }).join("") : `<div class="empty">這個月沒有已出貨的銷貨單。</div>`;
   $("stBody").querySelectorAll("[data-stsa]").forEach(a => a.addEventListener("click", e => { e.preventDefault(); openDoc("sale", a.dataset.stsa); }));
   $("stBody").querySelectorAll("[data-stex]").forEach(el => { const b = $("stBody").querySelector(`[data-stexs="${CSS.escape(el.dataset.stex)}"]`);
     el.addEventListener("input", () => b.hidden = false);
-    const save = async () => { try{ await busy(() => call("setSaleExport", { no: el.dataset.stex, exportNo: el.value })); await refresh(true); renderStmt(); flash(`${el.dataset.stex} 出口報單號碼已儲存。`); }catch(err){ msg("stMsg", err.message, "err"); } };
+    const save = async () => { try{ await busy(() => call("setSaleExport", { no: el.dataset.stex, exportNo: el.value })); await refresh(true); renderStmt(); flash(`${el.dataset.stex} 的號碼已儲存。`); }catch(err){ msg("stMsg", err.message, "err"); } };
     b.addEventListener("click", save); el.addEventListener("keydown", e => { if (e.key === "Enter" && !e.isComposing){ e.preventDefault(); save(); } }); });
 }
 ["stMonth","stCust","stMissing"].forEach(id => $(id).addEventListener("change", renderStmt));
@@ -5752,7 +5754,7 @@ $("stExcel").addEventListener("click", async () => {
   const head = (ws, cols) => { const r = ws.addRow(cols.map(c => c[0])); r.eachCell(c => { c.font = { ...font, ...hd }; c.fill = { type:"pattern", pattern:"solid", fgColor:{ argb:"FF" + SL_BLUE } }; c.alignment = { vertical:"middle", horizontal:"center", wrapText:true }; }); ws.columns = cols.map(c => ({ width:c[1] })); };
   const ws = wb.addWorksheet("月結明細");
   ws.addRow([`${m} 月結明細（已出貨銷貨單）`]).font = { ...font, size:14, bold:true }; ws.addRow([]);
-  head(ws, [["客戶",24],["客戶代號",10],["出貨日",11],["銷貨單號",16],["來源訂單",22],["客戶PO",16],["出口報單號碼",22],["幣別",7],["未稅金額",14],["稅額",11],["合計",14],["不計價品項",34]]);
+  head(ws, [["客戶",24],["客戶代號",10],["出貨日",11],["銷貨單號",16],["來源訂單",22],["客戶PO",16],["出口報單／發票號碼",22],["幣別",7],["未稅金額",14],["稅額",11],["合計",14],["不計價品項",34]]);
   D.forEach(r => { const row = ws.addRow([r.x.customer, r.x.custCode || "", shipDay(r.x), r.x.no, r.ords.join("、"), r.pos.join("、"), r.x.exportNo || "", r.x.currency || "", r.t.sub, r.t.tax, r.t.total,
     r.fr.map(l => `${l.itemCode}×${l.qty}（${l.free}）`).join("、")]); row.font = font; [9,10,11].forEach(i => row.getCell(i).numFmt = "#,##0.00");
     if (!r.x.exportNo) row.getCell(7).fill = { type:"pattern", pattern:"solid", fgColor:{ argb:"FFFDE2E1" } }; });
@@ -5760,7 +5762,7 @@ $("stExcel").addEventListener("click", async () => {
   ws.addRow(["客戶小計"]).font = { ...font, bold:true };
   Object.entries(sums).forEach(([k, v]) => { const [cn, cur] = k.split("｜"); const row = ws.addRow([cn, "", "", `${v.n} 張`, "", "", "", cur, v.sub, v.tax, v.total]); row.font = { ...font, bold:true }; [9,10,11].forEach(i => row.getCell(i).numFmt = "#,##0.00"); });
   const wl = wb.addWorksheet("品項明細");
-  head(wl, [["出貨日",11],["銷貨單號",16],["出口報單號碼",22],["客戶",22],["來源訂單",16],["品號",16],["品名",24],["數量",10],["單位",7],["計價",12],["單價",11],["金額",13],["幣別",7]]);
+  head(wl, [["出貨日",11],["銷貨單號",16],["出口報單／發票號碼",22],["客戶",22],["來源訂單",16],["品號",16],["品名",24],["數量",10],["單位",7],["計價",12],["單價",11],["金額",13],["幣別",7]]);
   D.forEach(r => r.L.filter(l => Number(l.qty) > 0).forEach(l => { const row = wl.addRow([shipDay(r.x), r.x.no, r.x.exportNo || "", r.x.customer, l.orderNo || r.x.orderNo || "", l.itemCode, l.name, Number(l.qty), l.unit,
     l.free ? `不計價（${l.free}）` : "計價", l.free ? 0 : Number(l.price) || 0, l.free ? 0 : round((Number(l.qty)||0) * (Number(l.price)||0)), r.x.currency || ""]); row.font = font; [11,12].forEach(i => row.getCell(i).numFmt = "#,##0.00"); }));
   const buf = await wb.xlsx.writeBuffer(); const fn = `月結明細_${m.replace("-", "")}.xlsx`;
@@ -6767,7 +6769,7 @@ function openDoc(kind, no){
   $("dErp").value = (DOC.doc && DOC.doc.erpNo) || ""; $("dErp").disabled = !PM().sales || !DOC.no; $("dErpHint").textContent = DOC.no ? "" : "存檔後可填";
   document.querySelectorAll("#docDlg [data-saonly]").forEach(el => el.hidden = kind !== "sale");
   $("dWh").innerHTML = `<option value="">（依品號主要庫別）</option>` + S.whs.map(w => `<option value="${esc(w.code)}">${esc(whLabel(w.code))}</option>`).join("");
-  $("dWh").value = d.whId || ""; $("dShip").value = d.shipDate || ""; $("dExport").value = d.exportNo || ""; DOC.orders = kind === "sale" ? [...new Set([d.orderNo, ...DOC.lines.map(l => l.orderNo)].filter(Boolean))] : [];
+  $("dWh").value = d.whId || ""; $("dShip").value = d.shipDate || ""; $("dExport").value = d.exportNo || ""; $("dExportLab").textContent = exLabel(d.currency || $("dCur").value); DOC.orders = kind === "sale" ? [...new Set([d.orderNo, ...DOC.lines.map(l => l.orderNo)].filter(Boolean))] : [];
   if (kind === "sale" && d.shippedAt) $("docMeta").textContent += `　出貨 ${d.shippedBy||""} ${d.shippedAt}`;
   $("docCurNote").hidden = !(kind === "quote" && PM().cost); $("docCurNote").innerHTML = `這張報價單的幣別：<b>${esc(d.currency || $("dCur").value || "TWD")}</b>　｜　「成本」欄一律填<b>台幣（TWD）未稅單價</b>，系統會依匯率換算對照`;
   if (kind === "order" && no){ const ms = (SD().mails || []).filter(m => m.docNo === no);
@@ -6784,7 +6786,7 @@ function openDoc(kind, no){
   $("docDlg").showModal();
   setTimeout(() => presCtx(no ? kind + ":" + no : ""), 0);
 }
-$("dCur").addEventListener("change", () => { if (!$("docCurNote").hidden) $("docCurNote").querySelector("b").textContent = $("dCur").value; if ($("dCur").value !== "TWD" && $("dTax").value === "應稅5%") $("dTax").value = "零稅率"; if ($("dCur").value === "TWD" && $("dTax").value === "零稅率") $("dTax").value = "應稅5%"; renderDocTotal(); renderDocLines(); });
+$("dCur").addEventListener("change", () => { if ($("dExportLab")) $("dExportLab").textContent = exLabel($("dCur").value); if (!$("docCurNote").hidden) $("docCurNote").querySelector("b").textContent = $("dCur").value; if ($("dCur").value !== "TWD" && $("dTax").value === "應稅5%") $("dTax").value = "零稅率"; if ($("dCur").value === "TWD" && $("dTax").value === "零稅率") $("dTax").value = "應稅5%"; renderDocTotal(); renderDocLines(); });
 $("dTax").addEventListener("change", renderDocTotal);
 function docCols(){
   const pm = PM(); const q = DOC.kind === "quote"; const sh = DOC.kind === "order" && DOC.no;

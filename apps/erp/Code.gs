@@ -1987,7 +1987,7 @@ function saleAdjust_(u, p) {
   if (x.status !== '已出貨') throw new Error('只有已出貨的銷貨單用這個方式修改；待出貨的請直接編輯。');
   const log = []; const h = p.head || {};
   const setH = (k, label, v) => { v = String(v == null ? '' : v).trim(); if (String(x[k] || '') !== v) { log.push(label + '：' + (x[k] || '（空白）') + ' → ' + (v || '（空白）')); x[k] = v; } };
-  setH('terms', '交易條件', h.terms); setH('note', '備註', h.note); setH('exportNo', '出口報單號碼', h.exportNo);
+  setH('terms', '交易條件', h.terms); setH('note', '備註', h.note); setH('exportNo', '出口報單／發票號碼', h.exportNo);
   if (h.currency) setH('currency', '幣別', h.currency);
   if (h.taxType && h.taxType !== x.taxType) { setH('taxType', '稅別', h.taxType); x.taxRate = TAX_[h.taxType] != null ? TAX_[h.taxType] : 0; }
   const lines = readAll_('salesLines').filter(l => l.saleNo === x.no);
