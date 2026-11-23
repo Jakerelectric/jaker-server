@@ -962,7 +962,7 @@ function mergeItem_(u, p) {
   renameRefs_({ [from.code]: into.code });   // BOM、單價紀錄、報價、訂單、工單、銷貨、報工一起換
   const cis = readAll_('costItems'); const cf = cis.find(x => x.code === from.code);
   if (cf) { if (cis.some(x => x.code === into.code)) deleteRow_('costItems', cf); else { cf.code = into.code; update_('costItems', cf); } }
-  syncCostItems_(); BOMC_CACHE_ = null; syncBomCosts_();
+  if (!p.batch) { syncCostItems_(); BOMC_CACHE_ = null; syncBomCosts_(); }
   recalcBalances_(into.code);   // 兩個品號的紀錄合在一起後，結存要重算
   return { into: into.code, alias: into.alias };
 }
@@ -1035,7 +1035,8 @@ function renameItems_(u, p) {
     res.refs = renameRefs_(plan);   // 報價、訂單、工單、用料、銷貨、報工、包裝、BOM、單價紀錄
   }
   // 2. 合併（新料號已經是另一個品號）
-  merges.forEach(m => { const into = plan[m[1]] || m[1]; mergeItem_(u, { from: plan[m[0]] || m[0], into }); res.merged++; });
+  merges.forEach(m => { const into = plan[m[1]] || m[1]; mergeItem_(u, { from: plan[m[0]] || m[0], into, batch: true }); res.merged++; });
+  if (merges.length || olds.length) { syncCostItems_(); BOMC_CACHE_ = null; syncBomCosts_(); }
   return res;
 }
 /** 客戶庫存表：整批補英文品名 / 英文規格。list = [{ code, nameEn?, specEn? }] */
