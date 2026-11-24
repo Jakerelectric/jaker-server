@@ -35,6 +35,7 @@ async function setupErp(app, { cfg, ROOT, log, serial }) {
     ? new FileStore(path.join(cfg.dataDir, 'erp-db'), { log })
     : new Store(cfg.db, { prefix: 'erp_', tableName: schema.tableName, defFor: schema.defFor, backupDir, log });
   await store.open();
+  if (store.pool) { try { if (await fixTxnsShift(store, log, backupDir)) await store.load(); } catch (e) { log('異動紀錄欄位修正失敗（資料沒有變動）', e); } }
   log('進銷存系統：' + (cfg.store === 'file' ? '單機資料（' + path.join(cfg.dataDir, 'erp-db') + '）' : '資料庫已連線') + '，工作表 ' + store.sheets.size + ' 張');
 
   const rt = createRuntime(store, {
@@ -198,3 +199,32 @@ async function setupErp(app, { cfg, ROOT, log, serial }) {
 }
 
 module.exports = { setupErp };
+
+/**
+ * 一次性修正（2026-11-24）：e4a1474 把 4 個新欄位插在異動紀錄中間，資料庫把第 28～40 欄依序改了名，
+ * 但欄位對照（gas_columns）沒改，造成讀錯欄、寫入失敗。資料本身沒動，只要把欄位名稱改回原樣、移除多出的空欄。
+ * 只在偵測到這個特定狀態時執行；改名前會檢查多出的欄位是空的。
+ */
+async function fixTxnsShift(store, log, backupDir) {
+  const tbl = store.tables.get('異動紀錄'); if (!tbl) return false;
+  const [cols] = await store.pool.query('SELECT COLUMN_NAME AS col, COLUMN_TYPE AS type, ORDINAL_POSITION AS pos FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? ORDER BY ORDINAL_POSITION', [tbl]);
+  const names = cols.map(c => c.col);
+  const now = ['pending', 'back_wh', 'recv_by', 'recv_at', 'note', 'cost', 'ts', 'synced', 'by_id', 'edited', 'pack_lines', 'order_no', 'wo_no', 'lot_no'];
+  const want = ['note', 'cost', 'ts', 'synced', 'by_id', 'edited', 'pack_lines', 'order_no', 'wo_no', 'lot_no', 'plt_no', 'loc', 'merged'];
+  if (names.slice(27, 41).join(',') !== now.join(',') || names.includes('plt_no')) return false;   // 不是這個狀態就不動
+  const [gas] = await store.pool.query('SELECT pos, col, header FROM gas_columns WHERE tbl = ? ORDER BY pos', [tbl]);
+  if (gas.slice(26, 39).map(g => g.col).join(',') !== want.join(',')) { log('異動紀錄：欄位對照和預期不同，不自動修正'); return false; }
+  const [[ex]] = await store.pool.query('SELECT COUNT(*) AS n FROM `' + tbl + '` WHERE `lot_no` IS NOT NULL AND `lot_no` <> \'\'');
+  if (ex.n) { log('異動紀錄：多出的欄位有資料（' + ex.n + ' 筆），不自動修正'); return false; }
+  const bak = path.join(backupDir, 'before-fixTxnsShift-' + Date.now() + '.json');
+  try { fs.mkdirSync(path.dirname(bak), { recursive: true }); const [rows] = await store.pool.query('SELECT * FROM `' + tbl + '`'); fs.writeFileSync(bak, JSON.stringify({ cols, gas, rows })); } catch (e) { log('異動紀錄修正前備份失敗，不修正', e); return false; }
+  const ty = {}; cols.forEach(c => { ty[c.col] = c.type; });
+  const hdr = {}; gas.forEach(g => { hdr[g.col] = g.header; });
+  const parts1 = now.map((c, i) => 'CHANGE `' + c + '` `fix_tmp_' + i + '` ' + ty[c] + ' NULL');
+  await store.pool.query('ALTER TABLE `' + tbl + '` ' + parts1.join(', '));
+  const parts2 = want.map((c, i) => 'CHANGE `fix_tmp_' + i + '` `' + c + '` ' + ty[now[i]] + ' NULL COMMENT ' + store.pool.escape(hdr[c] || c));
+  parts2.push('DROP COLUMN `fix_tmp_13`');
+  await store.pool.query('ALTER TABLE `' + tbl + '` ' + parts2.join(', '));
+  log('異動紀錄：欄位名稱已改回原樣（備份 ' + bak + '）');
+  return true;
+}

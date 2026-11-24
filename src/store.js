@@ -207,6 +207,9 @@ class Store {
       changed = true;
     } else {
       const used = new Set(['_id'].concat(meta.map(c => c.col.toLowerCase())));
+      // 保護：一次有好幾欄表頭同時改變，幾乎都是「新欄位插在中間」造成的錯位；這時不自動改欄位，避免資料對錯欄
+      const moved = meta.filter((c, j) => j < header.length && c.header !== String(header[j] == null ? '' : header[j]).trim().slice(0, 200)).length;
+      if (moved > 2) throw new Error(sheet + '：有 ' + moved + ' 欄表頭同時改變（可能是新欄位插在中間），為了保護資料不自動改欄位，請把新欄位加在最後面');
       for (let j = 0; j < header.length; j++) {
         const h = String(header[j] == null ? '' : header[j]).trim().slice(0, 200);
         if (j >= meta.length) {
