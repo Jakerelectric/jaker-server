@@ -168,6 +168,28 @@ async function setupErp(app, { cfg, ROOT, log, serial }) {
     });
   });
 
+  // 資料庫檢查（管理員，只讀）：比對某張表的欄位對照（gas_columns）與資料表實際欄位、各欄有值的筆數、最新兩筆原始資料
+  app.post('/erp/admin/dbinfo', express.json({ limit: '10kb' }), async (req, res) => {
+    const b = req.body || {};
+    let u = null;
+    try { u = await run('dbAuth', () => rt.call('session_', String(b.token || ''))); } catch (e) { u = null; }
+    if (!u || u.role !== 'admin') return res.status(403).json({ ok: false, error: '只有管理員可以使用。' });
+    if (!store.pool) return res.json({ ok: false, error: '單機版沒有資料庫。' });
+    try {
+      const sheet = String(b.sheet || '異動紀錄'); const tbl = store.tables.get(sheet);
+      if (!tbl) return res.json({ ok: false, error: '找不到工作表 ' + sheet });
+      const [gas] = await store.pool.query('SELECT pos, col, header, type FROM gas_columns WHERE tbl = ? ORDER BY pos', [tbl]);
+      const [cols] = await store.pool.query('SELECT COLUMN_NAME AS col, COLUMN_TYPE AS type, ORDINAL_POSITION AS pos FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? ORDER BY ORDINAL_POSITION', [tbl]);
+      const filled = {};
+      for (const c of cols) { if (c.col === '_id') continue; const [[r]] = await store.pool.query('SELECT COUNT(*) AS n FROM ' + '`' + tbl + '` WHERE `' + c.col + '` IS NOT NULL AND `' + c.col + "` <> ''"); filled[c.col] = r.n; }
+      const [[cnt]] = await store.pool.query('SELECT COUNT(*) AS n FROM `' + tbl + '`');
+      const [last] = await store.pool.query('SELECT * FROM `' + tbl + '` ORDER BY _id DESC LIMIT 2');
+      const [first] = await store.pool.query('SELECT * FROM `' + tbl + '` ORDER BY _id LIMIT 1');
+      const tables = []; for (const [sh, t] of store.tables) tables.push(sh + '=' + t);
+      res.set('Cache-Control', 'no-store').json({ ok: true, tbl, count: cnt.n, memHeader: (store.sheets.get(sheet) || [[]])[0], gas, cols, filled, last, first, tables });
+    } catch (e) { res.json({ ok: false, error: String(e.message || e) }); }
+  });
+
   // 每天凌晨 2:10 備份一份 JSON 到 data/backups/erp（保留 30 份；資料本身在 MySQL）
   cron.schedule('10 2 * * *', () => serial(() => { const f = store.backupTo(backupDir); log('進銷存 已備份 ' + f); }).catch(e => log('進銷存 備份失敗', e)),
     { timezone: 'Asia/Taipei' });
