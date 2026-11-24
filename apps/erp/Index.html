@@ -702,6 +702,7 @@ nav.tabs [data-tab].g-off{display:none}
         <label class="f span2">備註<input id="wrNote"></label>
         <div class="span2" style="display:flex;align-items:center;gap:8px;align-self:end;padding-bottom:10px;font-size:14px"><input type="checkbox" id="wrOpDone" style="width:auto;margin:0"><label for="wrOpDone">本製程完工（這張工單的這道製程做完了）</label></div>
       </div>
+      <label class="row" style="font-size:14px;gap:6px;margin-top:8px" id="wrReworkRow" hidden><input type="checkbox" id="wrRework" style="width:auto;margin:0"> <b>這筆是重工</b>（後站退回來的件數，修好的填良品、修不好的填不良）<span class="chip low" id="wrReworkLeft"></span></label>
       <label class="row" style="font-size:14px;gap:6px;margin-top:8px"><input type="checkbox" id="wrNoWo" style="width:auto;margin:0"> 沒有工單（先記錄現在的生產情況：填品號和製程就能報工）</label>
       <datalist id="wrOpOptions"></datalist><datalist id="deptOptions"></datalist><datalist id="wrStationOptions"></datalist><datalist id="wrStOptions"></datalist>
       <div class="muted" style="font-size:12px;margin-top:4px">前一站、下一站可以是同一個課／組，也可以是別的課／組；送去外面加工時單位選「委外」、旁邊填廠商名稱；第一站的前一站可填「來料」或「倉庫組」，最後一站的下一站可填「入庫」或「出貨」。同一個品號＋製程報過一次，下次會自動帶入上次填的前後站。</div>
@@ -712,6 +713,38 @@ nav.tabs [data-tab].g-off{display:none}
       <div id="wrMsg"></div>
     </div>
     <datalist id="peopleOptions"></datalist><datalist id="badReasons"></datalist>
+    <details class="panel" id="dfPanel" style="margin-bottom:18px">
+      <summary style="cursor:pointer;font-weight:600">回報前站不良（後站挑出前一站做壞的）<span class="count" id="dfPendCount" hidden>0</span></summary>
+      <p class="muted" style="font-size:13px;margin:8px 0">前站已經報成良品，但在你這站發現是不良：選是哪一道製程做壞的、數量、原因，以及要<b>退回重工</b>還是<b>報廢</b>。生管或品管確認後，前站的良品會扣掉、算成前站的不良；退回重工的，前站重工後再報工（勾「這筆是重工」）。</p>
+      <div class="form-grid">
+        <label class="f span2">工單<input id="dfWo" list="woOptions" placeholder="輸入或刷工單號"></label>
+        <label class="f">哪一道做壞的<select id="dfFrom"></select></label>
+        <label class="f">在哪一道發現（選填）<select id="dfFound"></select></label>
+        <label class="f">數量<input id="dfQty" type="number" min="0" step="any"></label>
+        <label class="f">不良原因<select id="dfReason"></select></label>
+        <label class="f" id="dfOtherWrap" hidden>其他原因<input id="dfOther" placeholder="請寫清楚"></label>
+        <div class="f"><span>處理方式</span><div class="row" style="gap:14px;font-size:14px">
+          <label class="row" style="gap:4px"><input type="radio" name="dfAct" value="重工" style="width:auto" checked> 退回重工</label>
+          <label class="row" style="gap:4px"><input type="radio" name="dfAct" value="報廢" style="width:auto"> 報廢（不能再製）</label></div></div>
+        <label class="f span2">備註<input id="dfNote" placeholder="例：第 3 板開始發現、已隔離放在 F1-T"></label>
+      </div>
+      <div id="dfInfo" class="muted" style="font-size:13px;margin-top:6px"></div>
+      <div class="row" style="margin-top:10px"><button class="btn primary" type="button" id="dfSubmit">送出回報</button>
+        <button class="btn sm" type="button" id="dfEditReasons" hidden>編輯不良原因選單</button></div>
+      <div id="dfReasonEdit" hidden style="margin-top:8px"><label class="f">不良原因選單（一行一個；「其他」會自動保留在最後）<textarea id="dfReasonText" rows="6"></textarea></label>
+        <button class="btn sm primary" type="button" id="dfReasonSave">儲存選單</button></div>
+      <div id="dfMsg"></div>
+      <div id="dfReviewBox" hidden style="margin-top:14px">
+        <h3 style="margin:0 0 6px">待確認的前站不良（生管／品管）</h3>
+        <div class="tbl-wrap"><table class="doc-lines"><thead><tr><th><input type="checkbox" id="dfAll" aria-label="全選"></th><th>日期</th><th>工單 / 品號</th><th>做壞的製程</th><th>發現</th><th class="r">數量</th><th>原因</th><th>處理</th><th>回報人</th></tr></thead><tbody id="dfPend"></tbody></table></div>
+        <div class="row" style="margin-top:8px;align-items:flex-end"><button class="btn primary sm" type="button" id="dfApprove">確認所選</button>
+          <label class="f" style="flex:1;min-width:200px">退回原因<input id="dfRejectReason" placeholder="退回時必填，例：現場確認是良品"></label>
+          <button class="btn danger sm" type="button" id="dfReject">退回所選</button></div>
+        <div id="dfRevMsg"></div>
+      </div>
+      <h3 style="margin:14px 0 6px">最近的前站不良紀錄（60 天）</h3>
+      <div class="tbl-wrap"><table><thead><tr><th>日期</th><th>工單 / 品號</th><th>做壞的製程</th><th class="r">數量</th><th>原因</th><th>處理</th><th>狀態</th><th>回報 / 確認</th><th></th></tr></thead><tbody id="dfRows"></tbody></table></div>
+    </details>
     <div class="panel" id="wrLeadPanel" hidden style="margin-bottom:18px">
       <div class="row" style="align-items:center"><h3 style="margin:0">待審核報工</h3><span class="muted" id="wrPendStat" style="font-size:13px"></span></div>
       <div class="tbl-wrap" style="margin-top:8px"><table class="doc-lines">
@@ -1752,7 +1785,8 @@ nav.tabs [data-tab].g-off{display:none}
         <label class="row" style="font-size:14px"><input type="checkbox" id="usPermWh"> 倉庫：出入庫、盤點</label>
         <label class="row" style="font-size:14px"><input type="checkbox" id="usPermProd"> 生產：開工單、領料、完工入庫、報工</label>
         <label class="row" style="font-size:14px"><input type="checkbox" id="usPermLead"> 生產主管：審核報工（自己報的直接核准）</label>
-        <label class="row" style="font-size:14px"><input type="checkbox" id="usPermPlan"> 生管：開工單、指定生產地點與委外、登記委外送出／收回</label></span>
+        <label class="row" style="font-size:14px"><input type="checkbox" id="usPermPlan"> 生管：開工單、指定生產地點與委外、登記委外送出／收回</label>
+        <label class="row" style="font-size:14px"><input type="checkbox" id="usPermQc"> 品管：確認後站回報的前站不良、維護不良原因選單</label></span>
         <span class="muted" style="font-size:12px;margin-top:4px" id="usPermHint">選部門／課組／職務時會自動勾建議的職能，可以再自己調整。一個都沒勾的一般帳號視為「倉庫」。管理員不用勾，全部都看得到。</span></div>
       <label class="f"><span id="usPwLab">密碼</span><input id="usPw" type="password" autocomplete="new-password"></label>
     </div>
@@ -3633,7 +3667,7 @@ function openUser(id){
   $("usId").value = u?.id || ""; $("usId").readOnly = !!u; $("usName").value = u?.name || ""; usOrgSet(u?.dept || "", u?.title || ""); fillSelect("usDefWh", [["","（不指定，看全部）"], ...S.whs.map(w => [w.id, `${w.code} ${w.name||""}`.trim()])]); $("usDefWh").value = u?.defWh || ""; const wa = String(u?.whAllow||"").split(",").filter(Boolean); $("usWhAllow").innerHTML = S.whs.map(w => `<label class="row" style="font-size:14px"><input type="checkbox" value="${esc(w.id)}"${wa.includes(w.id)?" checked":""}> ${esc(`${w.code} ${w.name||""}`.trim())}</label>`).join(""); $("usPermHint").textContent = "選部門／課組／職務時會自動勾建議的職能，可以再自己調整。一個都沒勾的一般帳號視為「倉庫」。管理員不用勾，全部都看得到。";
   $("usRole").value = u?.role || "user"; $("usActive").value = u?.active || "是"; $("usPw").value = "";
   $("usPermSales").checked = String(u?.perms||"").includes("業務"); $("usPermMat").checked = /採購|資材/.test(String(u?.perms||""));
-  $("usPermWh").checked = String(u?.perms||"").includes("倉庫"); $("usPermLead").checked = String(u?.perms||"").includes("生產主管"); $("usPermPlan").checked = String(u?.perms||"").includes("生管"); $("usPermProd").checked = String(u?.perms||"").replace("生產主管","").includes("生產");
+  $("usPermWh").checked = String(u?.perms||"").includes("倉庫"); $("usPermLead").checked = String(u?.perms||"").includes("生產主管"); $("usPermPlan").checked = String(u?.perms||"").includes("生管"); $("usPermQc").checked = String(u?.perms||"").includes("品管"); $("usPermProd").checked = String(u?.perms||"").replace("生產主管","").includes("生產");
   usPwText();
   $("usDel").hidden = !u || u.id===S.user.id; $("usDelConfirm").hidden = true; msg("usDlgMsg","");
   $("userDlg").showModal();
@@ -3654,7 +3688,7 @@ $("userForm").addEventListener("submit", async e => {
   if (!$("usOrgDept").value && !$("usDept").value) return msg("usDlgMsg","請選擇部門。","err");
   if ($("usOrgDept").value && (ORG[$("usOrgDept").value]||[]).length && !$("usOrgUnit").value) return msg("usDlgMsg","請選擇課／組，或選「部門主管」「代理主管」。","err");
   const p = { id:$("usId").value.trim(), name:$("usName").value.trim(), dept:$("usDept").value.trim(), title:usTitleOf(), role:$("usRole").value, active:$("usActive").value, pw:$("usPw").value, defWh:$("usDefWh").value, whAllow:[...$("usWhAllow").querySelectorAll("input:checked")].map(x=>x.value).join(","), isNew:!editingUser,
-    perms:[$("usPermSales").checked?"業務":"", $("usPermMat").checked?"採購":"", $("usPermWh").checked?"倉庫":"", $("usPermProd").checked?"生產":"", $("usPermLead").checked?"生產主管":"", $("usPermPlan").checked?"生管":""].filter(Boolean).join(",") };
+    perms:[$("usPermSales").checked?"業務":"", $("usPermMat").checked?"採購":"", $("usPermWh").checked?"倉庫":"", $("usPermProd").checked?"生產":"", $("usPermLead").checked?"生產主管":"", $("usPermPlan").checked?"生管":"", $("usPermQc").checked?"品管":""].filter(Boolean).join(",") };
   if (!p.name) return msg("usDlgMsg","請輸入姓名。","err");
   try{ S.users = await busy(() => call("saveUser", p)); $("userDlg").close(); renderUsers(); msg("usMsg", p.isNew ? (p.role==="staff" ? `已新增刷卡人員 ${p.id}。` : `已新增帳號 ${p.id}，請把初始密碼告訴本人並請他登入後修改。`) : `已更新 ${p.id}。`); refresh(); }
   catch(err){ msg("usDlgMsg", err.message, "err"); }
@@ -4001,7 +4035,7 @@ function renderWOOps(){
     const sm = WO.no && o.lid ? opSum(WO.no, o.lid) : { good:0, bad:0, hours:0 }; const pct = q ? Math.min(100, Math.round(sm.good / q * 100)) : 0;
     return `<tr><td class="muted">${i+1}</td><td><input data-op="${i}" value="${esc(o.name||"")}" list="opOptions" placeholder="製程名稱" style="min-width:130px" ${ed?"":"disabled"}>${(() => { const m = OPS().find(x => x.name === o.name); return m ? ` <span class="mono muted" style="font-size:12px">${esc(m.code)}</span> ${sopTag(m)}` : ""; })()}${sm.done?'<span class="chip in" style="margin-left:6px">完工</span>':""}${sm.pend?`<span class="sub" style="color:var(--warn)">待審核 ${sm.pend} 筆</span>`:""}</td>
       <td>${opVendorCell(o, i, sm)}</td>
-      <td class="r num">${fmt(sm.good,2)}</td><td class="r num">${sm.bad ? `<span style="color:var(--bad)">${fmt(sm.bad,2)}</span>` : "0"}</td><td class="r num">${yieldTxt(sm.good, sm.bad)}</td><td class="r num">${fmt(sm.hours,2)} h</td>
+      <td class="r num">${fmt(sm.good,2)}</td><td class="r num">${sm.bad ? `<span style="color:var(--bad)">${fmt(sm.bad,2)}</span>` : "0"}${sm.defect ? `<span class="sub">後站退回 ${fmt(sm.defect,2)}${sm.rwPend ? `、待重工 ${fmt(sm.rwPend,2)}` : ""}${sm.scrap ? `、報廢 ${fmt(sm.scrap,2)}` : ""}</span>` : ""}</td><td class="r num">${yieldTxt(sm.good, sm.bad)}</td><td class="r num">${fmt(sm.hours,2)} h</td>
       <td><span class="bar-meter" style="margin:0"><span style="width:${pct}%;${pct>=100?"background:var(--ok)":""}"></span></span></td>
       <td>${ed ? `<button type="button" class="btn sm" data-opup="${i}" ${i?"":"disabled"} aria-label="往前">↑</button> <button type="button" class="btn sm" data-opdel="${i}">刪除</button>` : ""}</td></tr>`;
   }).join("") : `<tr><td colspan="9"><div class="empty" style="padding:12px">還沒有設定製程。${ed ? "按「＋ 新增製程」，或用「沿用上次同品號工單」帶入。" : ""}</div></td></tr>`;
@@ -4282,10 +4316,11 @@ function wrFillOps(){
 }
 function wrInfo(){
   const w = wrWo(); const el = $("wrInfo");
-  if (!w){ el.hidden = true; return; }
+  if (!w){ el.hidden = true; $("wrReworkRow").hidden = true; $("wrRework").checked = false; return; }
   const ops = woOpsOf(w.no); const lid = $("wrOp").value; const i = ops.findIndex(o => o.lid === lid);
   const cur = i >= 0 ? opSum(w.no, lid) : null; const prev = i > 0 ? opSum(w.no, ops[i-1].lid) : null;
   el.hidden = false;
+  const rw = cur && cur.rwPend > 0; $("wrReworkRow").hidden = !rw; if (!rw) $("wrRework").checked = false; $("wrReworkLeft").textContent = rw ? `待重工 ${fmt(cur.rwPend,2)}` : "";
   el.innerHTML = `<b>${esc(w.no)}</b>　${esc(w.itemCode)} ${esc(w.name)}　預計 ${fmt(w.qty,2)} ${esc(w.unit||"")}　<span class="chip ${WO_ST_CHIP[w.status]||"wh"}">${esc(w.status)}</span>` +
     (cur ? `<div style="margin-top:4px">本製程累計：良品 ${fmt(cur.good,2)}、不良 ${fmt(cur.bad,2)}、工時 ${fmt(cur.hours,2)} h` + (prev ? `　｜　上一道「${esc(ops[i-1].name)}」良品 ${fmt(prev.good,2)}` : "") + `</div>` : "") +
     (ops.length ? `<div class="muted" style="margin-top:4px;font-size:12px">${ops.map(o => { const sm = opSum(w.no, o.lid); return `${esc(o.name)} ${fmt(sm.good,2)}`; }).join(" → ")}</div>` : "");
@@ -4314,17 +4349,94 @@ $("wrSubmit").addEventListener("click", async () => {
   const fin = findItemFromInput($("wrFinal").value);
   const body = { opCode: noWo ? ($("wrOpName").dataset.code || opFind($("wrOpName").value)?.code || "") : "", station:$("wrStation").value.trim(), finalItem: fin ? fin.code : $("wrFinal").value.trim(), prevDept:$("wrPrevDept").value, prevOp:$("wrPrevOp").value, nextDept:$("wrNextDept").value, nextOp:$("wrNextOp").value,
     woNo: noWo ? "" : w.no, opLid: noWo ? "" : $("wrOp").value, itemCode: noWo ? (it ? it.code : $("wrItem").value.trim()) : "", opName: noWo ? $("wrOpName").value.trim() : "", site: $("wrSite").dataset.code || siteFind($("wrSite").value)?.code || $("wrSite").value.trim(), stationCode: $("wrStation").dataset.code || stnFind($("wrStation").value)?.code || "", date:$("wrDate").value || today(), workers: team.map(x => ({ workerId:x.id || "", worker:x.name, dept:x.dept || "" })),
-    hours:$("wrHours").value, good:$("wrGood").value, bad:$("wrBad").value, badReason:$("wrReason").value, note:$("wrNote").value, opDone:$("wrOpDone").checked };
+    hours:$("wrHours").value, good:$("wrGood").value, bad:$("wrBad").value, badReason:$("wrReason").value, note:$("wrNote").value, opDone:$("wrOpDone").checked, rework: !noWo && !$("wrReworkRow").hidden && $("wrRework").checked };
   $("wrSubmit").disabled = true;
   try{
     const res = await busy(() => call("woReport", body)); await refresh(true);
-    ["wrHours","wrGood","wrBad","wrReason","wrNote"].forEach(id => $(id).value = "");  // 品號、製程、前後站、最終產品保留，方便連續報同一站 $("wrOpDone").checked = false;
+    ["wrHours","wrGood","wrBad","wrReason","wrNote"].forEach(id => $(id).value = ""); $("wrRework").checked = false;  // 品號、製程、前後站、最終產品保留，方便連續報同一站 $("wrOpDone").checked = false;
     if (!$("wrKeepWho").checked){ WR.people = []; $("wrWho").value = ""; } wrRenderPerson();
     wrFillOps(); renderWR(); beep(true);
     msg("wrMsg", `已報工：${p.name}　${noWo ? `${body.itemCode || "未填品號"}（無工單）${[body.opName, body.station].filter(Boolean).join("｜")}` : w.no}　良品 ${fmt(Number(body.good)||0,2)}、不良 ${fmt(Number(body.bad)||0,2)}、工時 ${fmt(Number(body.hours)||0,2)} h` + (body.opDone ? "　（本製程完工）" : "") + (res.count > 1 ? `\n小組 ${res.count} 人，每人良品 ${res.goods.join("、")}，不良 ${res.bads.join("、")}` : "") + (res.status === "待審核" ? "\n已送出，等主管審核後才會算進進度。" : "\n已核准。"));
     ($("wrKeepWho").checked ? $("wrHours") : $("wrWho")).focus();
   }catch(err){ beep(false); msg("wrMsg", err.message, "err"); }
   finally{ $("wrSubmit").disabled = false; }
+});
+/* ---------- 前站不良：後站挑出前站做壞的 → 退回重工或報廢；生管／品管確認 ---------- */
+const DF = { sel:{}, ed:{} };
+const dfCanReview = () => !!(PM().plan || PM().qc || S.user?.role === "admin");
+const dfReasons = () => (SD().badReasons && SD().badReasons.length ? SD().badReasons : ["其他"]);
+function dfWo(){ const no = orderNoOf($("dfWo").value); return (SD().wos || []).find(w => w.no === no) || null; }
+function dfFill(){
+  const w = dfWo(); const ops = w ? woOpsOf(w.no) : [];
+  const keepF = $("dfFrom").value, keepD = $("dfFound").value;
+  $("dfFrom").innerHTML = ops.length ? ops.map(o => `<option value="${esc(o.lid)}">${o.seq}. ${esc(o.name)}（良品 ${fmt(opSum(w.no, o.lid).good,2)}）</option>`).join("") : `<option value="">${w ? "這張工單沒有製程" : "先選工單"}</option>`;
+  $("dfFound").innerHTML = `<option value="">（不指定）</option>` + ops.map(o => `<option value="${esc(o.lid)}">${o.seq}. ${esc(o.name)}</option>`).join("");
+  if (ops.some(o => o.lid === keepF)) $("dfFrom").value = keepF; if (ops.some(o => o.lid === keepD)) $("dfFound").value = keepD;
+  if (!keepF && ops.length > 1){ /* 預設：倒數第二道做壞、最後一道發現 */ }
+  const keepR = $("dfReason").value; $("dfReason").innerHTML = `<option value="">請選擇</option>` + dfReasons().map(r => `<option>${esc(r)}</option>`).join("");
+  if (dfReasons().includes(keepR)) $("dfReason").value = keepR; $("dfOtherWrap").hidden = $("dfReason").value !== "其他";
+  const sm = w && $("dfFrom").value ? opSum(w.no, $("dfFrom").value) : null;
+  $("dfInfo").textContent = w ? `${w.no}　${w.itemCode} ${w.name}` + (sm ? `　｜　這道目前良品 ${fmt(sm.good,2)}${sm.defect ? `（已被退回 ${fmt(sm.defect,2)}）` : ""}` : "") : "";
+}
+function renderDF(){
+  const D = SD().defects || []; const rv = dfCanReview();
+  $("dfEditReasons").hidden = !rv; $("dfReviewBox").hidden = !rv;
+  const P = D.filter(d => d.status === "待確認");
+  $("dfPendCount").hidden = !(rv && P.length); $("dfPendCount").textContent = P.length;
+  if (document.activeElement?.closest?.("#dfPanel") == null) dfFill();
+  if (rv) {
+    $("dfPend").innerHTML = P.length ? P.map(d => `<tr><td><input type="checkbox" data-dfs="${esc(d.id)}" ${DF.sel[d.id]?"checked":""}></td><td class="mono">${esc(d.date)}</td>
+      <td><span class="mono">${esc(d.woNo)}</span><span class="sub">${esc(d.itemCode)}</span></td><td>${esc(d.fromOp)}</td><td>${esc(d.foundOp||"")}${d.foundDept?`<span class="sub">${esc(d.foundDept)}</span>`:""}</td>
+      <td class="r"><input type="number" min="0" step="any" data-dfe="${esc(d.id)}" data-k="qty" value="${esc(DF.ed[d.id]?.qty ?? d.qty)}" style="width:80px;text-align:right"></td><td>${esc(d.reason)}${d.note?`<span class="sub">${esc(d.note)}</span>`:""}</td>
+      <td><select data-dfe="${esc(d.id)}" data-k="action">${["重工","報廢"].map(a => `<option ${(DF.ed[d.id]?.action ?? d.action) === a ? "selected" : ""}>${a}</option>`).join("")}</select></td><td>${esc(d.reporter)}</td></tr>`).join("")
+      : `<tr><td colspan="9" class="muted">目前沒有待確認的回報。</td></tr>`;
+    $("dfPend").querySelectorAll("[data-dfs]").forEach(c => c.addEventListener("change", () => DF.sel[c.dataset.dfs] = c.checked));
+    $("dfPend").querySelectorAll("[data-dfe]").forEach(el => el.addEventListener(el.tagName === "SELECT" ? "change" : "input", () => {
+      (DF.ed[el.dataset.dfe] = DF.ed[el.dataset.dfe] || {})[el.dataset.k] = el.value; DF.sel[el.dataset.dfe] = true; const c = $("dfPend").querySelector(`[data-dfs="${el.dataset.dfe}"]`); if (c) c.checked = true; }));
+  }
+  const from = new Date(); from.setDate(from.getDate() - 60); const f = from.toISOString().slice(0,10);
+  const R = D.filter(d => String(d.date) >= f).sort((a,b) => (Number(b.ts)||0) - (Number(a.ts)||0));
+  const stChip = st => st === "已確認" ? "in" : st === "退回" ? "out" : "low";
+  $("dfRows").innerHTML = R.length ? R.map(d => { const sm = opSum(d.woNo, d.fromLid);
+    const canDel = rv || (d.reporterId === S.user?.id && d.status !== "已確認");
+    return `<tr><td class="mono">${esc(d.date)}</td><td><span class="mono">${esc(d.woNo)}</span><span class="sub">${esc(d.itemCode)}</span></td><td>${esc(d.fromOp)}</td>
+      <td class="r num">${fmt(d.qty,2)}</td><td>${esc(d.reason)}${d.note?`<span class="sub">${esc(d.note)}</span>`:""}</td>
+      <td>${esc(d.action)}${d.action === "重工" && d.status === "已確認" && sm.rwPend ? `<span class="sub">這道還有 ${fmt(sm.rwPend,2)} 待重工</span>` : ""}</td>
+      <td><span class="chip ${stChip(d.status)}">${esc(d.status)}</span>${d.rejectReason?`<span class="sub">${esc(d.rejectReason)}</span>`:""}</td>
+      <td>${esc(d.reporter)}${d.reviewer?`<span class="sub">確認：${esc(d.reviewer)}</span>`:""}</td>
+      <td>${canDel ? `<button class="btn sm" data-dfdel="${esc(d.id)}">刪除</button>` : ""}</td></tr>`; }).join("") : `<tr><td colspan="9" class="muted">60 天內沒有前站不良紀錄。</td></tr>`;
+  $("dfRows").querySelectorAll("[data-dfdel]").forEach(b => b.addEventListener("click", async () => {
+    if (!(await ask("刪除這筆前站不良回報？已確認的刪除後，前站的良品會加回來。"))) return;
+    try{ await busy(() => call("defectDel", { id: b.dataset.dfdel })); await refresh(true); renderWR(); msg("dfMsg","已刪除。","ok"); }catch(e){ msg("dfMsg", e.message, "err"); } }));
+}
+$("dfWo").addEventListener("change", () => { const w = dfWo(); if (w) $("dfWo").value = `${w.no} ${w.itemCode} ${w.name}`; dfFill(); });
+$("dfWo").addEventListener("input", dfFill); $("dfFrom").addEventListener("change", dfFill);
+$("dfReason").addEventListener("change", () => { $("dfOtherWrap").hidden = $("dfReason").value !== "其他"; });
+$("dfSubmit").addEventListener("click", async () => {
+  const w = dfWo(); if (!w) return msg("dfMsg","請選擇工單。","err");
+  if (!$("dfFrom").value) return msg("dfMsg","請選擇是哪一道製程做壞的。","err");
+  let reason = $("dfReason").value; if (!reason) return msg("dfMsg","請選擇不良原因。","err");
+  if (reason === "其他"){ const o = $("dfOther").value.trim(); if (!o) return msg("dfMsg","選「其他」時請寫原因。","err"); reason = "其他：" + o; }
+  const action = document.querySelector('input[name="dfAct"]:checked')?.value || "重工";
+  try{
+    const r = await busy(() => call("defectReport", { woNo: w.no, fromLid: $("dfFrom").value, foundLid: $("dfFound").value, qty: Number($("dfQty").value), reason, action, note: $("dfNote").value }));
+    await refresh(true); ["dfQty","dfNote","dfOther"].forEach(id => $(id).value = ""); renderWR();
+    msg("dfMsg", r.status === "已確認" ? `已回報並確認：${w.no} 退回 ${action}。` : `已送出，等生管或品管確認後才會從前站良品扣掉。`, "ok");
+  }catch(e){ msg("dfMsg", e.message, "err"); }
+});
+async function dfReview(action){
+  const ids = Object.keys(DF.sel).filter(k => DF.sel[k]); if (!ids.length) return msg("dfRevMsg","請先勾選。","err");
+  const edits = {}; ids.forEach(id => { if (DF.ed[id]) edits[id] = DF.ed[id]; });
+  try{ const r = await busy(() => call("defectReview", { ids, action, edits, reason: $("dfRejectReason").value }));
+    DF.sel = {}; DF.ed = {}; $("dfRejectReason").value = ""; await refresh(true); renderWR(); msg("dfRevMsg", `已${action === "approve" ? "確認" : "退回"} ${r.count} 筆。`, "ok"); }
+  catch(e){ msg("dfRevMsg", e.message, "err"); }
+}
+$("dfApprove").addEventListener("click", () => dfReview("approve")); $("dfReject").addEventListener("click", () => dfReview("reject"));
+$("dfAll").addEventListener("change", e => { (SD().defects || []).filter(d => d.status === "待確認").forEach(d => DF.sel[d.id] = e.target.checked); renderDF(); });
+$("dfEditReasons").addEventListener("click", () => { $("dfReasonEdit").hidden = !$("dfReasonEdit").hidden; $("dfReasonText").value = dfReasons().filter(x => x !== "其他").join("\n"); });
+$("dfReasonSave").addEventListener("click", async () => {
+  try{ await busy(() => call("saveBadReasons", { list: $("dfReasonText").value.split(/\n/) })); await refresh(true); $("dfReasonEdit").hidden = true; renderWR(); msg("dfMsg","不良原因選單已更新。","ok"); }
+  catch(e){ msg("dfMsg", e.message, "err"); }
 });
 function wrList(){
   const f = $("wrFrom").value, t = $("wrTo").value, q = $("wrSearch").value.trim().toLowerCase();
@@ -4366,8 +4478,8 @@ function renderWR(){
     $("wrNoWo").checked = saved != null ? saved === "1" : !open; wrModeUI(); }
   if (!$("wrFrom").value){ const d = new Date(); d.setDate(d.getDate() - 6); $("wrFrom").value = d.toISOString().slice(0,10); $("wrTo").value = today(); }
   $("peopleOptions").innerHTML = S.people.map(p => `<option value="${esc(p.id)} ${esc(p.name)}">${esc(p.dept||"")}</option>`).join("");
-  $("badReasons").innerHTML = [...new Set(["尺寸不良","外觀刮傷","螺牙不良","耐壓測試不良","組裝不良","材料不良", ...(SD().woReports||[]).map(r => r.badReason).filter(Boolean)])].map(x => `<option value="${esc(x)}"></option>`).join("");
-  wrSiteOpts(); wrDeptOpts(); wrRenderPerson(); wrFillOps(); renderWRLead();
+  $("badReasons").innerHTML = [...new Set([...dfReasons().filter(x => x !== "其他"), ...(SD().woReports||[]).map(r => r.badReason).filter(Boolean)])].map(x => `<option value="${esc(x)}"></option>`).join("");
+  wrSiteOpts(); wrDeptOpts(); wrRenderPerson(); wrFillOps(); renderWRLead(); renderDF();
   const L = wrList(); renderWRRoutes(L);
   $("wrRows").innerHTML = L.map(r => `<tr><td class="mono">${esc(r.date)}</td><td>${esc(r.worker)}${r.dept?`<span class="sub">${esc(r.dept)}</span>`:""}${Number(r.teamSize)>1?`<span class="sub">小組 ${fmt(r.teamSize)} 人</span>`:""}</td>
     <td>${r.woNo ? `<span class="mono">${esc(r.woNo)}</span>` : '<span class="muted">無工單</span>'}<span class="sub mono">${esc(r.itemCode)}</span></td><td>${r.opCode ? `<span class="mono muted">${esc(r.opCode)}</span> ` : ""}${esc(r.opName || "—")}${r.station ? `<span class="sub">${esc(r.station)}</span>` : ""}${r.site ? `<span class="sub">${esc(whById(r.site)?.name || r.site)}</span>` : ""}${(r.prevDept || r.prevOp || r.nextDept || r.nextOp) ? `<span class="sub">${esc(stTxt(r.prevDept, r.prevOp) || "—")} → 本站 → ${esc(stTxt(r.nextDept, r.nextOp) || "—")}</span>` : ""}${r.finalItem ? `<span class="sub">最終產品 ${esc(r.finalItem)}</span>` : ""}</td>

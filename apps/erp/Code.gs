@@ -94,10 +94,17 @@ const F = {
           ['good','良品數','n'],['bad','不良數','n'],['badReason','不良原因','s'],['note','備註','s'],['byId','登記帳號','s'],['ts','建立時間','n'],
           ['opDone','本製程完工','s'],['status','審核狀態','s'],['reviewer','審核人','s'],['reviewedAt','審核時間','s'],['rejectReason','退回原因','s'],
           ['groupId','小組報工ID','s'],['teamSize','小組人數','n'],['site','生產地點','s'],
-          ['finalItem','最終產品','s'],['station','工作站','s'],['opCode','製程代號','s'],['stationCode','工作站代號','s'],['prevDept','前站單位','s'],['prevOp','前站製程','s'],['nextDept','下站單位','s'],['nextOp','下站製程','s']]
+          ['finalItem','最終產品','s'],['station','工作站','s'],['opCode','製程代號','s'],['stationCode','工作站代號','s'],['prevDept','前站單位','s'],['prevOp','前站製程','s'],['nextDept','下站單位','s'],['nextOp','下站製程','s'],
+          // ↓ 新欄位一律加在最後面
+          ['rework','重工','s']],
+  // 後站挑出前站的不良：退回重工或報廢；生管／品管確認後才算數（新表）
+  woDefects:[['id','編號','s'],['date','日期','d'],['woNo','工單單號','s'],['itemCode','品號','s'],['fromLid','不良製程ID','s'],['fromOp','不良製程','s'],
+          ['fromSeq','不良製程順序','n'],['foundLid','發現製程ID','s'],['foundOp','發現製程','s'],['foundDept','發現單位','s'],['qty','數量','n'],
+          ['reason','不良原因','s'],['action','處理(重工/報廢)','s'],['status','狀態(待確認/已確認/退回)','s'],['reporterId','回報人ID','s'],['reporter','回報人','s'],
+          ['reviewer','確認人','s'],['reviewedAt','確認時間','s'],['rejectReason','退回原因','s'],['note','備註','s'],['ts','建立時間','n']]
 };
 const TAB = { users:'帳號', whs:'庫別', items:'品號', stock:'庫存', txns:'異動紀錄', counts:'盤點紀錄', packings:'PackingList', consignees:'收件人',
-  quotes:'報價單', quoteLines:'報價單身', orders:'訂單', orderLines:'訂單單身', wos:'工單', woMats:'工單用料', sales:'銷貨單', salesLines:'銷貨單身', repacks:'包裝紀錄', pallets:'棧板', invoices:'Invoice', bills:'結帳單', payments:'收款', customers:'客戶', costLog:'單價紀錄', costItems:'成本資料庫', bom:'BOM', bomHeads:'BOM表頭', bomLog:'BOM修改紀錄', metalPrices:'金屬價格', ops:'製程', settings:'設定', mails:'寄信紀錄', woOps:'工單製程', woOut:'委外紀錄', woReports:'報工紀錄' };
+  quotes:'報價單', quoteLines:'報價單身', orders:'訂單', orderLines:'訂單單身', wos:'工單', woMats:'工單用料', sales:'銷貨單', salesLines:'銷貨單身', repacks:'包裝紀錄', pallets:'棧板', invoices:'Invoice', bills:'結帳單', payments:'收款', customers:'客戶', costLog:'單價紀錄', costItems:'成本資料庫', bom:'BOM', bomHeads:'BOM表頭', bomLog:'BOM修改紀錄', metalPrices:'金屬價格', ops:'製程', settings:'設定', mails:'寄信紀錄', woOps:'工單製程', woOut:'委外紀錄', woReports:'報工紀錄', woDefects:'前站不良' };
 const TYPE_LABEL = { in:'入庫', out:'出庫', xfer:'調撥', adj:'調整' };
 const LABEL_TYPE = { '入庫':'in', '出庫':'out', '調撥':'xfer', '調整':'adj' };
 const ROLE_RANK = { staff:0, viewer:1, user:2, admin:3 };
@@ -377,6 +384,10 @@ const HANDLERS = {
   syncReportDept: ['admin', syncReportDeptAll_, true],
   delReport:   ['user', delReport_, true],
   reviewReports:['user', reviewReports_, true],
+  defectReport:['user', defectReport_, true],
+  defectReview:['user', defectReview_, true],
+  defectDel:   ['user', defectDel_, true],
+  saveBadReasons:['user', saveBadReasons_, true],
   txnsQuery:   ['viewer', txnsQuery_],
   getPacking:  ['viewer', getPacking_],
   savePacking: ['user', savePacking_, true],
@@ -1270,7 +1281,8 @@ function perms_(u) {
   const prodLead = admin || p.indexOf('生產主管') >= 0;
   const wh = admin || p.indexOf('倉庫') >= 0 || (u.role === 'user' && !p.trim());  // 沒勾任何職能的一般帳號視為倉庫
   const plan = admin || p.indexOf('生管') >= 0;  // 生管：開工單、決定生產地點與委外、登記委外送出/收回
-  return { sales, mat, buy: mat, wh, prod, prodLead, plan, price: sales, cost: sales || mat, admin };
+  const qc = admin || p.indexOf('品管') >= 0;    // 品管：確認後站回報的前站不良
+  return { sales, mat, buy: mat, wh, prod, prodLead, plan, qc, price: sales, cost: sales || mat, admin };
 }
 /** 出入庫、盤點只限倉庫或生產人員 */
 function whOnly_(fn) { return function (u, p) { const pm = perms_(u); if (!(pm.wh || pm.prod)) throw new Error('只有倉庫或生產人員可以登記出入庫與盤點。'); return fn(u, p); }; }
@@ -1342,8 +1354,21 @@ function salesLoad_(u) {
     const k = r.woNo + '__' + r.opLid; const o = opSum[k] || (opSum[k] = { good: 0, bad: 0, hours: 0, pend: 0, done: false, last: '' });
     if (st === '待審核') { o.pend++; return; }
     o.good = round_(o.good + Number(r.good || 0)); o.bad = round_(o.bad + Number(r.bad || 0)); o.hours = round_(o.hours + Number(r.hours || 0));
+    if (r.rework === '是') {   // 重工：這些件數退回時已經算成不良；修好的從不良移回良品，修不好的維持不良（報廢）
+      const g = Number(r.good || 0), b = Number(r.bad || 0);
+      o.bad = round_(o.bad - g - b); o.rwDone = round_((o.rwDone || 0) + g + b); o.rwBad = round_((o.rwBad || 0) + b);
+    }
     if (r.opDone === '是') o.done = true; if (String(r.date) > o.last) o.last = String(r.date);
   });
+  // 後站挑出的前站不良（已確認）：從該製程的良品扣掉、算成不良；退回重工的另外記「待重工」
+  const defects = (pm.prod || pm.wh || pm.plan || pm.qc) ? readAll_('woDefects').map(noRow_) : [];
+  readAll_('woDefects').forEach(d => {
+    if (d.status !== '已確認') return;
+    const k = d.woNo + '__' + d.fromLid; const o = opSum[k] || (opSum[k] = { good: 0, bad: 0, hours: 0, pend: 0, done: false, last: '' });
+    const q = Number(d.qty || 0); o.good = round_(o.good - q); o.bad = round_(o.bad + q); o.defect = round_((o.defect || 0) + q);
+    if (d.action === '重工') o.rwNeed = round_((o.rwNeed || 0) + q); else o.scrap = round_((o.scrap || 0) + q);
+  });
+  Object.values(opSum).forEach(o => { if (o.rwNeed || o.rwDone) o.rwPend = round_(Math.max(0, (o.rwNeed || 0) - (o.rwDone || 0))); });
   // 委外製程：收回的良品／不良算進該製程進度；另外統計送出、收回數量
   const woOut = readAll_('woOut').map(x => { delete x._row; return x; });
   woOut.forEach(x => { const k = x.woNo + '__' + x.opLid; const o = opSum[k] || (opSum[k] = { good: 0, bad: 0, hours: 0, pend: 0, done: false, last: '' });
@@ -1361,7 +1386,9 @@ function salesLoad_(u) {
   let codeRules = null; try { codeRules = JSON.parse(setting_('codeRules') || 'null'); } catch (e) {}
   const bills = pm.price ? readAll_('bills').map(x => { delete x._row; return x; }) : [];
   const payments = pm.price ? readAll_('payments').map(x => { delete x._row; return x; }) : [];
-  return { perm: pm, quotes, qLines, orders, oLines, shipped, wos, woMats, woDone, woIssued, woUsed, woOut, woOps, woReports, opSum, sales, sLines, customers, salesPeople, mails, ops, codeRules, bills, payments };
+  let badReasons = []; try { badReasons = JSON.parse(setting_('badReasons') || '[]'); } catch (e) {}
+  if (!badReasons.length) badReasons = BAD_REASONS_DEFAULT_;
+  return { perm: pm, defects, badReasons, quotes, qLines, orders, oLines, shipped, wos, woMats, woDone, woIssued, woUsed, woOut, woOps, woReports, opSum, sales, sLines, customers, salesPeople, mails, ops, codeRules, bills, payments };
 }
 function cleanLines_(lines, keepFrom, pm, isQuote) {
   const items = readAll_('items');
@@ -1920,6 +1947,11 @@ function woReport_(u, p) {
   if ([hours, good, bad].some(x => isNaN(x) || x < 0)) throw new Error('工時、良品、不良都要是 0 以上的數字。');
   if (!(hours > 0 || good > 0 || bad > 0)) throw new Error('請至少填工時、良品或不良其中一項。');
   if (bad > 0 && !String(p.badReason || '').trim()) throw new Error('有不良數時請填不良原因。');
+  if (p.rework) {   // 重工報工：只能報在有「待重工」的製程，件數不能超過待重工數
+    if (!w.no) throw new Error('重工要報在工單上。');
+    const left = woRwPend_(w.no, op.lid); if (!(left > 0)) throw new Error('「' + op.name + '」沒有待重工的數量。');
+    if (good + bad > left) throw new Error('「' + op.name + '」待重工只剩 ' + left + '，這次良品＋不良不能超過。');
+  }
   // 報工人員：一人或一組（多人時，工時是每人工時；良品/不良是全組合計，平均分給每個人）
   const users = readAll_('users');
   const list = (p.workers && p.workers.length ? p.workers : [{ workerId: p.workerId, worker: p.worker, dept: p.dept }]).map(x => {
@@ -1944,7 +1976,7 @@ function woReport_(u, p) {
     itemCode: w.itemCode, workerId: x.workerId, worker: x.worker, dept: x.dept, hours, good: goods[i], bad: bads[i],
     badReason: String(p.badReason || '').trim(), note: String(p.note || '').trim(), byId: u.id, ts,
     opDone: p.opDone ? '是' : '', status: lead ? '已核准' : '待審核', reviewer: lead ? u.name : '', reviewedAt: lead ? nowStr_() : '', rejectReason: '',
-    groupId: gid, teamSize: n, site, finalItem, station: tx_(p.station), opCode: tx_(p.opCode) || (readAll_('ops').find(x => x.name === op.name && (x.kind || '製程') === '製程') || {}).code || '', stationCode: tx_(p.stationCode), prevDept: tx_(p.prevDept), prevOp: tx_(p.prevOp), nextDept: tx_(p.nextDept), nextOp: tx_(p.nextOp) }));
+    groupId: gid, teamSize: n, site, finalItem, rework: p.rework ? '是' : '', station: tx_(p.station), opCode: tx_(p.opCode) || (readAll_('ops').find(x => x.name === op.name && (x.kind || '製程') === '製程') || {}).code || '', stationCode: tx_(p.stationCode), prevDept: tx_(p.prevDept), prevOp: tx_(p.prevOp), nextDept: tx_(p.nextDept), nextOp: tx_(p.nextOp) }));
   append_('woReports', recs);
   if (w.no && w.status === '未開工') { w.status = '生產中'; w.updatedAt = nowStr_(); update_('wos', w); }
   return { id: recs[0].id, status: recs[0].status, count: n, goods, bads };
@@ -1961,6 +1993,76 @@ function syncReportDept_(workerId, dept) {
 }
 /** 管理員：把所有報工的單位對齊到報工人員目前帳號的單位 */
 function syncReportDeptAll_(u, p) { let n = 0; readAll_('users').forEach(x => { if (x.dept) n += syncReportDept_(x.id, x.dept); }); return { changed: n }; }
+// ======================= 前站不良（後站發現 → 退回重工或報廢） =======================
+const BAD_REASONS_DEFAULT_ = ['尺寸不符', '外觀刮傷／變形', '螺牙不良', '焊接不良', '鍍層不良', '組裝錯誤', '耐壓／功能測試不良', '材料不良', '其他'];
+/** 某工單某製程：已核准的良品（含重工修好的）扣掉已確認的前站不良 */
+function woOpGood_(woNo, lid) {
+  let g = 0;
+  readAll_('woReports').forEach(r => { if (r.woNo === woNo && r.opLid === lid && (r.status || '已核准') === '已核准') g += Number(r.good || 0); });
+  readAll_('woOut').forEach(x => { if (x.woNo === woNo && x.opLid === lid && x.kind === '收回') g += Number(x.good || 0); });
+  readAll_('woDefects').forEach(d => { if (d.woNo === woNo && d.fromLid === lid && d.status !== '退回') g -= Number(d.qty || 0); });
+  return round_(g);
+}
+function woRwPend_(woNo, lid) {
+  let need = 0, done = 0;
+  readAll_('woDefects').forEach(d => { if (d.woNo === woNo && d.fromLid === lid && d.status === '已確認' && d.action === '重工') need += Number(d.qty || 0); });
+  readAll_('woReports').forEach(r => { if (r.woNo === woNo && r.opLid === lid && r.rework === '是' && (r.status || '已核准') !== '退回') done += Number(r.good || 0) + Number(r.bad || 0); });
+  return round_(Math.max(0, need - done));
+}
+const canReviewDefect_ = u => { const pm = perms_(u); return pm.plan || pm.qc; };
+function defectReport_(u, p) {
+  const pm = perms_(u); if (!(pm.prod || pm.plan || pm.qc)) throw new Error('只有生產、生管或品管人員可以回報前站不良。');
+  const w = readAll_('wos').find(x => x.no === p.woNo); if (!w) throw new Error('找不到工單 ' + (p.woNo || '') + '。');
+  const ops = readAll_('woOps').filter(o => o.woNo === w.no);
+  const from = ops.find(o => o.lid === p.fromLid); if (!from) throw new Error('請選擇是哪一道製程做壞的。');
+  const found = ops.find(o => o.lid === p.foundLid) || null;
+  const qty = round_(Number(p.qty)); if (!(qty > 0)) throw new Error('數量要大於 0。');
+  const reason = String(p.reason || '').trim(); if (!reason) throw new Error('請選擇不良原因。');
+  const action = p.action === '報廢' ? '報廢' : p.action === '重工' ? '重工' : ''; if (!action) throw new Error('請選擇處理方式：退回重工或報廢。');
+  const avail = woOpGood_(w.no, from.lid);
+  if (qty > avail) throw new Error('「' + from.name + '」目前只有 ' + avail + ' 件良品（已扣掉之前回報的），回報數量不能超過。');
+  const auto = canReviewDefect_(u);   // 生管／品管自己回報的直接確認
+  const d = { id: 'D' + Date.now() + Math.floor(Math.random() * 100), date: p.date || today_(), woNo: w.no, itemCode: w.itemCode, fromLid: from.lid, fromOp: from.name,
+    fromSeq: Number(from.seq) || '', foundLid: found ? found.lid : '', foundOp: found ? found.name : String(p.foundOp || '').trim(), foundDept: u.dept || '',
+    qty, reason, action, status: auto ? '已確認' : '待確認', reporterId: u.id, reporter: u.name, reviewer: auto ? u.name : '', reviewedAt: auto ? nowStr_() : '',
+    rejectReason: '', note: String(p.note || '').trim(), ts: Date.now() };
+  append_('woDefects', [d]);
+  return { id: d.id, status: d.status };
+}
+function defectReview_(u, p) {
+  if (!canReviewDefect_(u)) throw new Error('只有生管或品管可以確認前站不良。');
+  const ids = p.ids || []; if (!ids.length) throw new Error('請先勾選要處理的回報。');
+  const reject = p.action === 'reject'; if (reject && !String(p.reason || '').trim()) throw new Error('退回時請填寫原因。');
+  const all = readAll_('woDefects'); let n = 0;
+  ids.forEach(id => {
+    const d = all.find(x => x.id === id); if (!d || d.status !== '待確認') return;
+    const e = (p.edits || {})[id] || {};
+    if (e.qty !== undefined && e.qty !== '') { const q = round_(Number(e.qty)); if (!(q > 0)) throw new Error('數量要大於 0。'); d.qty = q; }
+    if (e.action === '重工' || e.action === '報廢') d.action = e.action;
+    if (e.reason) d.reason = String(e.reason).trim();
+    if (!reject) { const avail = woOpGood_(d.woNo, d.fromLid) + Number(d.qty || 0);   // 待確認的已經先扣著，算可用量時加回自己
+      if (Number(d.qty) > avail) throw new Error(d.woNo + '「' + d.fromOp + '」只有 ' + avail + ' 件良品，數量不能超過。'); }
+    d.status = reject ? '退回' : '已確認'; d.reviewer = u.name; d.reviewedAt = nowStr_(); d.rejectReason = reject ? String(p.reason).trim() : '';
+    update_('woDefects', d); n++;
+  });
+  return { count: n };
+}
+function defectDel_(u, p) {
+  const d = readAll_('woDefects').find(x => x.id === p.id); if (!d) throw new Error('找不到這筆回報。');
+  if (!(canReviewDefect_(u) || (d.reporterId === u.id && d.status !== '已確認'))) throw new Error('已確認的回報只有生管或品管可以刪除。');
+  if (d.status === '已確認' && d.action === '重工') {
+    const done = readAll_('woReports').some(r => r.woNo === d.woNo && r.opLid === d.fromLid && r.rework === '是' && (r.status || '已核准') !== '退回');
+    if (done) throw new Error('這道製程已經有重工報工，請先處理那些報工再刪除。');
+  }
+  deleteRow_('woDefects', d); return true;
+}
+function saveBadReasons_(u, p) {
+  if (!canReviewDefect_(u)) throw new Error('只有生管或品管可以修改不良原因選單。');
+  const list = [...new Set((p.list || []).map(x => String(x || '').trim()).filter(Boolean))].slice(0, 60);
+  if (!list.length) throw new Error('至少要有一個原因。');
+  if (list.indexOf('其他') < 0) list.push('其他');
+  setSetting_('badReasons', JSON.stringify(list)); return { list };
+}
 /** 主管審核：可以先修改數字再核准，或整批退回（要寫原因） */
 function reviewReports_(u, p) {
   if (!perms_(u).prodLead) throw new Error('只有生產主管可以審核報工。');
