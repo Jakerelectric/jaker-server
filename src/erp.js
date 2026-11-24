@@ -178,8 +178,11 @@ async function setupErp(app, { cfg, ROOT, log, serial }) {
       const t0 = Date.now(); const root = path.resolve(__dirname, '..'); const p = { errors: [] };
       try { p.mo = await dingxin.fetchOpenMos(root); } catch (e) { p.errors.push('製令：' + String(e.message || e).slice(0, 200)); }
       try { p.po = await dingxin.fetchOpenPos(root); } catch (e) { p.errors.push('採購單：' + String(e.message || e).slice(0, 200)); }
+      try { const extra = [].concat((p.mo ? p.mo.mos.map(m => m.itemCode) : []), (p.po ? p.po.lines.map(l => l.itemCode) : []));
+        p.imp = await dingxin.fetchImport(root, extra); } catch (e) { p.errors.push('訂單／銷貨／品號：' + String(e.message || e).slice(0, 200)); }
       if (!p.mo && !p.po) throw new Error(p.errors.join('；'));
       const r = await run('dxSync', () => rt.call('dxSync_', p));
+      if (r.imp) log('進銷存 鼎新匯入（' + by + '）：新增品號 ' + r.imp.items + '、訂單 ' + r.imp.orders + '、銷貨單 ' + r.imp.sales);
       log('進銷存 鼎新同步（' + by + '）：製令 ' + (r.mos ?? '失敗') + ' 張、製程 ' + (r.ops ?? '-') + ' 筆、採購單 ' + (r.pos ?? '失敗') + ' 張／未進料 ' + (r.poLines ?? '-') + ' 筆，' + Math.round((Date.now() - t0) / 1000) + ' 秒' + (p.errors.length ? '；' + p.errors.join('；') : ''));
       return Object.assign(r, { errors: p.errors });
     })().finally(() => { dxSyncing = null; });

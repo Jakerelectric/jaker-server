@@ -3914,16 +3914,17 @@ const whOptsIn = sel => { const o = w => `<option value="${esc(w.code)}" ${w.cod
   const W = S.whs.filter(w => (w.type || "倉庫") === "倉庫"), P = S.whs.filter(w => w.type === "生產"), X = S.whs.filter(w => w.code === sel && !W.includes(w) && !P.includes(w));
   return `<optgroup label="倉庫">${W.map(o).join("")}</optgroup>` + (P.length ? `<optgroup label="生產地點（課組）">${P.map(o).join("")}</optgroup>` : "") + X.map(o).join(""); };
 const whOpts = sel => S.whs.map(w => `<option value="${esc(w.code)}" ${w.code===sel?"selected":""}>${esc(whLabel(w.code))}</option>`).join("");
-function openWO(no){
+function openWO(no, pre){
   WO.no = no || null; WO.doc = no ? (SD().wos || []).find(w => w.no === no) : null;
-  const d = WO.doc || {};
+  WO.pre = !no && pre ? pre : null;   // 從鼎新製令帶出的預設內容（可以再改）
+  const d = WO.doc || WO.pre || {};
   WO.mats = no ? woMatsOf(no).map(m => ({ ...m, now:"" })) : [];
-  WO.ops = no ? woOpsOf(no).map(o => ({ lid:o.lid, name:o.name, vendor:o.vendor||"" })) : [];
+  WO.ops = no ? woOpsOf(no).map(o => ({ lid:o.lid, name:o.name, vendor:o.vendor||"" })) : (WO.pre?.ops || []).map(o => ({ lid:"", name:o.name, vendor:"" }));
   if (!WO.mats.length) WO.mats = [{ lid:uid8(), now:"" }];
   $("woTitle").textContent = no ? "工單 " + no : "開立工單";
   $("woStatus").innerHTML = d.status ? `<span class="chip ${WO_ST_CHIP[d.status]||"wh"}">${esc(d.status)}</span>` : "";
-  $("woMeta").textContent = no ? `開單 ${d.createdBy||""} ${d.createdAt||""}　更新 ${d.updatedAt||""}` : "";
-  $("wNo").value = no || ""; $("wNo").readOnly = !!no; $("wDate").value = d.date || today();
+  $("woMeta").textContent = no ? `開單 ${d.createdBy||""} ${d.createdAt||""}　更新 ${d.updatedAt||""}${d.moNo ? `　鼎新製令 ${d.moNo}` : ""}` : (WO.pre ? `從鼎新製令 ${WO.pre.moNo} 帶入（${WO.pre.wcName}）：品號、數量、製程、生產地點都可以改，存檔後才會開立` : "");
+  $("wNo").value = no || (WO.pre?.no || ""); $("wNo").readOnly = !!no; $("wDate").value = d.date || today();
   $("wItem").value = d.itemCode ? `${d.itemCode} ${d.name||""}` : ""; $("wQty").value = d.qty || ""; $("wDue").value = d.dueDate || ""; $("wOrder").value = d.orderNo || ""; $("wNote").value = d.note || "";
   $("wWhIn").innerHTML = whOptsIn(d.whIn || "");
   $("wSite").innerHTML = `<option value="">（不指定：領料直接從倉庫扣帳）</option>` + whOfType("生產").map(w => `<option value="${esc(w.code)}">${esc(whLabel(w.code))}</option>`).join("")
@@ -4004,7 +4005,8 @@ function woPayload(){
   const it = findItemFromInput($("wItem").value);
   return { isNew: !WO.no, no: WO.no || $("wNo").value.trim(), date:$("wDate").value, itemCode: it ? it.code : $("wItem").value.trim(), qty:$("wQty").value, whIn:$("wWhIn").value,
     dueDate:$("wDue").value, orderNo: orderNoOf($("wOrder").value), note:$("wNote").value, site:$("wSite").value, mats: WO.mats.map(m => ({ lid:m.lid, itemCode:m.itemCode||"", qty:m.qty, whOut:m.whOut||"", note:m.note||"" })),
-    ops: WO.ops.filter(o => String(o.name||"").trim()).map(o => ({ lid:o.lid||"", name:o.name, vendor:o.vendor||"" })) };
+    ops: WO.ops.filter(o => String(o.name||"").trim()).map(o => ({ lid:o.lid||"", name:o.name, vendor:o.vendor||"" })),
+    ...(WO.pre && !WO.no ? { moNo: WO.pre.moNo, wc: WO.pre.wc } : {}) };
 }
 async function woRun(fn, okText, keepOpen){
   msg("woMsg","");
@@ -4406,7 +4408,7 @@ async function dxSyncNow(msgId, after){
   msg(msgId, "同步中，請稍候…", "ok");
   try{ const r = await fetch((ERP_API || "/erp/api").replace(/\/api$/, "/dingxin/sync"), { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ token: S.token }) }).then(r => r.json());
     if (!r.ok) throw new Error(r.error || "同步失敗");
-    const d = r.data; msg(msgId, `同步完成：製令 ${d.mos ?? "失敗"} 張、採購未進料 ${d.poLines ?? "失敗"} 筆。` + (d.errors && d.errors.length ? "　" + d.errors.join("；") : ""), d.errors && d.errors.length ? "err" : "ok");
+    const d = r.data; msg(msgId, `同步完成：製令 ${d.mos ?? "失敗"} 張、採購未進料 ${d.poLines ?? "失敗"} 筆` + (d.imp ? `；新增品號 ${d.imp.items}、訂單 ${d.imp.orders} 張、銷貨單 ${d.imp.sales} 張（已有的不覆蓋）` : "") + "。" + (d.errors && d.errors.length ? "　" + d.errors.join("；") : ""), d.errors && d.errors.length ? "err" : "ok");
     MO.d = null; PO.d = null; after(); }
   catch(e){ msg(msgId, e.message, "err"); }
 }
@@ -4435,11 +4437,48 @@ function renderMO(){
       <td class="mono">${esc(m.startDate||"")}<span class="sub" ${late?'style="color:var(--bad)"':""}>${esc(m.dueDate||"")}${late?" 已逾期":""}</span></td>
       <td><span class="chip ${m.status==="生產中"?"in":m.status==="已發料"?"wh":"low"}">${esc(m.status)}</span></td>
       <td class="wrap-cell" style="font-size:13px">${ops.length ? ops.map(o => o.kind === "委外" ? `<span class="chip out" title="${esc(o.desc)}">委外 ${esc(o.wcName)}${o.desc?"："+esc(o.desc):""}</span>` : `<span class="chip wh" title="${esc(o.opCode)}">${esc(DX_WC[o.wc] || o.wcName || o.wc)}${o.desc?"："+esc(o.desc):""}</span>`).join(" → ") : '<span class="muted">鼎新沒有排製程</span>'}</td>
-      <td>${w ? `<span class="mono">${esc(w.no)}</span><span class="sub">${esc(w.status)}</span>` : '<span class="muted">尚未開立</span>'}</td></tr>`; }).join("")
+      <td>${moWoCell(m, ops)}</td></tr>`; }).join("")
     : `<tr><td colspan="7"><div class="empty" style="padding:12px">${MO.d.mos.length ? "沒有符合條件的製令。" : "還沒有同步鼎新製令。" + (S.user?.role === "admin" ? "按右上「立即同步鼎新」。" : "")}</div></td></tr>`;
   $("moMore").textContent = L.length > SHOW ? `共 ${L.length} 張，只列前 ${SHOW} 張；請用搜尋或篩選縮小範圍。` : (L.length ? `共 ${L.length} 張` : "");
 }
 ["moQ","moWc","moSt"].forEach(id => $(id).addEventListener(id === "moQ" ? "input" : "change", renderMO));
+/* 製令 → 各課工單：依鼎新製程的工作中心分段，每個課一個「＋開工單」按鈕，帶入預設值後打開工單畫面再存 */
+const DX_SITE = { P1:"M1", P2:"M2", P3:"M3", PA:"AS", PF:"FA" };
+const moWosOf = no => (SD().wos || []).filter(w => w.moNo === no || w.no === no || String(w.no).startsWith(no + "-"));
+function moSegs(ops){   // 連續同一個課的製程合成一段；委外另外標示（掛在前一段後面）
+  const segs = []; ops.forEach(o => { if (o.kind === "委外"){ const s = segs[segs.length-1]; if (s) s.after.push(o); return; }
+    const s = segs[segs.length-1]; if (s && s.wc === o.wc && !s.after.length) s.ops.push(o); else segs.push({ wc:o.wc, wcName: DX_WC[o.wc] || o.wcName || o.wc, ops:[o], after:[] }); });
+  return segs;
+}
+function moSiteOf(wc, name){ const ws = whOfType("生產"); return (ws.find(w => w.name === name || whLabel(w.code).includes(name)) || ws.find(w => w.code === DX_SITE[wc]) || {}).code || ""; }
+function moWoCell(m, ops){
+  const W = moWosOf(m.no); const can = PM().prod || PM().plan;
+  const segs = moSegs(ops); const have = new Set(W.map(w => w.wc).filter(Boolean));
+  return (W.length ? W.map(w => `<a href="#" data-mowo="${esc(w.no)}" class="mono">${esc(w.no)}</a><span class="sub">${esc(w.status)}${w.wc ? "・" + esc(DX_WC[w.wc] || w.wc) : ""}</span>`).join("") : "")
+    + (can ? (segs.length ? segs.map((s, i) => have.has(s.wc) ? "" : `<button class="btn sm" data-mojoin="${esc(m.no)}" data-seg="${i}" title="帶出${esc(s.wcName)}的工單">＋${esc(s.wcName)}</button>`).join(" ")
+      : (W.length ? "" : `<button class="btn sm" data-mojoin="${esc(m.no)}" data-seg="-1">＋開工單</button>`)) : (W.length ? "" : '<span class="muted">尚未開立</span>'));
+}
+function moJoin(no, segIdx){
+  const m = MO.d.mos.find(x => x.no === no); if (!m) return;
+  const ops = MO.d.ops.filter(o => o.moNo === no).sort((a,b) => String(a.seq).localeCompare(String(b.seq)));
+  const segs = moSegs(ops); const seg = segIdx >= 0 ? segs[segIdx] : null; const last = !seg || segIdx === segs.length - 1;
+  const used = new Set((SD().wos || []).map(w => w.no)); let wno = no;
+  if (used.has(wno) || (seg && segs.length > 1)) { wno = seg ? `${no}-${seg.wc}` : no; let k = 2; while (used.has(wno)) wno = `${no}-${seg ? seg.wc : ""}${k++}`; }
+  const site = seg ? moSiteOf(seg.wc, seg.wcName) : (whOfType("生產").find(w => w.code === S.user?.defWh)?.code || "");
+  const next = seg && !last ? segs[segIdx + 1] : null;
+  const segDue = seg ? [...seg.ops, ...seg.after].map(o => o.dueDate).filter(Boolean).sort().pop() : "";
+  const it = itemByAny(m.itemCode);
+  openWO(null, { moNo: m.no, wc: seg ? seg.wc : "", wcName: seg ? seg.wcName : "（鼎新沒有排製程）", no: wno, date: today(),
+    itemCode: it ? it.code : m.itemCode, name: it ? it.name : m.name, qty: m.qty, dueDate: segDue || m.dueDate, orderNo: m.orderNo, site,
+    whIn: next ? moSiteOf(next.wc, next.wcName) : "", note: `鼎新製令 ${m.no}` + (seg ? `（${seg.wcName}${segs.length > 1 ? `，第 ${segIdx+1}/${segs.length} 段` : ""}）` : "") + (seg && seg.after.length ? `；之後委外：${seg.after.map(o => o.wcName + (o.desc ? " " + o.desc : "")).join("、")}` : ""),
+    ops: seg ? seg.ops.map(o => ({ name: opFind(o.opCode)?.name || o.desc || o.opCode })) : [] });
+  if (!it) msg("woMsg", `系統還沒有品號 ${m.itemCode}，請先建立品號或改成這個課實際做的半成品品號。`, "err");
+  else if (!last) msg("woMsg", `這是第 ${segIdx+1} 段（${seg.wcName}），做完會交給 ${next.wcName}：品號如果是半成品，請改成這段實際做出來的品號；入庫庫別預設是下一段的課。`, "ok");
+}
+$("moRows").addEventListener("click", e => {
+  const j = e.target.closest("[data-mojoin]"); if (j) return moJoin(j.dataset.mojoin, Number(j.dataset.seg));
+  const a = e.target.closest("[data-mowo]"); if (a){ e.preventDefault(); openWO(a.dataset.mowo); }
+});
 $("moSync").addEventListener("click", () => dxSyncNow("moMsg", () => loadMO(true)));
 async function loadPO(force){
   $("poSync").hidden = S.user?.role !== "admin";

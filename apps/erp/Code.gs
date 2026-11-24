@@ -75,7 +75,9 @@ const F = {
   // ---- 工單（接近鼎新 MOCTA 工單單頭 / MOCTB 工單用料）----
   wos:   [['no','工單單號','s'],['date','開單日期','d'],['itemCode','品號','s'],['name','品名','s'],['spec','規格','s'],['unit','單位','s'],
           ['qty','預計產量','n'],['whIn','入庫庫別','s'],['dueDate','預計完工','d'],['orderNo','來源訂單','s'],['status','狀態','s'],['note','備註','s'],
-          ['createdBy','開單人','s'],['createdAt','建立時間','s'],['updatedAt','更新時間','s'],['site','生產地點','s']],
+          ['createdBy','開單人','s'],['createdAt','建立時間','s'],['updatedAt','更新時間','s'],['site','生產地點','s'],
+          // ↓ 新欄位一律加在最後面
+          ['moNo','鼎新製令單號','s'],['wc','鼎新工作中心','s']],
   woMats:[['woNo','工單單號','s'],['lid','明細ID','s'],['seq','序號','n'],['itemCode','品號','s'],['name','品名','s'],['spec','規格','s'],['unit','單位','s'],
           ['qty','需領用量','n'],['whOut','領料庫別','s'],['note','備註','s']],
   // ---- 銷貨單（接近鼎新 COPTG 銷貨單頭 / COPTH 銷貨單身）：業務開單，倉庫確認出貨才扣庫存 ----
@@ -625,8 +627,53 @@ function dxSync_(p) {
     replaceSheet_('mos', mos); replaceSheet_('moOps', p.mo.ops || []); setSetting_('dxMoSyncAt', at); r.mos = mos.length; r.ops = (p.mo.ops || []).length; }
   if (p.po) { const pos = (p.po.pos || []).map(x => Object.assign({}, x, { syncedAt: at }));
     replaceSheet_('pos', pos); replaceSheet_('poLines', p.po.lines || []); setSetting_('dxPoSyncAt', at); r.pos = pos.length; r.poLines = (p.po.lines || []).length; }
+  if (p.imp) { r.imp = dxImport_(p.imp, at); setSetting_('dxImpAt', at); setSetting_('dxImpLast', JSON.stringify(r.imp)); }
   if (p.errors && p.errors.length) setSetting_('dxSyncErr', at + '：' + p.errors.join('；')); else setSetting_('dxSyncErr', '');
   setSetting_('dxSyncAt', at);
+  return r;
+}
+/**
+ * 鼎新 → 系統：只「新增」系統沒有的品號、訂單、銷貨單；已經有的一律不覆蓋（差異請看試算報告）
+ *   銷貨單標成「舊資料匯入／已出貨」：只計入訂單已出貨數量，不會動到庫存
+ */
+function dxImport_(imp, at) {
+  const r = { items: 0, orders: 0, orderLines: 0, sales: 0, salesLines: 0, skippedNoItem: 0 };
+  const items = readAll_('items'); const known = new Set();
+  items.forEach(i => { known.add(String(i.code).toUpperCase()); String(i.alias || '').split(/[,，;；、\s]+/).filter(Boolean).forEach(a => known.add(a.toUpperCase())); });
+  const catOf = c => /^[34]/.test(c) ? '成品/半成品' : '原物料/零組件';
+  const newItems = (imp.items || []).filter(i => i.code && !known.has(i.code.toUpperCase())).map(i => {
+    known.add(i.code.toUpperCase());
+    return { code: i.code, name: i.name || i.code, nameEn: '', spec: i.spec || '', unit: i.unit || 'PCS', cat: catOf(i.code), mainWh: '', safety: '', cost: '', note: '鼎新匯入 ' + at, alias: '', erpWh: i.erpWh || '' };
+  });
+  if (newItems.length) { append_('items', newItems); r.items = newItems.length; }
+  const codeOf = c => { const it = itemByAny_(readAll_('items'), c); return it ? it.code : c; };
+  const custs = readAll_('customers'); const custName = (code, full) => { const c = custs.find(x => x.code === code); return c ? (c.short || c.full || full) : full; };
+  // 訂單
+  const ords = readAll_('orders'); const haveO = new Set(); ords.forEach(o => { haveO.add(String(o.no)); if (o.erpNo) haveO.add(String(o.erpNo)); });
+  const oh = [], ol = [];
+  (imp.orders || []).forEach(o => {
+    if (haveO.has(o.no) || !o.lines.length) return;
+    const open = o.lines.some(l => !l.closed && l.qty > l.done);
+    oh.push({ no: o.no, date: o.date, custCode: o.custCode, customer: custName(o.custCode, o.customer), contact: '', custPO: o.custPO, currency: o.currency || 'TWD',
+      taxType: '', taxRate: o.taxRate || '', quoteNo: '', terms: '', note: '鼎新匯入' + (o.confirmed ? '' : '（鼎新未確認）'), salesId: '', salesName: '',
+      status: open ? '進行中' : '已結案', createdAt: at, updatedAt: at, req: '', erpNo: o.no });
+    o.lines.forEach((l, i) => ol.push({ orderNo: o.no, lid: Utilities.getUuid().slice(0, 8), seq: i + 1, itemCode: codeOf(l.itemCode), name: l.name, nameEn: '', spec: l.spec,
+      unit: l.unit, qty: l.qty, price: l.price, cost: '', dueDate: l.dueDate, note: l.closed ? '鼎新已結案（已交 ' + l.done + '）' : (l.done ? '鼎新已交 ' + l.done : '') }));
+  });
+  if (oh.length) { append_('orders', oh); append_('orderLines', ol); r.orders = oh.length; r.orderLines = ol.length; }
+  // 銷貨單
+  const haveS = new Set(readAll_('sales').map(x => String(x.no)));
+  const sh = [], sl = [];
+  (imp.sales || []).forEach(x => {
+    if (haveS.has(x.no) || !x.lines.length) return;
+    const ord = (x.lines.find(l => l.orderNo) || {}).orderNo || '';
+    sh.push({ no: x.no, date: x.date, custCode: x.custCode, customer: custName(x.custCode, x.customer), contact: '', orderNo: ord, currency: x.currency || 'TWD', taxType: '',
+      taxRate: x.taxRate || '', whId: '', shipDate: x.date, terms: '', note: '鼎新匯入', salesId: '', salesName: '', status: '已出貨', shippedAt: x.date, shippedBy: '鼎新',
+      createdAt: at, updatedAt: at, imported: '是', exportNo: '', editLog: '' });
+    x.lines.forEach((l, i) => sl.push({ saleNo: x.no, lid: Utilities.getUuid().slice(0, 8), seq: i + 1, itemCode: codeOf(l.itemCode), name: l.name, nameEn: '', spec: l.spec,
+      unit: l.unit, qty: l.qty, price: l.price, whId: '', note: '', shipQty: l.qty, orderNo: l.orderNo, free: l.price ? '' : '' }));
+  });
+  if (sh.length) { append_('sales', sh); append_('salesLines', sl); r.sales = sh.length; r.salesLines = sl.length; }
   return r;
 }
 function moList_(u, p) {
@@ -1592,6 +1639,7 @@ function saveWO_(u, p) {
     throw new Error('委外加工只能由生管設定。');
   const h = { date: d.date || today_(), itemCode: it.code, name: it.name, spec: it.spec || '', unit: it.unit, qty, whIn: d.whIn, dueDate: d.dueDate || '',
     orderNo: String(d.orderNo || '').trim(), note: String(d.note || '').trim(), site };
+  if (d.moNo !== undefined) { h.moNo = String(d.moNo || '').trim(); h.wc = String(d.wc || '').trim(); }   // 從鼎新製令帶出的工單：記下是哪張製令、哪個課
   if (!w) {
     const no = String(d.no || '').trim() || nextNo_('MO', h.date, all.map(x => x.no));
     w = Object.assign({ no, status: '未開工', createdBy: u.name, createdAt: nowStr_() }, h); w.updatedAt = nowStr_(); append_('wos', [w]);

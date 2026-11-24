@@ -62,4 +62,41 @@ async function fetchOpenPos(root) {
   });
 }
 
-module.exports = { fetchOpenMos, fetchOpenPos };
+const cur = v => (t(v).toUpperCase() === 'NTD' ? 'TWD' : t(v).toUpperCase());
+const since = days => { const d = new Date(Date.now() - days * 864e5); return d.toISOString().slice(0, 10).replace(/-/g, ''); };
+/**
+ * 正式匯入用：訂單（近 180 天）、銷貨單（近 120 天，只取已確認）、以及「用得到」的品號
+ *   用得到 = 這些訂單／銷貨單／未結案製令／未進料採購的品號，加上鼎新有庫存的品號（費用品 Z9x 除外）
+ */
+async function fetchImport(root, extraCodes) {
+  return withPool(root, async pool => {
+    const rq = () => pool.request();
+    const oS = since(180), sS = since(120);
+    const TC = (await rq().input('d', oS).query(`SELECT TC001,TC002,TC003,TC004,TC008,TC012,TC027,TC041,TC053 FROM COPTC WITH (NOLOCK) WHERE TC003 >= @d AND TC027 <> 'V'`)).recordset;
+    const TD = (await rq().input('d', oS).query(`SELECT d.TD001,d.TD002,d.TD003,d.TD004,d.TD005,d.TD006,d.TD008,d.TD009,d.TD010,d.TD011,d.TD013,d.TD016
+      FROM COPTD d WITH (NOLOCK) JOIN COPTC c WITH (NOLOCK) ON c.TC001 = d.TD001 AND c.TC002 = d.TD002 WHERE c.TC003 >= @d AND c.TC027 <> 'V'`)).recordset;
+    const TG = (await rq().input('d', sS).query(`SELECT TG001,TG002,TG003,TG004,TG007,TG011,TG044 FROM COPTG WITH (NOLOCK) WHERE TG003 >= @d AND TG023 = 'Y'`)).recordset;
+    const TH = (await rq().input('d', sS).query(`SELECT h.TH001,h.TH002,h.TH003,h.TH004,h.TH005,h.TH006,h.TH008,h.TH009,h.TH012,h.TH014,h.TH015
+      FROM COPTH h WITH (NOLOCK) JOIN COPTG g WITH (NOLOCK) ON g.TG001 = h.TH001 AND g.TG002 = h.TH002 WHERE g.TG003 >= @d AND g.TG023 = 'Y'`)).recordset;
+    const MC = (await rq().query(`SELECT DISTINCT MC001 FROM INVMC WITH (NOLOCK) WHERE MC007 <> 0`)).recordset;
+    const orders = {}; TC.forEach(c => { const no = `${t(c.TC001)}-${t(c.TC002)}`;
+      orders[no] = { no, date: ymd(c.TC003), custCode: t(c.TC004), customer: t(c.TC053), custPO: t(c.TC012), currency: cur(c.TC008), taxRate: n(c.TC041), confirmed: t(c.TC027) === 'Y', lines: [] }; });
+    TD.forEach(d => { const o = orders[`${t(d.TD001)}-${t(d.TD002)}`]; if (!o) return;
+      o.lines.push({ seq: Number(t(d.TD003)) || o.lines.length + 1, itemCode: t(d.TD004), name: t(d.TD005), spec: t(d.TD006), qty: n(d.TD008), done: n(d.TD009),
+        unit: t(d.TD010), price: n(d.TD011), dueDate: ymd(d.TD013), closed: t(d.TD016) !== 'N' }); });
+    const sales = {}; TG.forEach(g => { const no = `${t(g.TG001)}-${t(g.TG002)}`;
+      sales[no] = { no, date: ymd(g.TG003), custCode: t(g.TG004), customer: t(g.TG007), currency: cur(g.TG011), taxRate: n(g.TG044), lines: [] }; });
+    TH.forEach(h => { const x = sales[`${t(h.TH001)}-${t(h.TH002)}`]; if (!x) return;
+      x.lines.push({ seq: Number(t(h.TH003)) || x.lines.length + 1, itemCode: t(h.TH004), name: t(h.TH005), spec: t(h.TH006), qty: n(h.TH008), unit: t(h.TH009),
+        price: n(h.TH012), orderNo: t(h.TH014) && t(h.TH015) ? `${t(h.TH014)}-${t(h.TH015)}` : '' }); });
+    const want = new Set((extraCodes || []).map(t));
+    Object.values(orders).forEach(o => o.lines.forEach(l => want.add(l.itemCode)));
+    Object.values(sales).forEach(x => x.lines.forEach(l => want.add(l.itemCode)));
+    MC.forEach(r => want.add(t(r.MC001)));
+    const items = []; const all = (await rq().query(`SELECT MB001,MB002,MB003,MB004,MB017 FROM INVMB WITH (NOLOCK)`)).recordset;
+    all.forEach(m => { const c = t(m.MB001); if (c && want.has(c) && !/^Z9\d/i.test(c)) items.push({ code: c, name: t(m.MB002), spec: t(m.MB003), unit: t(m.MB004), erpWh: t(m.MB017) }); });
+    return { orders: Object.values(orders), sales: Object.values(sales), items };
+  });
+}
+
+module.exports = { fetchOpenMos, fetchOpenPos, fetchImport };
