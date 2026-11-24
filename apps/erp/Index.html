@@ -287,6 +287,7 @@ nav.tabs [data-tab].g-off{display:none}
   <button role="tab" data-tab="wo" data-g="prod" data-vis="prod,wh,plan">工單<span class="count" id="woCount" hidden>0</span></button>
   <button role="tab" data-tab="wr" data-g="prod" data-vis="prod,plan">報工<span class="count" id="wrCount" hidden>0</span></button>
   <button role="tab" data-tab="pov" data-g="prod" data-vis="prod,plan">生產一覽</button>
+  <button role="tab" data-tab="mo" data-g="prod" data-vis="prod,plan,wh,qc">鼎新製令</button>
   <button role="tab" data-tab="quote" data-g="biz" data-vis="sales">報價單<span class="count" id="qtCount" hidden>0</span></button>
   <button role="tab" data-tab="order" data-g="biz" data-vis="sales,wh,prod,mat,plan">訂單</button>
   <button role="tab" data-tab="sale" data-g="biz" data-vis="sales">銷貨單</button>
@@ -297,6 +298,7 @@ nav.tabs [data-tab].g-off{display:none}
   <button role="tab" data-tab="stmt" data-g="biz" data-vis="sales">月結明細<span class="count" id="stmtCount" hidden>0</span></button>
   <button role="tab" data-tab="bill" data-g="biz" data-vis="sales">結帳收款</button>
   <button role="tab" data-tab="matq" data-g="mat" data-vis="mat">報價回覆<span class="count" id="mqCount" hidden>0</span></button>
+  <button role="tab" data-tab="po" data-g="mat" data-vis="wh,mat,plan">待進料</button>
   <button role="tab" data-tab="cost" data-g="mat" data-vis="mat">材料單價</button>
   <button role="tab" data-tab="bomc" data-g="mat" data-vis="mat,sales">BOM 成本</button>
   <button role="tab" data-tab="ops" data-g="set" data-vis="prod,plan">代碼設定<span class="count" id="opsCount" hidden>0</span></button>
@@ -603,6 +605,38 @@ nav.tabs [data-tab].g-off{display:none}
     <div class="panel" style="margin-top:14px"><h3 style="margin:0 0 8px" id="povT2">人員</h3><div class="tbl-wrap" id="povPeople"></div></div>
     <div class="panel" style="margin-top:14px"><h3 style="margin:0 0 8px">相關工單</h3><div class="tbl-wrap" id="povWos"></div></div>
   </section>
+  <!-- 鼎新製令（只讀，每天同步） -->
+  <section id="tab-mo" hidden>
+    <div class="sec-head"><h2>鼎新製令</h2>
+      <div class="tools"><input id="moQ" type="search" placeholder="搜尋製令號、品號、品名、課別、訂單" style="width:240px">
+        <select id="moWc" style="width:auto"><option value="">全部課別</option></select>
+        <select id="moSt" style="width:auto"><option value="">全部狀態</option><option>未生產</option><option>已發料</option><option>生產中</option></select>
+        <button class="btn" id="moSync" hidden>立即同步鼎新</button></div></div>
+    <p class="muted" id="moInfo" style="font-size:13px;margin:-4px 0 10px"></p>
+    <div id="moMsg"></div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>製令單號</th><th>產品</th><th class="r">預計產量</th><th>預計開工 / 完工</th><th>狀態</th><th>製程（課別／委外）</th><th>系統工單</th></tr></thead>
+      <tbody id="moRows"></tbody></table></div>
+    <div class="muted" id="moMore" style="font-size:13px;margin-top:6px"></div>
+  </section>
+
+  <!-- 待進料（鼎新採購單，只讀，每天同步） -->
+  <section id="tab-po" hidden>
+    <div class="sec-head"><h2>待進料</h2>
+      <div class="tools"><input id="poQ" type="search" placeholder="搜尋廠商、品號、品名、採購單號" style="width:240px">
+        <select id="poWh" style="width:auto"><option value="">全部入庫庫別</option></select>
+        <select id="poRange" style="width:auto"><option value="60">前後 60 天</option><option value="14">今天起 14 天內（含逾期）</option><option value="late">只看已逾期</option><option value="all">全部未進料</option></select>
+        <label class="row" style="gap:4px;font-size:13px"><input type="checkbox" id="poZ99" style="width:auto"> 顯示費用品（Z99）</label>
+        <button class="btn" id="poSync" hidden>立即同步鼎新</button></div></div>
+    <p class="muted" id="poInfo" style="font-size:13px;margin:-4px 0 10px"></p>
+    <div id="poMsg"></div>
+    <div id="poSum" class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:10px"></div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>預交日</th><th>廠商</th><th>採購單號-序</th><th>品號 / 品名</th><th class="r">未進貨</th><th class="r">採購 / 已進</th><th>入庫庫別</th></tr></thead>
+      <tbody id="poRows"></tbody></table></div>
+    <div class="muted" id="poMore" style="font-size:13px;margin-top:6px"></div>
+  </section>
+
   <section id="tab-mods" hidden>
     <div class="sec-head"><h2>功能開關</h2><div class="tools"><button class="btn" id="mdDefault" type="button">恢復建議設定</button><button class="btn primary" id="mdSave" type="button">儲存</button></div></div>
     <p class="muted" style="margin-top:-8px">這套系統用來輔助鼎新 ERP：庫存、訂單、銷貨、生產以鼎新為準，不必在這裡重複輸入。用不到的功能在這裡關掉，所有人的畫面上就不會出現；資料和程式都還在，需要時再打開。</p>
@@ -2037,7 +2071,7 @@ function showTab(t){
   S.tab = t; GRP_LAST[tabBtn(t)?.dataset.g || "mat"] = t;
   document.querySelectorAll("nav.tabs [data-tab]").forEach(b => b.setAttribute("aria-selected", b.dataset.tab===t));
   paintGroups();
-  ["dash","items","move","count","report","pack","sl","quote","order","matq","wo","wr","pov","ops","codes","mods","stmt","bill","cost","bomc","sale","ship","repack","inv","cust","data","users"].forEach(x => $("tab-"+x).hidden = x!==t);
+  ["dash","items","move","count","report","pack","sl","quote","order","matq","wo","wr","pov","mo","po","ops","codes","mods","stmt","bill","cost","bomc","sale","ship","repack","inv","cust","data","users"].forEach(x => $("tab-"+x).hidden = x!==t);
   if (t==="cust") renderCust();
   if (t==="inv") invPrep();
   if (t==="repack") renderRepack();
@@ -2047,6 +2081,7 @@ function showTab(t){
   if (t==="sl"){ renderSl(); renderSc(); }
   if (typeof PRES !== "undefined"){ renderPres(); ping(); }
   if (t==="report") loadReport();
+  if (t==="mo") loadMO(); if (t==="po") loadPO();
   if (t==="count") renderCount();
   if (t==="users") loadUsers();
   store.lset("inv.tab", t);
@@ -4361,6 +4396,82 @@ $("wrSubmit").addEventListener("click", async () => {
   }catch(err){ beep(false); msg("wrMsg", err.message, "err"); }
   finally{ $("wrSubmit").disabled = false; }
 });
+/* ---------- 鼎新製令、待進料（只讀；每天 18:00 同步，管理員可立即同步） ---------- */
+const MO = { d:null }, PO = { d:null };
+const DX_WC = { P1:"製造1課", P2:"製造2課", P3:"製造3課", PA:"組立課", PF:"廠務組", RQ:"品管課", UN:"不確定" };
+const DX_WH = { "1111":"原料倉", "1112":"物料倉", "1113":"零件倉", "1114":"成品倉", "2113":"費用倉" };
+const dxWhName = c => DX_WH[c] ? `${c} ${DX_WH[c]}` : c;
+async function dxSyncNow(msgId, after){
+  if (!(await ask("現在從鼎新同步製令和採購單？大約 10～60 秒，只讀鼎新，不會改鼎新的資料。"))) return;
+  msg(msgId, "同步中，請稍候…", "ok");
+  try{ const r = await fetch((ERP_API || "/erp/api").replace(/\/api$/, "/dingxin/sync"), { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ token: S.token }) }).then(r => r.json());
+    if (!r.ok) throw new Error(r.error || "同步失敗");
+    const d = r.data; msg(msgId, `同步完成：製令 ${d.mos ?? "失敗"} 張、採購未進料 ${d.poLines ?? "失敗"} 筆。` + (d.errors && d.errors.length ? "　" + d.errors.join("；") : ""), d.errors && d.errors.length ? "err" : "ok");
+    MO.d = null; PO.d = null; after(); }
+  catch(e){ msg(msgId, e.message, "err"); }
+}
+async function loadMO(force){
+  $("moSync").hidden = S.user?.role !== "admin";
+  if (!MO.d || force){ $("moRows").innerHTML = `<tr><td colspan="7" class="muted">載入中…</td></tr>`;
+    try{ MO.d = await call("moList", {}); }catch(e){ return msg("moMsg", e.message, "err"); } }
+  const wcs = [...new Set(MO.d.ops.filter(o => o.kind === "廠內").map(o => o.wc))].sort();
+  const keep = $("moWc").value; $("moWc").innerHTML = `<option value="">全部課別</option>` + wcs.map(w => `<option value="${esc(w)}">${esc(DX_WC[w] || w)}</option>`).join(""); $("moWc").value = keep;
+  renderMO();
+}
+function renderMO(){
+  if (!MO.d) return; const q = $("moQ").value.trim().toLowerCase(), wc = $("moWc").value, st = $("moSt").value;
+  const opsOf = {}; MO.d.ops.forEach(o => (opsOf[o.moNo] = opsOf[o.moNo] || []).push(o));
+  const wos = new Map((SD().wos || []).map(w => [w.no, w]));
+  let L = MO.d.mos.filter(m => (!st || m.status === st) && (!wc || (opsOf[m.no] || []).some(o => o.wc === wc)));
+  if (q) L = L.filter(m => [m.no, m.itemCode, m.name, m.spec, m.orderNo, m.note, ...(opsOf[m.no] || []).map(o => (DX_WC[o.wc] || "") + o.wcName + o.desc)].join(" ").toLowerCase().includes(q));
+  L.sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)) || a.no.localeCompare(b.no));
+  $("moInfo").textContent = `鼎新未結案製令 ${MO.d.mos.length} 張（只讀，每天 18:00 自動同步）　上次同步：${MO.d.syncedAt || "還沒同步過"}` + (MO.d.err ? `　⚠ ${MO.d.err}` : "");
+  const T = today(); const SHOW = 300;
+  $("moRows").innerHTML = L.length ? L.slice(0, SHOW).map(m => { const ops = opsOf[m.no] || []; const w = wos.get(m.no);
+    const late = m.dueDate && m.dueDate < T;
+    return `<tr><td class="mono">${esc(m.no)}${m.orderNo?`<span class="sub">訂單 ${esc(m.orderNo)}</span>`:""}</td>
+      <td><span class="mono">${esc(m.itemCode)}</span><span class="sub">${esc(m.name)}${m.spec?" "+esc(m.spec):""}</span></td>
+      <td class="r num">${fmt(m.qty,2)} ${esc(m.unit||"")}${m.made?`<span class="sub">鼎新已生產 ${fmt(m.made,2)}</span>`:""}</td>
+      <td class="mono">${esc(m.startDate||"")}<span class="sub" ${late?'style="color:var(--bad)"':""}>${esc(m.dueDate||"")}${late?" 已逾期":""}</span></td>
+      <td><span class="chip ${m.status==="生產中"?"in":m.status==="已發料"?"wh":"low"}">${esc(m.status)}</span></td>
+      <td class="wrap-cell" style="font-size:13px">${ops.length ? ops.map(o => o.kind === "委外" ? `<span class="chip out" title="${esc(o.desc)}">委外 ${esc(o.wcName)}${o.desc?"："+esc(o.desc):""}</span>` : `<span class="chip wh" title="${esc(o.opCode)}">${esc(DX_WC[o.wc] || o.wcName || o.wc)}${o.desc?"："+esc(o.desc):""}</span>`).join(" → ") : '<span class="muted">鼎新沒有排製程</span>'}</td>
+      <td>${w ? `<span class="mono">${esc(w.no)}</span><span class="sub">${esc(w.status)}</span>` : '<span class="muted">尚未開立</span>'}</td></tr>`; }).join("")
+    : `<tr><td colspan="7"><div class="empty" style="padding:12px">${MO.d.mos.length ? "沒有符合條件的製令。" : "還沒有同步鼎新製令。" + (S.user?.role === "admin" ? "按右上「立即同步鼎新」。" : "")}</div></td></tr>`;
+  $("moMore").textContent = L.length > SHOW ? `共 ${L.length} 張，只列前 ${SHOW} 張；請用搜尋或篩選縮小範圍。` : (L.length ? `共 ${L.length} 張` : "");
+}
+["moQ","moWc","moSt"].forEach(id => $(id).addEventListener(id === "moQ" ? "input" : "change", renderMO));
+$("moSync").addEventListener("click", () => dxSyncNow("moMsg", () => loadMO(true)));
+async function loadPO(force){
+  $("poSync").hidden = S.user?.role !== "admin";
+  if (!PO.d || force){ $("poRows").innerHTML = `<tr><td colspan="7" class="muted">載入中…</td></tr>`;
+    try{ PO.d = await call("poList", {}); }catch(e){ return msg("poMsg", e.message, "err"); } }
+  const whs = [...new Set(PO.d.lines.map(l => l.wh).filter(Boolean))].sort();
+  const keep = $("poWh").value; $("poWh").innerHTML = `<option value="">全部入庫庫別</option>` + whs.map(w => `<option value="${esc(w)}">${esc(dxWhName(w))}</option>`).join(""); $("poWh").value = keep;
+  renderPO();
+}
+function renderPO(){
+  if (!PO.d) return; const q = $("poQ").value.trim().toLowerCase(), wh = $("poWh").value, rg = $("poRange").value, z = $("poZ99").checked;
+  const T = today(); const addD = n => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0,10); };
+  let L = PO.d.lines.filter(l => (z || !/^Z9\d/i.test(l.itemCode)) && (!wh || l.wh === wh));
+  if (rg === "60") L = L.filter(l => l.dueDate && l.dueDate >= addD(-60) && l.dueDate <= addD(60));
+  if (rg === "14") L = L.filter(l => l.dueDate && l.dueDate <= addD(14));
+  if (rg === "late") L = L.filter(l => l.dueDate && l.dueDate < T);
+  if (q) L = L.filter(l => [l.vendor, l.poNo, l.itemCode, l.name, l.spec].join(" ").toLowerCase().includes(q));
+  const late = L.filter(l => l.dueDate && l.dueDate < T).length, wk = L.filter(l => l.dueDate >= T && l.dueDate <= addD(7)).length;
+  $("poInfo").textContent = `鼎新已確認、還沒進完的採購明細 ${PO.d.lines.length} 筆（只讀，每天 18:00 自動同步）　上次同步：${PO.d.syncedAt || "還沒同步過"}` + (PO.d.err ? `　⚠ ${PO.d.err}` : "");
+  $("poSum").innerHTML = `<span class="chip ${late?"out":"wh"}">已逾期 ${late} 筆</span><span class="chip ${wk?"low":"wh"}">7 天內要到 ${wk} 筆</span><span class="chip wh">這個範圍共 ${L.length} 筆</span>`;
+  const SHOW = 400; let lastD = "";
+  $("poRows").innerHTML = L.length ? L.slice(0, SHOW).map(l => { const isLate = l.dueDate && l.dueDate < T, soon = !isLate && l.dueDate <= addD(7);
+    const head = l.dueDate !== lastD; lastD = l.dueDate;
+    return `<tr${head ? ' style="border-top:2px solid var(--line)"' : ""}><td class="mono" ${isLate?'style="color:var(--bad)"':soon?'style="color:var(--warn)"':""}>${head ? esc(l.dueDate || "未填") + (isLate ? "<span class=\"sub\">已逾期</span>" : l.dueDate === T ? "<span class=\"sub\">今天</span>" : "") : ""}</td>
+      <td>${esc(l.vendor)}</td><td class="mono">${esc(l.poNo)}-${esc(l.seq)}${l.woNo?`<span class="sub">製令 ${esc(l.woNo)}</span>`:""}</td>
+      <td><span class="mono">${esc(l.itemCode)}</span><span class="sub">${esc(l.name)}${l.spec?" "+esc(l.spec):""}</span></td>
+      <td class="r num"><b>${fmt(l.leftQty,2)}</b> ${esc(l.unit||"")}</td><td class="r num muted">${fmt(l.qty,2)} / ${fmt(l.recvQty,2)}</td><td>${esc(dxWhName(l.wh))}</td></tr>`; }).join("")
+    : `<tr><td colspan="7"><div class="empty" style="padding:12px">${PO.d.lines.length ? "這個範圍沒有待進料。" : "還沒有同步鼎新採購單。" + (S.user?.role === "admin" ? "按右上「立即同步鼎新」。" : "")}</div></td></tr>`;
+  $("poMore").textContent = L.length > SHOW ? `共 ${L.length} 筆，只列前 ${SHOW} 筆；請用搜尋或篩選縮小範圍。` : "";
+}
+["poQ","poWh","poRange","poZ99"].forEach(id => $(id).addEventListener(id === "poQ" ? "input" : "change", renderPO));
+$("poSync").addEventListener("click", () => dxSyncNow("poMsg", () => loadPO(true)));
 /* ---------- 前站不良：後站挑出前站做壞的 → 退回重工或報廢；生管／品管確認 ---------- */
 const DF = { sel:{}, ed:{} };
 const dfCanReview = () => !!(PM().plan || PM().qc || S.user?.role === "admin");

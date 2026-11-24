@@ -101,9 +101,19 @@ const F = {
   woDefects:[['id','編號','s'],['date','日期','d'],['woNo','工單單號','s'],['itemCode','品號','s'],['fromLid','不良製程ID','s'],['fromOp','不良製程','s'],
           ['fromSeq','不良製程順序','n'],['foundLid','發現製程ID','s'],['foundOp','發現製程','s'],['foundDept','發現單位','s'],['qty','數量','n'],
           ['reason','不良原因','s'],['action','處理(重工/報廢)','s'],['status','狀態(待確認/已確認/退回)','s'],['reporterId','回報人ID','s'],['reporter','回報人','s'],
-          ['reviewer','確認人','s'],['reviewedAt','確認時間','s'],['rejectReason','退回原因','s'],['note','備註','s'],['ts','建立時間','n']]
+          ['reviewer','確認人','s'],['reviewedAt','確認時間','s'],['rejectReason','退回原因','s'],['note','備註','s'],['ts','建立時間','n']],
+  // 鼎新製令（每天同步，只讀；只放未結案的）
+  mos:   [['no','製令單號','s'],['date','開單日期','d'],['itemCode','產品品號','s'],['name','品名','s'],['spec','規格','s'],['unit','單位','s'],
+          ['qty','預計產量','n'],['made','鼎新已生產量','n'],['startDate','預計開工','d'],['dueDate','預計完工','d'],['status','狀態','s'],
+          ['whIn','入庫庫別','s'],['line','生產線別','s'],['orderNo','來源訂單','s'],['note','備註','s'],['syncedAt','同步時間','s']],
+  moOps: [['moNo','製令單號','s'],['seq','加工順序','s'],['opCode','製程代號','s'],['kind','性質(廠內/委外)','s'],['wc','工作中心／廠商代號','s'],
+          ['wcName','工作中心／廠商','s'],['desc','製程說明','s'],['startDate','預計開工','d'],['dueDate','預計完工','d']],
+  // 鼎新採購單（每天同步，只讀；只放還沒進完的料）
+  pos:   [['no','採購單號','s'],['date','採購日期','d'],['vendorCode','廠商代號','s'],['vendor','廠商','s'],['currency','幣別','s'],['syncedAt','同步時間','s']],
+  poLines:[['poNo','採購單號','s'],['seq','序號','s'],['itemCode','品號','s'],['name','品名','s'],['spec','規格','s'],['unit','單位','s'],['wh','入庫庫別','s'],
+          ['qty','採購數量','n'],['recvQty','已進貨','n'],['leftQty','未進貨','n'],['dueDate','預交日','d'],['vendor','廠商','s'],['woNo','製令單號','s']]
 };
-const TAB = { users:'帳號', whs:'庫別', items:'品號', stock:'庫存', txns:'異動紀錄', counts:'盤點紀錄', packings:'PackingList', consignees:'收件人',
+const TAB = { mos:'製令', moOps:'製令製程', pos:'採購單', poLines:'採購單身', users:'帳號', whs:'庫別', items:'品號', stock:'庫存', txns:'異動紀錄', counts:'盤點紀錄', packings:'PackingList', consignees:'收件人',
   quotes:'報價單', quoteLines:'報價單身', orders:'訂單', orderLines:'訂單單身', wos:'工單', woMats:'工單用料', sales:'銷貨單', salesLines:'銷貨單身', repacks:'包裝紀錄', pallets:'棧板', invoices:'Invoice', bills:'結帳單', payments:'收款', customers:'客戶', costLog:'單價紀錄', costItems:'成本資料庫', bom:'BOM', bomHeads:'BOM表頭', bomLog:'BOM修改紀錄', metalPrices:'金屬價格', ops:'製程', settings:'設定', mails:'寄信紀錄', woOps:'工單製程', woOut:'委外紀錄', woReports:'報工紀錄', woDefects:'前站不良' };
 const TYPE_LABEL = { in:'入庫', out:'出庫', xfer:'調撥', adj:'調整' };
 const LABEL_TYPE = { '入庫':'in', '出庫':'out', '調撥':'xfer', '調整':'adj' };
@@ -339,6 +349,8 @@ const HANDLERS = {
   changePw:    ['viewer', changePw_, true],
   move:        ['user', whOnly_(move_), true],
   rcptConfirm: ['user', whOnly_(rcptConfirm_), true],
+  moList:      ['user', moList_],
+  poList:      ['user', poList_],
   moveBatch:   ['user', whOnly_(moveBatch_), true],
   stocktake:   ['user', whOnly_(stocktake_), true],
   saveLoc:     ['user', whOnly_(saveLoc_), true],
@@ -599,6 +611,32 @@ function itemByAny_(items, code) {
 function itemOf_(code) { const it = readAll_('items').find(i => i.code === code); if (!it) throw new Error('找不到品號 ' + code + '。'); return it; }
 function whOf_(code) { const w = readAll_('whs').find(x => x.code === code); if (!w) throw new Error('找不到庫別 ' + code + '。'); return w; }
 
+/** 鼎新製令：伺服器同步時呼叫（不經過 API 登入），整批換成鼎新目前的未結案製令 */
+function replaceSheet_(k, objs) {
+  const s = sh_(k); const last = s.getLastRow(); const n = F[k].length; const rows = objs.map(o => objToRow_(k, o));
+  if (rows.length) s.getRange(2, 1, rows.length, n).setValues(rows);
+  if (last - 1 > rows.length) s.deleteRows(rows.length + 2, last - 1 - rows.length);
+  READ_MEMO_ = {};
+}
+/** 同步：製令（含製程）、採購單（未進完的明細）；p 裡沒有的部分不動 */
+function dxSync_(p) {
+  const at = nowStr_(); const r = { at };
+  if (p.mo) { const mos = (p.mo.mos || []).map(m => Object.assign({}, m, { syncedAt: at }));
+    replaceSheet_('mos', mos); replaceSheet_('moOps', p.mo.ops || []); setSetting_('dxMoSyncAt', at); r.mos = mos.length; r.ops = (p.mo.ops || []).length; }
+  if (p.po) { const pos = (p.po.pos || []).map(x => Object.assign({}, x, { syncedAt: at }));
+    replaceSheet_('pos', pos); replaceSheet_('poLines', p.po.lines || []); setSetting_('dxPoSyncAt', at); r.pos = pos.length; r.poLines = (p.po.lines || []).length; }
+  if (p.errors && p.errors.length) setSetting_('dxSyncErr', at + '：' + p.errors.join('；')); else setSetting_('dxSyncErr', '');
+  setSetting_('dxSyncAt', at);
+  return r;
+}
+function moList_(u, p) {
+  const pm = perms_(u); if (!(pm.prod || pm.plan || pm.wh || pm.qc)) throw new Error('只有生產、生管、倉庫人員可以看製令。');
+  return { mos: readAll_('mos').map(noRow_), ops: readAll_('moOps').map(noRow_), syncedAt: setting_('dxMoSyncAt'), err: setting_('dxSyncErr') };
+}
+function poList_(u, p) {
+  const pm = perms_(u); if (!(pm.wh || pm.mat || pm.plan || pm.prod)) throw new Error('只有倉庫、採購、生管人員可以看待進料。');
+  return { pos: readAll_('pos').map(noRow_), lines: readAll_('poLines').map(noRow_), syncedAt: setting_('dxPoSyncAt'), err: setting_('dxSyncErr') };
+}
 /** 待收貨確認：負責該庫別的人（可異動庫別有它，或管理員）確認實收數量；少收的部分、或整批拒收，入回生產單位自己的庫別 */
 function rcptConfirm_(u, p) {
   const all = readAll_('txns'); const t = all.find(x => x.id === p.id); if (!t) throw new Error('找不到這筆入庫。');

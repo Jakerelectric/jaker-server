@@ -169,6 +169,31 @@ async function setupErp(app, { cfg, ROOT, log, serial }) {
     });
   });
 
+  // 鼎新同步（製令＋採購單）：每天 18:00 自動一次，管理員也可在網頁按「立即同步」；只讀鼎新，系統裡這幾張表整批換成鼎新目前的資料
+  const dingxin = require('./dingxin');
+  let dxSyncing = null;
+  async function syncDx(by) {
+    if (dxSyncing) return dxSyncing;
+    dxSyncing = (async () => {
+      const t0 = Date.now(); const root = path.resolve(__dirname, '..'); const p = { errors: [] };
+      try { p.mo = await dingxin.fetchOpenMos(root); } catch (e) { p.errors.push('製令：' + String(e.message || e).slice(0, 200)); }
+      try { p.po = await dingxin.fetchOpenPos(root); } catch (e) { p.errors.push('採購單：' + String(e.message || e).slice(0, 200)); }
+      if (!p.mo && !p.po) throw new Error(p.errors.join('；'));
+      const r = await run('dxSync', () => rt.call('dxSync_', p));
+      log('進銷存 鼎新同步（' + by + '）：製令 ' + (r.mos ?? '失敗') + ' 張、製程 ' + (r.ops ?? '-') + ' 筆、採購單 ' + (r.pos ?? '失敗') + ' 張／未進料 ' + (r.poLines ?? '-') + ' 筆，' + Math.round((Date.now() - t0) / 1000) + ' 秒' + (p.errors.length ? '；' + p.errors.join('；') : ''));
+      return Object.assign(r, { errors: p.errors });
+    })().finally(() => { dxSyncing = null; });
+    return dxSyncing;
+  }
+  app.post('/erp/dingxin/sync', express.json({ limit: '10kb' }), async (req, res) => {
+    const b = req.body || {}; let u = null;
+    try { u = await run('dxAuth', () => rt.call('session_', String(b.token || ''))); } catch (e) { u = null; }
+    if (!u || u.role !== 'admin') return res.status(403).json({ ok: false, error: '只有管理員可以同步鼎新資料。' });
+    try { res.json({ ok: true, data: await syncDx(u.name) }); }
+    catch (e) { log('進銷存 鼎新同步失敗', e); res.json({ ok: false, error: String(e.message || e).slice(0, 300) }); }
+  });
+  if (cfg.store !== 'file') cron.schedule('0 18 * * *', () => syncDx('每日 18:00').catch(e => log('進銷存 鼎新同步失敗', e)), { timezone: 'Asia/Taipei' });
+
   // 資料庫檢查（管理員，只讀）：比對某張表的欄位對照（gas_columns）與資料表實際欄位、各欄有值的筆數、最新兩筆原始資料
   app.post('/erp/admin/dbinfo', express.json({ limit: '10kb' }), async (req, res) => {
     const b = req.body || {};
