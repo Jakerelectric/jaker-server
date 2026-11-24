@@ -1350,6 +1350,20 @@ nav.tabs [data-tab].g-off{display:none}
         <div class="row" style="margin-top:10px"><button class="btn primary" id="whAdd">新增庫別</button></div>
         <div id="whMsg"></div>
       </div>
+      <div class="panel" id="dxPanel">
+        <h3>鼎新資料工具（只讀，不會寫入任何一邊）</h3>
+        <p class="muted" style="font-size:13px;margin:0 0 8px">在主機上連鼎新讀資料、跟系統比對，結果顯示在下面，也可以下載。一次跑一個，大約 10 秒到 1 分鐘。</p>
+        <div class="row" style="gap:6px;flex-wrap:wrap">
+          <button class="btn sm" data-dx="test">連線測試</button>
+          <button class="btn sm" data-dx="mo">製令抽樣</button>
+          <button class="btn sm" data-dx="sales">銷貨單試算</button>
+          <button class="btn sm" data-dx="all">其他資料試算</button>
+          <button class="btn sm" data-dx="rename">料號對照清單</button>
+          <button class="btn sm" id="dxDl" hidden>下載結果</button>
+        </div>
+        <div id="dxMsg"></div>
+        <pre id="dxOut" style="max-height:420px;overflow:auto;white-space:pre-wrap;font-size:12px;margin-top:8px" hidden></pre>
+      </div>
     </div>
   </section>
 
@@ -2146,6 +2160,21 @@ const packCell = t => { const p = [];
   return (p.length ? `<span class="mono" style="font-size:12px">${p.join(" · ")}</span>` : "") + (t.report ? `<span class="sub">報告：${esc(t.report)}</span>` : ""); };
 /* ---------- 待收貨確認：生產單位入到別人負責的庫別，由該庫別的負責人點收 ---------- */
 function rcptMine(t){ const U = S.user || {}; if (U.role === "admin") return true; const L = String(U.whAllow || "").split(",").filter(Boolean); return L.length ? L.includes(t.whId) : !!PM().wh; }
+/* ---------- 鼎新工具（管理員）：在主機上執行只讀的試算／抽樣 ---------- */
+let DX_LAST = { name: "", text: "" };
+document.querySelectorAll("[data-dx]").forEach(b => b.addEventListener("click", async () => {
+  const tool = b.dataset.dx; msg("dxMsg", "執行中，請稍候（最多幾分鐘）…", "ok");
+  document.querySelectorAll("[data-dx]").forEach(x => x.disabled = true);
+  try {
+    const r = await fetch((ERP_API || "/erp/api").replace(/\/api$/, "/dingxin/run"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: S.token, tool }) });
+    const j = await r.json(); if (!j.ok && !j.text) throw new Error(j.error || ("HTTP " + r.status));
+    DX_LAST = { name: "dingxin-" + tool + "-" + today() + ".txt", text: j.text || "" };
+    $("dxOut").hidden = false; $("dxOut").textContent = DX_LAST.text; $("dxDl").hidden = !DX_LAST.text;
+    msg("dxMsg", j.error ? "執行有錯誤：" + j.error : "完成（" + b.textContent + "）。", j.error ? "err" : "ok");
+  } catch (e) { msg("dxMsg", e.message, "err"); }
+  finally { document.querySelectorAll("[data-dx]").forEach(x => x.disabled = false); }
+}));
+$("dxDl").addEventListener("click", () => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["\ufeff" + DX_LAST.text], { type: "text/plain;charset=utf-8" })); a.download = DX_LAST.name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); });
 function renderRcpts(){
   const all = S.rcpts || [], mine = all.filter(rcptMine), sent = all.filter(t => !rcptMine(t) && t.fillerId === S.user?.id);
   $("rcvCount").hidden = !mine.length; $("rcvCount").textContent = mine.length;

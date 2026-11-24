@@ -145,6 +145,29 @@ async function setupErp(app, { cfg, ROOT, log, serial }) {
     }
   });
 
+  // 鼎新工具（只讀）：管理員在網頁上執行試算／抽樣，不用到主機按 bat。結果文字直接回傳
+  const DX_TOOLS = { mo: ['dingxin-mo-sample.js', 'dingxin-mo-sample.txt'], all: ['dingxin-all-dryrun.js', 'dingxin-all-dryrun.txt'],
+    sales: ['dingxin-sales-dryrun.js', 'dingxin-sales-dryrun.txt'], rename: ['dingxin-rename-list.js', 'dingxin-rename-report.txt'], test: ['dingxin-test.js', 'dingxin-test.txt'] };
+  let dxBusy = false;
+  app.post('/erp/dingxin/run', express.json({ limit: '10kb' }), async (req, res) => {
+    const b = req.body || {}; const tool = DX_TOOLS[b.tool];
+    if (!tool) return res.status(400).json({ ok: false, error: '沒有這個工具。' });
+    let u = null;
+    try { u = await run('dxAuth', () => rt.call('session_', String(b.token || ''))); } catch (e) { u = null; }
+    if (!u || u.role !== 'admin') return res.status(403).json({ ok: false, error: '只有管理員可以執行鼎新工具。' });
+    if (dxBusy) return res.json({ ok: false, error: '另一個鼎新工具正在執行，請稍後再試。' });
+    dxBusy = true;
+    const root = path.resolve(__dirname, '..'); const outFile = path.join(root, 'data', tool[1]);
+    try { fs.unlinkSync(outFile); } catch (e) {}   // 不要把上一次的結果當成這次的
+    const args = [path.join(root, 'tools', tool[0])].concat(b.arg && /^\d{8}$/.test(String(b.arg)) ? [String(b.arg)] : []);
+    require('child_process').execFile(process.execPath, args, { cwd: root, timeout: 5 * 60e3, maxBuffer: 20 * 1024 * 1024, windowsHide: true }, (err, stdout) => {
+      dxBusy = false;
+      let text = ''; try { text = fs.readFileSync(outFile, 'utf8'); } catch (e) { text = String(stdout || ''); }
+      log('進銷存 鼎新工具 ' + b.tool + '（' + u.name + '）' + (err ? '失敗：' + err.message : '完成'));
+      res.set('Cache-Control', 'no-store').json({ ok: !err || !!text, text, error: err ? String(err.message).slice(0, 300) : '' });
+    });
+  });
+
   // 每天凌晨 2:10 備份一份 JSON 到 data/backups/erp（保留 30 份；資料本身在 MySQL）
   cron.schedule('10 2 * * *', () => serial(() => { const f = store.backupTo(backupDir); log('進銷存 已備份 ' + f); }).catch(e => log('進銷存 備份失敗', e)),
     { timezone: 'Asia/Taipei' });
