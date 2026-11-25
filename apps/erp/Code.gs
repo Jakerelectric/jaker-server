@@ -63,7 +63,9 @@ const F = {
   quotes:[['no','報價單號','s'],['date','報價日期','d'],['custCode','客戶代號','s'],['customer','客戶','s'],['contact','聯絡人','s'],['currency','幣別','s'],
           ['taxType','稅別','s'],['taxRate','稅率','n'],['validUntil','有效期限','d'],['terms','交易條件','s'],['note','備註','s'],
           ['salesId','業務ID','s'],['salesName','業務','s'],['status','狀態','s'],['orderNo','轉訂單號','s'],
-          ['sentAt','送資材時間','s'],['repliedAt','資材回覆時間','s'],['createdAt','建立時間','s'],['updatedAt','更新時間','s'],['erpNo','鼎新單號','s']],
+          ['sentAt','送資材時間','s'],['repliedAt','資材回覆時間','s'],['createdAt','建立時間','s'],['updatedAt','更新時間','s'],['erpNo','鼎新單號','s'],
+          // ↓ 新欄位一律加在最後面
+          ['files','附件','s']],
   quoteLines:[['quoteNo','報價單號','s'],['lid','明細ID','s'],['seq','序號','n'],['itemCode','品號','s'],['name','品名','s'],['nameEn','英文品名','s'],
           ['spec','規格','s'],['unit','單位','s'],['qty','數量','n'],['wantDate','客戶希望交期','d'],['price','單價','n'],
           ['cost','成本','n'],['leadDate','資材確認交期','d'],['matNote','資材備註','s'],['matBy','資材回覆人','s'],['matAt','資材回覆時間','s']],
@@ -433,6 +435,7 @@ const HANDLERS = {
   setErpNo:    ['user', setErpNo_, true],
   matReply:    ['user', matReply_, true],
   quoteToOrder:['user', quoteToOrder_, true],
+  quoteFiles:  ['user', quoteFiles_, true],
   saveOrder:   ['user', saveOrder_, true],
   orderStatus: ['user', orderStatus_, true],
   deleteDoc:   ['user', deleteDoc_, true],
@@ -2418,18 +2421,34 @@ function needPrice_(u) { if (!perms_(u).price) throw new Error('只有業務或�
 const jsonArr_ = v => { try { const a = JSON.parse(v || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } };
 const jsonObj_ = v => { try { const a = JSON.parse(v || '{}'); return a && typeof a === 'object' && !Array.isArray(a) ? a : {}; } catch (e) { return {}; } };
 /** 附件：網頁傳來 [{name, mime, b64}] 存到「收款與結帳附件」資料夾；已存的 [{id, name, url}] 原樣保留 */
-function saveFiles_(list) {
+function saveFiles_(list, folderName) {
   const out = [];
   (list || []).forEach(f => {
     if (f && f.id) { out.push({ id: f.id, name: f.name, url: f.url, mime: f.mime || '' }); return; }
     if (!f || !f.b64) return;
     if (String(f.b64).length > 14e6) throw new Error('檔案「' + f.name + '」太大，請小於 10MB。');
-    const root = DriveApp.getRootFolder(); const it = root.getFoldersByName('收款與結帳附件');
-    const folder = it.hasNext() ? it.next() : root.createFolder('收款與結帳附件');
+    const fn = folderName || '收款與結帳附件';
+    const root = DriveApp.getRootFolder(); const it = root.getFoldersByName(fn);
+    const folder = it.hasNext() ? it.next() : root.createFolder(fn);
     const file = folder.createFile(Utilities.newBlob(Utilities.base64Decode(f.b64), f.mime || 'application/octet-stream', String(f.name || 'file')));
     out.push({ id: file.getId(), name: file.getName(), url: file.getUrl(), mime: f.mime || '' });
   });
   return JSON.stringify(out);
+}
+/** 報價單附件：客戶確認回簽、圖面／規格、其他；記下誰在什麼時候上傳。p.files = 完整清單（已存的照舊、新的帶 b64、拿掉的就是刪除） */
+const QUOTE_FILE_KINDS_ = ['客戶確認回簽', '圖面／規格', '其他'];
+function quoteFiles_(u, p) {
+  const pm = perms_(u); if (!(pm.sales || pm.mat)) throw new Error('只有業務或資材可以管理報價單附件。');
+  const q = readAll_('quotes').find(x => x.no === p.no); if (!q) throw new Error('找不到報價單 ' + (p.no || '') + '，請先存檔。');
+  const old = jsonArr_(q.files); const at = nowStr_();
+  const keep = [], neu = [];
+  (p.files || []).forEach(f => { if (f && f.id) { const o = old.find(x => x.id === f.id); if (o) keep.push(Object.assign({}, o, QUOTE_FILE_KINDS_.indexOf(f.kind) >= 0 ? { kind: f.kind } : {})); }
+    else if (f && f.b64) neu.push(f); });
+  const saved = jsonArr_(saveFiles_(neu, '報價單附件')).map((f, i) => Object.assign(f, { kind: QUOTE_FILE_KINDS_.indexOf(neu[i].kind) >= 0 ? neu[i].kind : '其他', by: u.name, at }));
+  const removed = old.filter(o => !keep.some(k => k.id === o.id));
+  if (removed.length && !pm.admin && removed.some(r => r.by && r.by !== u.name)) throw new Error('別人上傳的附件只有管理員可以刪除。');
+  q.files = JSON.stringify(keep.concat(saved)); q.updatedAt = at; update_('quotes', q);
+  return { files: q.files };
 }
 function billSave_(u, p) {
   needPrice_(u); const d = p.doc || {};

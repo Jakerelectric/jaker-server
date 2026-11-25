@@ -1622,6 +1622,12 @@ nav.tabs [data-tab].g-off{display:none}
       <span class="muted" id="docHint" style="font-size:12px;flex:1"></span>
       <div class="doc-total" id="docTotal" data-price></div>
     </div>
+    <div id="docFilesBox" hidden style="margin-top:12px">
+      <div class="row" style="justify-content:space-between;align-items:center"><h3 style="margin:0">附件</h3>
+        <div class="row" id="docFileAdd" style="gap:6px"><select id="docFileKind" style="width:auto"><option>客戶確認回簽</option><option>圖面／規格</option><option>其他</option></select>
+          <button type="button" class="btn sm" id="docFileBtn">上傳檔案</button></div></div>
+      <div id="docFiles" style="margin-top:6px"></div>
+    </div>
     <div id="docMsg"></div>
     <div class="hint" id="docToOrder" hidden style="margin-top:10px">
       <div class="row" style="align-items:flex-end">
@@ -5808,6 +5814,29 @@ const docDay = x => { const m = String(x.no || "").match(/(20\d{2})(\d{2})(\d{2}
 const saleAmt = x => { const L = saLinesOf(x.no).map(l => ({ ...l, qty: l.shipQty !== "" && l.shipQty != null ? l.shipQty : l.qty })); return docTotals(L, x.currency, x.taxRate).total; };
 function blPaid(){ const m = {}; (SD().payments || []).forEach(p => { let a = {}; try{ a = JSON.parse(p.alloc || "{}"); }catch(e){} Object.entries(a).forEach(([k, v]) => m[k] = round((m[k] || 0) + Number(v || 0))); }); return m; }
 const blFiles = v => { try{ const a = JSON.parse(v || "[]"); return Array.isArray(a) ? a : []; }catch(e){ return []; } };
+/* 報價單附件（訂單畫面也看得到來源報價單的附件） */
+const QF_CHIP = { "客戶確認回簽":"in", "圖面／規格":"wh", "其他":"low" };
+function renderDocFiles(){
+  const k = DOC.kind; const q = k === "quote" ? DOC.doc : k === "order" && DOC.doc?.quoteNo ? SD().quotes.find(x => x.no === DOC.doc.quoteNo) : null;
+  const F = q ? blFiles(q.files) : []; const canEdit = k === "quote" && !!DOC.no && (PM().sales || PM().mat);
+  $("docFilesBox").hidden = !(canEdit || F.length); $("docFileAdd").hidden = !canEdit;
+  $("docFiles").innerHTML = (k === "order" && F.length ? `<p class="muted" style="font-size:12px;margin:0 0 4px">來自報價單 ${esc(q.no)}</p>` : "")
+    + (F.length ? F.map(f => `<div class="row" style="gap:8px;align-items:center;padding:3px 0;border-bottom:1px solid var(--line)"><span class="chip ${QF_CHIP[f.kind]||"low"}">${esc(f.kind||"其他")}</span>
+      <a href="${esc(f.url)}" target="_blank" rel="noopener" style="flex:1">${esc(f.name)}</a><span class="muted" style="font-size:12px">${esc(f.by||"")} ${esc(f.at||"")}</span>
+      ${canEdit ? `<button type="button" class="btn sm" data-qfdel="${esc(f.id)}">刪除</button>` : ""}</div>`).join("")
+      : `<p class="muted" style="font-size:13px;margin:0">還沒有附件。客戶確認後，把回簽的報價單或確認信上傳留存。</p>`);
+  $("docFiles").querySelectorAll("[data-qfdel]").forEach(b => b.addEventListener("click", async () => {
+    if (!(await ask("刪除這個附件？"))) return;
+    try{ await busy(() => call("quoteFiles", { no: DOC.no, files: blFiles(DOC.doc.files).filter(f => f.id !== b.dataset.qfdel) })); await refreshSales(); DOC.doc = SD().quotes.find(x => x.no === DOC.no); renderDocFiles(); msg("docMsg","已刪除附件。","ok"); }
+    catch(e){ msg("docMsg", e.message, "err"); } }));
+}
+$("docFileBtn").addEventListener("click", () => { const kind = $("docFileKind").value;
+  const inp = document.createElement("input"); inp.type = "file"; inp.multiple = true;
+  inp.onchange = async () => { try{ const nf = (await readFiles(inp.files)).map(f => ({ ...f, kind }));
+      await busy(() => call("quoteFiles", { no: DOC.no, files: [...blFiles(DOC.doc.files), ...nf] })); await refreshSales();
+      DOC.doc = SD().quotes.find(x => x.no === DOC.no); renderDocFiles(); msg("docMsg", `已上傳 ${nf.length} 個附件（${kind}）。`, "ok"); }
+    catch(e){ msg("docMsg", e.message, "err"); } };
+  inp.click(); });
 const blFileLinks = v => blFiles(v).map(f => `<a href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.name)}</a>`).join("<br>");
 function blSales(cust, cur){
   const paid = blPaid(), inBill = {};
@@ -7192,6 +7221,7 @@ function openDoc(kind, no){
   $("dDate").value = d.date || today(); $("dCustomer").value = d.customer || ""; $("dContact").value = d.contact || ""; $("dPO").value = d.custPO || "";
   $("dCur").value = d.currency || "TWD"; $("dTax").value = d.taxType || "應稅5%"; $("dValid").value = d.validUntil || ""; $("dTerms").value = d.terms || ""; $("dNote").value = d.note || ""; $("dReq").value = d.req || "";
   document.querySelectorAll("#docDlg [data-qtonly]").forEach(el => el.hidden = kind !== "quote");
+  renderDocFiles();
   document.querySelectorAll("#docDlg [data-odonly]").forEach(el => el.hidden = kind !== "order");
   document.querySelectorAll("#docDlg [data-erp]").forEach(el => el.hidden = kind === "sale");
   $("dErp").value = (DOC.doc && DOC.doc.erpNo) || ""; $("dErp").disabled = !PM().sales || !DOC.no; $("dErpHint").textContent = DOC.no ? "" : "存檔後可填";
@@ -7398,7 +7428,9 @@ function renderDocBtns(){
     B.push(["", "複製到鼎新", () => copyToErp()]);
     B.push(["", "PDF（中文）", () => bizPdf("quote", "zh")]); B.push(["", "PDF（English）", () => bizPdf("quote", "en")]);
     if (ed && d.status !== "已報價") B.push(["", "標示已報價", () => docRun(async () => { await docSave(); await call("quoteStatus", { no:DOC.no, status:"已報價" }); }, "已標示為已報價。", true)]);
-    if (ed && modOn("order")) B.push(["primary", "轉訂單", () => { $("toDate").value = today(); $("toPO").value = ""; $("toNo").value = ""; $("docToOrder").hidden = false; }]);
+    if (ed && modOn("order")) B.push(["primary", "轉訂單", async () => {
+      if (!blFiles(DOC.doc?.files).some(f => f.kind === "客戶確認回簽") && !(await ask("這張報價單還沒有上傳「客戶確認回簽」的附件。\n建議先把客戶簽回的報價單或確認信上傳留存。仍要繼續轉訂單嗎？"))) return;
+      $("toDate").value = today(); $("toPO").value = ""; $("toNo").value = ""; $("docToOrder").hidden = false; }]);
     if (ed && d.status !== "失效") B.push(["", "標示失效", () => docRun(() => call("quoteStatus", { no:DOC.no, status:"失效" }), "已標示失效。")]);
     if (d.orderNo && modOn("order")) B.push(["", "開啟訂單 " + d.orderNo, () => openDoc("order", d.orderNo)]);
   }
