@@ -944,7 +944,7 @@ nav.tabs [data-tab].g-off{display:none}
       </table></div>
       <div class="row" style="margin-top:8px"><button type="button" class="btn sm" id="ivAdd">＋ 新增一行</button><span class="muted" id="ivWords" style="font-size:13px;flex:1"></span></div>
       <div class="row" style="margin-top:14px">
-        <button class="btn primary" id="ivSave">儲存</button><button class="btn" id="ivExcel">匯出貨代 Excel（Invoice＋Packing）</button><button class="btn" id="ivPdf">輸出貨代 PDF（Invoice＋Packing）</button><button class="btn" id="ivPrint">列印</button>
+        <button class="btn primary" id="ivSave">儲存</button><select id="ivLayout" title="品項超過範本一頁的格數時怎麼排版" style="width:auto"><option value="auto">版面：自動</option><option value="one">版面：縮成一頁</option><option value="pages">版面：分頁（頁首頁尾標單號、頁碼）</option></select><button class="btn" id="ivExcel">匯出貨代 Excel（Invoice＋Packing）</button><button class="btn" id="ivPdf">輸出貨代 PDF（Invoice＋Packing）</button><button class="btn" id="ivPrint">列印</button>
         <button class="btn" id="ivRebuild">從銷貨單重新帶出</button><span class="muted" id="ivStatus" style="font-size:13px"></span>
       </div>
     </div>
@@ -1376,6 +1376,7 @@ nav.tabs [data-tab].g-off{display:none}
       </table></div>
       <div class="row" style="margin-top:14px">
         <button class="btn primary" id="plSave" data-write>儲存</button>
+        <select id="plLayout" title="品項超過範本一頁的格數時怎麼排版" style="width:auto"><option value="auto">版面：自動</option><option value="one">版面：縮成一頁</option><option value="pages">版面：分頁（頁首頁尾標單號、頁碼）</option></select>
         <button class="btn" id="plExport">匯出 Excel</button>
         <button class="btn" id="plPdf">輸出 PDF</button>
         <button class="btn" id="plRebuild">依出庫紀錄重新產生</button>
@@ -3331,7 +3332,7 @@ $("plDesc").addEventListener("change", () => { const d = $("plDesc").value.trim(
 function plData(){
   return { sc:PL.sc, no:$("plNo").value.trim(), date:$("plDate").value, company:$("plCompany").value.trim(), consignee:$("plConsignee").value,
     vessel:$("plVessel").value.trim(), sailing:$("plSailing").value.trim(), from:$("plFrom").value.trim(), to:$("plTo").value.trim(),
-    marks:$("plMarks").value, desc:$("plDesc").value.trim(), lines:PL.lines, picks:PL.picks||[] };
+    marks:$("plMarks").value, desc:$("plDesc").value.trim(), lines:PL.lines, picks:PL.picks||[], layout:$("plLayout").value };
 }
 $("plSave").addEventListener("click", async () => {
   const d = plData(); if (!d.sc) return;
@@ -5026,7 +5027,7 @@ $("ivPdf").addEventListener("click", async () => {
   msg("ivMsg", ""); const d = ivData(); if (!d.lines.length) return msg("ivMsg","沒有品項。","err");
   const pk = IV.base && IV.base.packing;
   if (!pk || !(pk.lines || []).length) return msg("ivMsg","這張單還沒有儲存 Packing List。請先到「Packing List」帶出、確認包裝後按「儲存」，再回來輸出（Invoice 和 Packing 會放在同一個 PDF）。","err");
-  try{ await fwdPdf("full", d, { ...pk, sc: d.sc }, `${d.no || d.sc}-SEA.pdf`); }catch(err){ msg("ivMsg", "輸出失敗：" + err.message, "err"); }
+  try{ const lay = $("ivLayout").value; await fwdPdf("full", { ...d, layout: lay }, { ...pk, sc: d.sc, layout: lay }, `${d.no || d.sc}-SEA.pdf`); }catch(err){ msg("ivMsg", "輸出失敗：" + err.message, "err"); }
 });
 $("ivPrint").addEventListener("click", () => {
   const d = ivData(); if (!d.lines.length) return msg("ivMsg","沒有品項。","err");
@@ -5042,7 +5043,7 @@ $("ivExcel").addEventListener("click", async () => {
   const pk = IV.base && IV.base.packing;
   if (!pk || !(pk.lines || []).length) return msg("ivMsg","這張單還沒有儲存 Packing List。請先到「Packing List」帶出、確認包裝後按「儲存」，再回來匯出（Invoice 和 Packing 會放在同一個 Excel）。","err");
   try{
-    const blob = await busy(() => exportForwarder("full", d, { ...pk, sc: d.sc }));
+    const lay = $("ivLayout").value; const blob = await busy(() => exportForwarder("full", { ...d, layout: lay }, { ...pk, sc: d.sc, layout: lay }));
     download(`${d.no || d.sc}-SEA.xlsx`, blob, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     msg("ivMsg", `已匯出 ${d.no || d.sc}-SEA.xlsx（公司原本的 Invoice + Packing 格式）。`);
   }catch(err){ msg("ivMsg", err.message, "err"); }
@@ -6657,8 +6658,9 @@ function xlTwoPages(doc, wbDoc, sheetName, brk, titleRow){
   const ps = els(doc, "pageSetup")[0];  // 寬度縮成一張 A4、高度依換頁點分頁
   if (ps){ ps.removeAttribute("scale"); ps.setAttribute("fitToWidth", "1"); ps.setAttribute("fitToHeight", "0"); }
   els(doc, "rowBreaks").forEach(x => x.parentNode.removeChild(x));
-  const rb = doc.createElementNS(XNS, "rowBreaks"); rb.setAttribute("count", "1"); rb.setAttribute("manualBreakCount", "1");
-  const b = doc.createElementNS(XNS, "brk"); b.setAttribute("id", brk); b.setAttribute("max", "16383"); b.setAttribute("man", "1"); rb.appendChild(b);
+  const list = [].concat(brk);   // 可以有好幾個換頁點
+  const rb = doc.createElementNS(XNS, "rowBreaks"); rb.setAttribute("count", list.length); rb.setAttribute("manualBreakCount", list.length);
+  list.forEach(id => { const b = doc.createElementNS(XNS, "brk"); b.setAttribute("id", id); b.setAttribute("max", "16383"); b.setAttribute("man", "1"); rb.appendChild(b); });
   const after = els(doc, "headerFooter")[0] || ps; after.parentNode.insertBefore(rb, after.nextSibling);
   const idx = els(wbDoc, "sheet").findIndex(x => x.getAttribute("name") === sheetName);
   let dn = els(wbDoc, "definedNames")[0];
@@ -6671,6 +6673,65 @@ function xlTwoPages(doc, wbDoc, sheetName, brk, titleRow){
     a.textContent = `'${sheetName}'!$A$1:$P$${last}`; dn.insertBefore(a, dn.firstChild);
   }
 }
+/** 縮成一頁：寬、高都縮到一張 A4（超過範本格數不多時用，跟手動調比例一樣） */
+function xlOnePage(doc){
+  const W = doc.documentElement; let sp = els(doc, "sheetPr")[0];
+  if (!sp){ sp = doc.createElementNS(XNS, "sheetPr"); W.insertBefore(sp, W.firstChild); }
+  let pu = els(doc, "pageSetUpPr")[0]; if (!pu){ pu = doc.createElementNS(XNS, "pageSetUpPr"); sp.appendChild(pu); }
+  pu.setAttribute("fitToPage", "1");
+  const ps = els(doc, "pageSetup")[0]; if (ps){ ps.removeAttribute("scale"); ps.setAttribute("fitToWidth", "1"); ps.setAttribute("fitToHeight", "1"); }
+  els(doc, "rowBreaks").forEach(x => x.parentNode.removeChild(x));
+}
+/** 分頁時：每頁頁尾印「單號　第 N / 共 M 頁」，第 2 頁起頁首印「單號（續）」，看得出是同一份文件 */
+function xlPageTexts(doc, title, no){
+  els(doc, "headerFooter").forEach(x => x.parentNode.removeChild(x));
+  const hf = doc.createElementNS(XNS, "headerFooter"); hf.setAttribute("differentFirst", "1");
+  const add = (tag, txt) => { const e = doc.createElementNS(XNS, tag); e.textContent = txt; hf.appendChild(e); };
+  const t = String(title + (no ? " No. " + no : "")).replace(/&/g, "&&");
+  add("oddHeader", `&R&"Arial,Bold"&9${t} (continued)`);
+  add("oddFooter", `&C&"Arial"&8${t}　　Page &P of &N`);
+  add("firstFooter", `&C&"Arial"&8${t}　　Page &P of &N`);
+  const ps = els(doc, "pageSetup")[0] || els(doc, "pageMargins")[0];
+  const before = ["rowBreaks","colBreaks","customProperties","cellWatches","ignoredErrors","smartTags","drawing","legacyDrawing","legacyDrawingHF","picture","oleObjects","controls","webPublishItems","tableParts","extLst"]
+    .map(n => els(doc, n)[0]).filter(Boolean)[0];
+  if (before) before.parentNode.insertBefore(hf, before); else ps.parentNode.insertBefore(hf, ps.nextSibling);
+}
+/** 同一個棧板的 Measurement 合併成一格（並板的貨物不會留白），垂直置中 */
+function xlMergeByPallet(stylesDoc, doc, L, first, col){
+  const mc = els(doc, "mergeCells")[0] || (() => { const m = doc.createElementNS(XNS, "mergeCells"); const after = els(doc, "sheetData")[0]; after.parentNode.insertBefore(m, after.nextSibling); return m; })();
+  const xfs = els(stylesDoc, "cellXfs")[0]; const memo = {};
+  const center = a => { const c = els(doc, "c").find(x => x.getAttribute("r") === a); if (!c) return; const st = c.getAttribute("s") || "0";
+    if (memo[st] == null){ const nx = xfs.getElementsByTagNameNS(XNS, "xf")[Number(st)].cloneNode(true); let al = Array.from(nx.childNodes).find(x => x.localName === "alignment");
+      if (!al){ al = stylesDoc.createElementNS(XNS, "alignment"); nx.insertBefore(al, nx.firstChild); } al.setAttribute("vertical", "center"); al.setAttribute("horizontal", "center"); al.setAttribute("wrapText", "1");
+      nx.setAttribute("applyAlignment", "1"); xfs.appendChild(nx); memo[st] = xfs.getElementsByTagNameNS(XNS, "xf").length - 1; xfs.setAttribute("count", memo[st] + 1); }
+    c.setAttribute("s", memo[st]); };
+  let i = 0;
+  while (i < L.length){
+    let j = i; const p = String(L[i].plt || "").trim();
+    if (p) while (j + 1 < L.length && String(L[j + 1].plt || "").trim() === p) j++;
+    if (j > i){
+      const meas = L.slice(i, j + 1).map(l => l.meas).find(Boolean) || "";
+      const r1 = first + i, r2 = first + j;
+      xlSet(doc, col + r1, meas); for (let r = r1 + 1; r <= r2; r++) xlSet(doc, col + r, null);
+      const m = doc.createElementNS(XNS, "mergeCell"); m.setAttribute("ref", `${col}${r1}:${col}${r2}`); mc.appendChild(m);
+      center(col + r1);
+    }
+    i = j + 1;
+  }
+  mc.setAttribute("count", mc.getElementsByTagNameNS(XNS, "mergeCell").length);
+}
+/** 換頁點：第一頁放 firstCap 列、之後每頁 nextCap 列，最後一頁至少留 3 列；有 groupKey 時不把同一組（同棧板）拆到兩頁 */
+function pageBreaks(n, first, firstCap, nextCap, groupKey){
+  const out = []; let i = Math.min(n - 3, firstCap);
+  while (i > 0 && i < n){
+    let k = i; if (groupKey) while (k > 1 && groupKey(k - 1) && groupKey(k - 1) === groupKey(k)) k--;
+    if (k <= (out.length ? out[out.length - 1] - first + 1 : 0)) k = i;
+    out.push(first - 1 + k); i = k + nextCap; if (n - i < 3) break;
+  }
+  return out;
+}
+const PAGE_FIT_EXTRA = 20;   // 超過範本格數 20 列以內：縮成一頁；更多：分頁並加頁首頁尾
+const pageMode = (layout, extra) => !extra ? "none" : layout === "one" ? "one" : layout === "pages" ? "pages" : (extra <= PAGE_FIT_EXTRA ? "one" : "pages");
 /** 幣別不是美金時，單價與金額改成不帶 $ 的數字格式 */
 /** 套用範本列的格式時，保留這一格原本就有的框線（例如最後一列的底線），只補不刪 */
 function xlKeepBorders(stylesDoc, st, own, memo){
@@ -6741,7 +6802,9 @@ async function exportForwarder(kind, inv, pk){
     for (const [file, draw, name, variant] of [["sheet1", "drawing1", "Invoice(FOB)", "FOB"], ["sheet2", "drawing2", "Invoice (EXW)", "EXW"]]){
       const doc = await P(`xl/worksheets/${file}.xml`), dd = await P(`xl/drawings/${draw}.xml`);
       xlInsertRows(doc, dd, wb, name, INV_FIRST + INV_CAP - 1, invExtra, INV_FIRST + INV_CAP - 2);
-      if (invExtra) xlTwoPages(doc, wb, name, INV_FIRST - 1 + Math.min(inv.lines.length - 3, INV_CAP + 12), INV_FIRST - 1);
+      const im = pageMode(inv.layout, invExtra);
+      if (im === "one") xlOnePage(doc);
+      else if (im === "pages"){ xlTwoPages(doc, wb, name, pageBreaks(inv.lines.length, INV_FIRST, INV_CAP + 12, 42), INV_FIRST - 1); xlPageTexts(doc, "COMMERCIAL INVOICE", inv.no); }
       const { cells, money } = invoiceCells(inv, variant, invExtra);
       sheets.push([file, doc, cells]); zip.file(`xl/drawings/${draw}.xml`, S.serializeToString(dd));
       if (String(inv.currency || "USD").toUpperCase() !== "USD") sheets[sheets.length - 1].push(money);
@@ -6749,7 +6812,9 @@ async function exportForwarder(kind, inv, pk){
   }
   const pdoc = await P("xl/worksheets/sheet3.xml"), pdd = await P("xl/drawings/drawing3.xml");
   xlInsertRows(pdoc, pdd, wb, "Packing", PK_FIRST + PK_CAP - 1, pkExtra, PK_FIRST + PK_CAP - 2);
-  if (pkExtra) xlTwoPages(pdoc, wb, "Packing", PK_FIRST - 1 + Math.min(pk.lines.length - 3, PK_CAP + 6), PK_FIRST - 1);
+  const pmode = pageMode(pk.layout, pkExtra);
+  if (pmode === "one") xlOnePage(pdoc);
+  else if (pmode === "pages"){ const LS = pkSorted(pk); xlTwoPages(pdoc, wb, "Packing", pageBreaks(LS.length, PK_FIRST, PK_CAP + 6, 30, k => String(LS[k] && LS[k].plt || "").trim()), PK_FIRST - 1); xlPageTexts(pdoc, "PACKING LIST", pk.no || pk.sc); }
   zip.file("xl/drawings/drawing3.xml", S.serializeToString(pdd));
   sheets.push(["sheet3", pdoc, packingCells(pk, pkExtra)]);
   for (const [file, doc, cells, money] of sheets){
@@ -6757,6 +6822,7 @@ async function exportForwarder(kind, inv, pk){
     cells.forEach(([addr, val, styleFrom, force]) => { const st = styleFrom ? xlStyleOf(doc, styleFrom) : null; const own = xlStyleOf(doc, addr); const c = xlSet(doc, addr, val, st);
       if (force && st != null) c.setAttribute("s", own != null && own !== st ? xlKeepBorders(styles, st, own, bm) : st); });
     if (money) xlPlainNumber(styles, doc, money);
+    if (file === "sheet3") xlMergeByPallet(styles, doc, pkSorted(pk), PK_FIRST, "P");
     zip.file(`xl/worksheets/${file}.xml`, S.serializeToString(doc));
   }
   zip.file("xl/workbook.xml", S.serializeToString(wb)); zip.file("xl/styles.xml", S.serializeToString(styles));
@@ -6957,7 +7023,9 @@ async function xlSheetPages(doc, path, idx, name, X){
   const ps = els(doc, "pageSetup")[0], pm = els(doc, "pageMargins")[0], po = els(doc, "printOptions")[0], spr = els(doc, "pageSetUpPr")[0];
   const land = ps && ps.getAttribute("orientation") === "landscape";
   const mg = k => (pm ? Number(pm.getAttribute(k)) : 0.7) * 25.4;
-  const pageW = (land ? 297 : 210) - mg("left") - mg("right"), pageH = (land ? 210 : 297) - mg("top") - mg("bottom");
+  const pageW = (land ? 297 : 210) - mg("left") - mg("right"), pageH0 = (land ? 210 : 297) - mg("top") - mg("bottom");
+  const hfx = els(doc, "headerFooter")[0]; const HF_H = hfx ? 6 : 0;   // 有頁首頁尾時，上下各留 6mm 給它們
+  const pageH = pageH0 - 2 * HF_H;
   const xs = [0]; for (let k = c1; k <= c2; k++) xs.push(xs[xs.length - 1] + cw(k)); const W = xs[xs.length - 1];
   const X0 = k => xs[k - c1] != null ? xs[k - c1] : (k < c1 ? 0 : W);
   const segH = seg => { let h = 0; [...(seg[0] > r1 && titles.length ? [titles] : []), seg].forEach(([a, b]) => { for (let r = a; r <= b; r++) h += rh(r); }); return h; };
@@ -7017,8 +7085,16 @@ async function xlSheetPages(doc, path, idx, name, X){
         <div style="position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;line-height:1">${text}</div></div>`);
     });
     const wmm = W * mmPx * sc, hmm = H * mmPx * sc;
+    // 頁首／頁尾（分頁時的「續」和頁碼）
+    const hfT = tag => { const e = hfx && Array.from(hfx.children).find(x => x.localName === tag); return e ? e.textContent : ""; };
+    const hfClean = t => esc(String(t).replace(/&"[^"]*"/g, "").replace(/&\d+/g, "").replace(/&[LCR]/g, "").replace(/&P/g, String(si + 1)).replace(/&N/g, String(segs.length)).replace(/&&/g, "&"));
+    const first = si === 0 && hfx && hfx.getAttribute("differentFirst") === "1";
+    const hdr = hfT(first ? "firstHeader" : "oddHeader"), ftr = hfT(first ? "firstFooter" : "oddFooter");
     const ml = po && po.getAttribute("horizontalCentered") === "1" ? (pageW - wmm) / 2 : 0, mt = po && po.getAttribute("verticalCentered") === "1" ? (pageH - hmm) / 2 : 0;
-    out.push({ html: `<div style="position:relative;width:${pageW.toFixed(2)}mm;height:${(pageH - 0.5).toFixed(2)}mm;overflow:hidden;background:#fff;color:#000"><div style="position:absolute;left:${ml.toFixed(2)}mm;top:${mt.toFixed(2)}mm;width:${wmm.toFixed(2)}mm;height:${hmm.toFixed(2)}mm">${parts.join("")}</div></div>`,
+    const hfHtml = (hdr ? `<div style="position:absolute;right:0;top:0;font:bold 8pt Arial,sans-serif">${hfClean(hdr)}</div>` : "")
+      + (ftr ? `<div style="position:absolute;left:0;right:0;bottom:0;text-align:center;font:7.5pt Arial,sans-serif">${hfClean(ftr)}</div>` : "");
+    const top = HF_H + (si ? 0 : mt);   // 續頁從上面開始排，不垂直置中
+    out.push({ html: `<div style="position:relative;width:${pageW.toFixed(2)}mm;height:${(pageH0 - 0.5).toFixed(2)}mm;overflow:hidden;background:#fff;color:#000">${hfHtml}<div style="position:absolute;left:${ml.toFixed(2)}mm;top:${top.toFixed(2)}mm;width:${wmm.toFixed(2)}mm;height:${hmm.toFixed(2)}mm">${parts.join("")}</div></div>`,
       margin: [mg("top"), mg("right"), mg("bottom"), mg("left")], name });
   });
   return out;
