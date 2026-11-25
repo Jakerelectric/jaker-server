@@ -316,6 +316,14 @@ function mkHtml(appDir) {
 function createRuntime(store, cfg) {
   const log = cfg.log || ((...a) => console.log(...a));
   const cache = new Map();
+  // 登入狀態（tk_ 開頭的快取）存到檔案：主機更新重啟後不用重新登入
+  const sessFile = cfg.dataDir ? path.join(cfg.dataDir, 'sessions' + String(cfg.mount || '').replace(/[^a-z0-9]/gi, '-') + '.json') : '';
+  try { if (sessFile && fs.existsSync(sessFile)) { const o = JSON.parse(fs.readFileSync(sessFile, 'utf8')); const now = Date.now();
+    Object.keys(o).forEach(k => { if (o[k] && o[k].exp > now) cache.set(k, o[k]); }); } } catch (e) { log('讀取登入狀態失敗', e.message); }
+  let sessTimer = null;
+  const saveSess = () => { if (!sessFile || sessTimer) return; sessTimer = setTimeout(() => { sessTimer = null;
+    try { const o = {}; const now = Date.now(); cache.forEach((e, k) => { if (k.startsWith('tk_') && e.exp > now) o[k] = e; });
+      fs.writeFileSync(sessFile + '.tmp', JSON.stringify(o)); fs.renameSync(sessFile + '.tmp', sessFile); } catch (e) { log('儲存登入狀態失敗', e.message); } }, 2000); };
   let lockHeld = false;
   const scriptProps = {
     getProperty: k => (store.props.has(k) ? store.props.get(k) : null),
@@ -327,8 +335,8 @@ function createRuntime(store, cfg) {
   };
   const scriptCache = {
     get: k => { const e = cache.get(k); if (!e) return null; if (e.exp < Date.now()) { cache.delete(k); return null; } return e.v; },
-    put: (k, v, sec) => { cache.set(k, { v: String(v), exp: Date.now() + 1000 * (sec || 600) }); },
-    remove: k => { cache.delete(k); },
+    put: (k, v, sec) => { cache.set(k, { v: String(v), exp: Date.now() + 1000 * (sec || 600) }); if (String(k).startsWith('tk_')) saveSess(); },
+    remove: k => { cache.delete(k); if (String(k).startsWith('tk_')) saveSess(); },
     getAll: ks => { const o = {}; ks.forEach(k => { const v = scriptCache.get(k); if (v != null) o[k] = v; }); return o; },
     putAll: (o, sec) => Object.keys(o).forEach(k => scriptCache.put(k, o[k], sec)),
     removeAll: ks => ks.forEach(k => cache.delete(k))

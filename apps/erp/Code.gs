@@ -676,6 +676,35 @@ function dxImport_(imp, at) {
   if (sh.length) { append_('sales', sh); append_('salesLines', sl); r.sales = sh.length; r.salesLines = sl.length; }
   return r;
 }
+/**
+ * 以鼎新為準更新指定的銷貨單（單頭客戶、日期、幣別與全部明細）
+ *   安全限制：系統自己出貨、有出庫紀錄的銷貨單不改（改了庫存會對不上），列出來給人工處理
+ */
+function dxReplaceSales_(list, by) {
+  const at = nowStr_(); const sales = readAll_('sales'); const items = readAll_('items'); const custs = readAll_('customers');
+  const tx = readAll_('txns').filter(t => t.typeLabel === '出庫');
+  const res = [];
+  list.forEach(d => {
+    const x = sales.find(s => s.no === d.no);
+    if (!x) return res.push({ no: d.no, result: '系統沒有這張' });
+    if (d.missing) return res.push({ no: d.no, result: '鼎新找不到這張，沒有更動' });
+    if (!d.lines.length) return res.push({ no: d.no, result: '鼎新這張沒有明細，沒有更動' });
+    const short = String(d.no).split('-').pop();
+    const hasTx = tx.some(t => String(t.ref || '') === d.no || String(t.ref || '') === short);
+    if (x.imported !== '是' && hasTx) return res.push({ no: d.no, result: '這張是系統出貨的（有出庫紀錄），為了不讓庫存對不上沒有自動改，請人工處理' });
+    const before = readAll_('salesLines').filter(l => l.saleNo === x.no).map(l => `${l.itemCode}×${l.qty}@${l.price}`).join('、');
+    const c = custs.find(k => k.code === d.custCode);
+    Object.assign(x, { date: d.date || x.date, custCode: d.custCode, customer: c ? (c.short || c.full) : d.customer, currency: d.currency || x.currency, taxRate: d.taxRate || x.taxRate,
+      orderNo: (d.lines.find(l => l.orderNo) || {}).orderNo || x.orderNo, updatedAt: at,
+      editLog: (x.editLog ? x.editLog + '\n' : '') + at + ' ' + by + ' 依鼎新更新（原：' + before + '）' });
+    update_('sales', x);
+    replaceLines_('salesLines', 'saleNo', x.no, d.lines.map((l, i) => { const it = itemByAny_(items, l.itemCode);
+      return { lid: Utilities.getUuid().slice(0, 8), seq: i + 1, itemCode: it ? it.code : l.itemCode, name: l.name, nameEn: '', spec: l.spec, unit: l.unit, qty: l.qty, price: l.price,
+        whId: '', note: '', shipQty: l.qty, orderNo: l.orderNo, free: '' }; }));
+    res.push({ no: d.no, result: '已依鼎新更新', before, after: d.lines.map(l => `${l.itemCode}×${l.qty}@${l.price}`).join('、') });
+  });
+  return res;
+}
 function moList_(u, p) {
   const pm = perms_(u); if (!(pm.prod || pm.plan || pm.wh || pm.qc)) throw new Error('只有生產、生管、倉庫人員可以看製令。');
   return { mos: readAll_('mos').map(noRow_), ops: readAll_('moOps').map(noRow_), syncedAt: setting_('dxMoSyncAt'), err: setting_('dxSyncErr') };

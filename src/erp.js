@@ -195,6 +195,19 @@ async function setupErp(app, { cfg, ROOT, log, serial }) {
     try { res.json({ ok: true, data: await syncDx(u.name) }); }
     catch (e) { log('進銷存 鼎新同步失敗', e); res.json({ ok: false, error: String(e.message || e).slice(0, 300) }); }
   });
+  // 以鼎新為準：把指定的銷貨單換成鼎新目前的內容（管理員）
+  app.post('/erp/dingxin/resync-sales', express.json({ limit: '50kb' }), async (req, res) => {
+    const b = req.body || {}; let u = null;
+    try { u = await run('dxAuth', () => rt.call('session_', String(b.token || ''))); } catch (e) { u = null; }
+    if (!u || u.role !== 'admin') return res.status(403).json({ ok: false, error: '只有管理員可以使用。' });
+    const nos = (b.nos || []).map(x => String(x).trim()).filter(Boolean).slice(0, 200);
+    if (!nos.length) return res.json({ ok: false, error: '請提供銷貨單號。' });
+    try { const list = await dingxin.fetchSalesByNo(path.resolve(__dirname, '..'), nos);
+      const r = await run('dxResync', () => rt.call('dxReplaceSales_', list, u.name));
+      log('進銷存 以鼎新為準更新銷貨單（' + u.name + '）：' + r.map(x => x.no + ' ' + x.result).join('；'));
+      res.json({ ok: true, data: r }); }
+    catch (e) { res.json({ ok: false, error: String(e.message || e).slice(0, 300) }); }
+  });
   if (cfg.store !== 'file') cron.schedule('0 18 * * *', () => syncDx('每日 18:00').catch(e => log('進銷存 鼎新同步失敗', e)), { timezone: 'Asia/Taipei' });
 
   // 資料庫檢查（管理員，只讀）：比對某張表的欄位對照（gas_columns）與資料表實際欄位、各欄有值的筆數、最新兩筆原始資料

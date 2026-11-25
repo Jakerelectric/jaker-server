@@ -99,4 +99,21 @@ async function fetchImport(root, extraCodes) {
   });
 }
 
-module.exports = { fetchOpenMos, fetchOpenPos, fetchImport };
+/** 指定單號的銷貨單（單頭＋明細），用來「以鼎新為準」更新系統 */
+async function fetchSalesByNo(root, nos) {
+  return withPool(root, async pool => {
+    const out = [];
+    for (const no of nos) {
+      const m = String(no).trim().match(/^(\w+)-(\w+)$/); if (!m) continue;
+      const g = (await pool.request().input('a', m[1]).input('b', m[2]).query(`SELECT TG001,TG002,TG003,TG004,TG007,TG011,TG023,TG044 FROM COPTG WITH (NOLOCK) WHERE TG001=@a AND TG002=@b`)).recordset[0];
+      if (!g) { out.push({ no, missing: true }); continue; }
+      const h = (await pool.request().input('a', m[1]).input('b', m[2]).query(`SELECT TH003,TH004,TH005,TH006,TH008,TH009,TH012,TH014,TH015 FROM COPTH WITH (NOLOCK) WHERE TH001=@a AND TH002=@b ORDER BY TH003`)).recordset;
+      out.push({ no, date: ymd(g.TG003), custCode: t(g.TG004), customer: t(g.TG007), currency: cur(g.TG011), taxRate: n(g.TG044), confirm: t(g.TG023),
+        lines: h.map((l, i) => ({ seq: Number(t(l.TH003)) || i + 1, itemCode: t(l.TH004), name: t(l.TH005), spec: t(l.TH006), qty: n(l.TH008), unit: t(l.TH009), price: n(l.TH012),
+          orderNo: t(l.TH014) && t(l.TH015) ? `${t(l.TH014)}-${t(l.TH015)}` : '' })) });
+    }
+    return out;
+  });
+}
+
+module.exports = { fetchOpenMos, fetchOpenPos, fetchImport, fetchSalesByNo };
