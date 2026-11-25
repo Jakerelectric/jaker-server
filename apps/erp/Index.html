@@ -6673,6 +6673,32 @@ function xlTwoPages(doc, wbDoc, sheetName, brk, titleRow){
     a.textContent = `'${sheetName}'!$A$1:$P$${last}`; dn.insertBefore(a, dn.firstChild);
   }
 }
+/** 換頁時：這一頁最後一列補上底線（原本靠下一列的上框線畫，換頁後下一列在下一頁，底線就不見了） */
+function xlBreakBorders(stylesDoc, doc){
+  const brks = els(doc, "brk").filter(b => b.parentNode.localName === "rowBreaks").map(b => Number(b.getAttribute("id"))); if (!brks.length) return;
+  const xfs = els(stylesDoc, "cellXfs")[0], bds = els(stylesDoc, "borders")[0]; const memo = {};
+  const xfL = () => xfs.getElementsByTagNameNS(XNS, "xf"), bdL = () => bds.getElementsByTagNameNS(XNS, "border");
+  const side = (b, n) => b && Array.from(b.childNodes).find(x => x.localName === n);
+  const cellAt = (row, col) => els(doc, "c").find(x => x.getAttribute("r") === col + row);
+  brks.forEach(r => {
+    const below = els(doc, "row").find(x => Number(x.getAttribute("r")) === r + 1); if (!below) return;
+    Array.from(below.getElementsByTagNameNS(XNS, "c")).forEach(c2 => {
+      const col = splitAddr(c2.getAttribute("r")).col; const tb = side(bdL()[Number(xfL()[Number(c2.getAttribute("s") || 0)].getAttribute("borderId") || 0)], "top");
+      if (!tb || !tb.getAttribute("style")) return;
+      const c1 = cellAt(r, col) || xlSet(doc, col + r, null); const st = c1.getAttribute("s") || "0"; const key = st + "|" + tb.getAttribute("style");
+      if (memo[key] == null){
+        const xf = xfL()[Number(st)]; const nb = bdL()[Number(xf.getAttribute("borderId") || 0)].cloneNode(true);
+        const bt = side(nb, "bottom"); const nbt = stylesDoc.createElementNS(XNS, "bottom"); nbt.setAttribute("style", tb.getAttribute("style")); Array.from(tb.childNodes).forEach(k => nbt.appendChild(k.cloneNode(true)));
+        if (bt) nb.replaceChild(nbt, bt); else nb.appendChild(nbt);
+        ["left", "right", "top", "bottom", "diagonal"].forEach(n => { const x = side(nb, n); if (x) nb.appendChild(x); });
+        bds.appendChild(nb); bds.setAttribute("count", bdL().length);
+        const nx = xf.cloneNode(true); nx.setAttribute("borderId", bdL().length - 1); nx.setAttribute("applyBorder", "1"); xfs.appendChild(nx); xfs.setAttribute("count", xfL().length);
+        memo[key] = xfL().length - 1;
+      }
+      c1.setAttribute("s", memo[key]);
+    });
+  });
+}
 /** 縮成一頁：寬、高都縮到一張 A4（超過範本格數不多時用，跟手動調比例一樣） */
 function xlOnePage(doc){
   const W = doc.documentElement; let sp = els(doc, "sheetPr")[0];
@@ -6823,6 +6849,7 @@ async function exportForwarder(kind, inv, pk){
       if (force && st != null) c.setAttribute("s", own != null && own !== st ? xlKeepBorders(styles, st, own, bm) : st); });
     if (money) xlPlainNumber(styles, doc, money);
     if (file === "sheet3") xlMergeByPallet(styles, doc, pkSorted(pk), PK_FIRST, "P");
+    xlBreakBorders(styles, doc);
     zip.file(`xl/worksheets/${file}.xml`, S.serializeToString(doc));
   }
   zip.file("xl/workbook.xml", S.serializeToString(wb)); zip.file("xl/styles.xml", S.serializeToString(styles));
@@ -7048,6 +7075,9 @@ async function xlSheetPages(doc, path, idx, name, X){
       const xf = c ? (X.xfs[c.s] || X.xfs[0]) : null;
       // 框線：每格自己的框線
       const mg0 = cv ? merged[cv] : null; const edge = q => !mg0 || (q === "top" ? r === mg0.r1 : q === "bottom" ? r === mg0.r2 : q === "left" ? k === mg0.c1 : k === mg0.c2);
+      // 這一頁的最後一列：下一列在下一頁，補畫下一列的上框線當底線
+      const nb = si < segs.length - 1 && r === seg[1] ? (() => { const c2 = cells[colName(k) + (r + 1)]; const x2 = c2 ? (X.xfs[c2.s] || X.xfs[0]) : null; return x2 && x2.border.top; })() : null;
+      if (nb && (!xf || !xf.border.bottom)) parts.push(`<div style="position:absolute;box-sizing:border-box;left:${u(X0(k) - 0.3)};top:${u(Y0(r) - 0.3)};width:${u(cw(k) + 0.6)};height:${u(rh(r) + 0.6)};border-bottom:${nb.replace(/[\d.]+pt/, m => (parseFloat(m) * sc).toFixed(2) + "pt")} #000"></div>`);
       if (xf){ const b = xf.border; const bs = ["top","right","bottom","left"].filter(q => b[q] && edge(q)).map(q => `border-${q}:${b[q].replace(/[\d.]+pt/, m => (parseFloat(m) * sc).toFixed(2) + "pt")} #000`).join(";");
         if (bs) parts.push(`<div style="position:absolute;box-sizing:border-box;left:${u(X0(k) - 0.3)};top:${u(Y0(r) - 0.3)};width:${u(cw(k) + 0.6)};height:${u(rh(r) + 0.6)};${bs}"></div>`); }
       if (cv && cv !== a) continue;  // 被合併的格子不放文字
@@ -7091,7 +7121,7 @@ async function xlSheetPages(doc, path, idx, name, X){
     const first = si === 0 && hfx && hfx.getAttribute("differentFirst") === "1";
     const hdr = hfT(first ? "firstHeader" : "oddHeader"), ftr = hfT(first ? "firstFooter" : "oddFooter");
     const ml = po && po.getAttribute("horizontalCentered") === "1" ? (pageW - wmm) / 2 : 0, mt = po && po.getAttribute("verticalCentered") === "1" ? (pageH - hmm) / 2 : 0;
-    const hfHtml = (hdr ? `<div style="position:absolute;right:0;top:0;font:bold 8pt Arial,sans-serif">${hfClean(hdr)}</div>` : "")
+    const hfHtml = (hdr ? `<div style="position:absolute;right:3mm;top:0;font:bold 7.5pt Arial,sans-serif;white-space:nowrap">${hfClean(hdr)}</div>` : "")
       + (ftr ? `<div style="position:absolute;left:0;right:0;bottom:0;text-align:center;font:7.5pt Arial,sans-serif">${hfClean(ftr)}</div>` : "");
     const top = HF_H + (si ? 0 : mt);   // 續頁從上面開始排，不垂直置中
     out.push({ html: `<div style="position:relative;width:${pageW.toFixed(2)}mm;height:${(pageH0 - 0.5).toFixed(2)}mm;overflow:hidden;background:#fff;color:#000">${hfHtml}<div style="position:absolute;left:${ml.toFixed(2)}mm;top:${top.toFixed(2)}mm;width:${wmm.toFixed(2)}mm;height:${hmm.toFixed(2)}mm">${parts.join("")}</div></div>`,
