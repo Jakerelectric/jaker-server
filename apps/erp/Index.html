@@ -932,7 +932,7 @@ nav.tabs [data-tab].g-off{display:none}
           <label class="f span2">Export references（訂單號、發票號）<input id="ivRefs"></label>
           <label class="f">原產地 Country of origin<input id="ivOrigin" value="Taiwan"></label>
           <label class="f">最終目的地 Ultimate destination<input id="ivDest"></label>
-          <label class="f span2">HS CODE / 說明（印在品項下方）<input id="ivHs" placeholder="1-. HS CODE 853890-1000"></label>
+          <label class="f span2">HS CODE / 說明（印在品項下方；開頭的板號範圍「1-10.」會依 Packing 板數自動更新）<input id="ivHs" placeholder="1-10. HS CODE 853890-1000"></label>
           <label class="f span2" style="grid-column:span 2">進口人 Importer（與收件人不同時才填）<textarea id="ivImporter" rows="2"></textarea></label>
         </div>
         <datalist id="incoterms"><option value="FOB Taiwan"></option><option value="CIF"></option><option value="CFR"></option><option value="EXW"></option><option value="DAP"></option><option value="DDP"></option></datalist>
@@ -3287,6 +3287,13 @@ function plTotals(){
 /** 件數合計：只有一種包裝單位時「3 CTNS」；混合時「2 PKGS (1 CASE + 1 CTN)」 */
 /** 數量的單位（PCS / SET…）：Packing 的數量來自出庫紀錄，用品號的庫存單位；Invoice 依 Packing 分板時也用同一個，兩份文件才會一致 */
 function pkQtyUnit(l){ const base = String(l.code || l.itemCode || "").replace(/#+$/, ""); const it = itemByAny(base); return unitEn(l.qtyUnit || (it && it.unit) || "") || "PCS"; }
+/** 板號範圍：HS CODE 那一行開頭的「1-10.」依 Packing 的板數自動帶（跟嘜頭 P/NO. 一樣），手動改過其他文字的不動 */
+const pltMax = lines => Math.max(0, ...(lines || []).map(l => parseInt(l.plt, 10)).filter(n => n > 0));
+function hsAuto(text, n){
+  const t = String(text || "").trim() || "1-. HS CODE 853890-1000"; if (!n) return t;
+  const rg = n > 1 ? `1-${n}.` : "1.";
+  return /^\s*1\s*(-\s*\d*)?\s*\./.test(t) ? t.replace(/^\s*1\s*(-\s*\d*)?\s*\./, rg) : t;
+}
 function pkUnit(l){ return String(l.unit || "CTNS").trim().toUpperCase() || "CTNS"; }
 function pkTotal(lines){
   const by = {}; let t = 0; (lines||[]).forEach(l => { const c = Number(l.ctn)||0; if (!c) return; const u = pkUnit(l); by[u] = (by[u]||0) + c; t += c; });
@@ -4954,7 +4961,7 @@ async function invLoad(rebuild){
   const ord = sa.orderNo ? SD().orders.find(o => o.no === sa.orderNo) : null;
   $("ivPO").value = v("po", ord?.custPO || ""); $("ivNote").value = v("note", "");
   $("ivAwb").value = v("awb", ""); $("ivExpDate").value = v("exportDate", ""); $("ivOrigin").value = v("origin", "Taiwan");
-  $("ivDest").value = v("destCountry", pk.to || r.consignee?.to || ""); $("ivHs").value = v("hs", "1-. HS CODE 853890-1000"); $("ivImporter").value = v("importer", "");
+  $("ivDest").value = v("destCountry", pk.to || r.consignee?.to || ""); $("ivHs").value = hsAuto(v("hs", "1-. HS CODE 853890-1000"), pltMax(pk.lines)); $("ivImporter").value = v("importer", "");
   $("ivRefs").value = v("refs", [$("ivPO").value ? "Order No.: " + $("ivPO").value : "", "Invoice No.: " + $("ivNo").value].filter(Boolean).join(" / "));
   // 品項：有存過 Invoice 用存檔；否則依 Packing List 分板（一板一行），單價從銷貨單帶
   const FOC = { 樣品:"F.O.C. SAMPLE", 補料:"F.O.C. REPLACEMENT", 其他:"F.O.C." };
@@ -6900,6 +6907,7 @@ async function exportForwarder(kind, inv, pk){
   const S = new XMLSerializer();
   const wb = await P("xl/workbook.xml"), styles = await P("xl/styles.xml");
   const pkExtra = Math.max(0, pk.lines.length - PK_CAP);
+  if (inv) inv = { ...inv, hs: hsAuto(inv.hs, pltMax(pk.lines)) };   // 板數改過、或存檔時忘了改，輸出時都以 Packing 為準
   const sheets = [];
   if (kind === "full"){
     const invExtra = Math.max(0, inv.lines.length - INV_CAP);
