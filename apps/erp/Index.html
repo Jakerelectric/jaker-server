@@ -3285,6 +3285,8 @@ function plTotals(){
   $("plTPlt").textContent = `SAY TOTAL ${n} PALLET${n>1?"S":""} = ${pkTotal(PL.lines)}`;
 }
 /** 件數合計：只有一種包裝單位時「3 CTNS」；混合時「2 PKGS (1 CASE + 1 CTN)」 */
+/** 數量的單位（PCS / SET…）：Packing 的數量來自出庫紀錄，用品號的庫存單位；Invoice 依 Packing 分板時也用同一個，兩份文件才會一致 */
+function pkQtyUnit(l){ const base = String(l.code || l.itemCode || "").replace(/#+$/, ""); const it = itemByAny(base); return unitEn(l.qtyUnit || (it && it.unit) || "") || "PCS"; }
 function pkUnit(l){ return String(l.unit || "CTNS").trim().toUpperCase() || "CTNS"; }
 function pkTotal(lines){
   const by = {}; let t = 0; (lines||[]).forEach(l => { const c = Number(l.ctn)||0; if (!c) return; const u = pkUnit(l); by[u] = (by[u]||0) + c; t += c; });
@@ -4961,7 +4963,7 @@ async function invLoad(rebuild){
   const price = {}, unit = {}; r.lines.forEach(l => { if (price[l.itemCode] == null && l.price !== "" && l.price != null) price[l.itemCode] = l.price; unit[l.itemCode] = l.unit; });
   IV.fromPacking = !sv && !!(pk.lines && pk.lines.length);
   IV.lines = sv && sv.lines ? sv.lines.map(l => ({ ...l }))
-    : IV.fromPacking ? pk.lines.map(l => { const base = String(l.code||"").replace(/#+$/,""); return { plt:l.plt, itemCode:l.code, desc:l.desc, spec:"", qty:l.qty, unit: unit[l.code] || unit[base] || "PCS", weight:"", ...(() => { const f = freeOf[l.code] ?? freeOf[base];
+    : IV.fromPacking ? pk.lines.map(l => { const base = String(l.code||"").replace(/#+$/,""); return { plt:l.plt, itemCode:l.code, desc:l.desc, spec:"", qty:l.qty, unit: pkQtyUnit(l) || unit[l.code] || unit[base] || "PCS", weight:"", ...(() => { const f = freeOf[l.code] ?? freeOf[base];
         return f && f !== "mix" ? { price:0, desc: `${l.desc} (${FOC[f] || "F.O.C."})` } : { price: price[l.code] ?? price[base] ?? "" }; })() }; })
     : r.lines.map((l, i) => ({ ...l, plt:String(i+1), weight:"", ...(l.free ? { price:0, desc: `${l.desc} (${FOC[l.free] || "F.O.C."})` } : {}) }));
   if (!sv && Object.values(freeOf).includes("mix")) msg("ivMsg", "有品號同時有計價和不計價（樣品／補料）兩種，依 Packing List 分板時無法自動分開，請手動調整那幾行的單價。", "err");
@@ -6728,6 +6730,17 @@ function xlBreakBorders(stylesDoc, doc){
     });
   });
 }
+/** 數量單位混合時：每一行的數量用「#,##0" SET"」這種格式，數字還是數字（合計公式照算），畫面上帶單位 */
+function xlQtyUnits(stylesDoc, doc, L, first, col, extra){
+  const us = [...new Set(L.map(pkQtyUnit))]; if (us.length < 2) return;
+  let nf = els(stylesDoc, "numFmts")[0]; if (!nf){ nf = stylesDoc.createElementNS(XNS, "numFmts"); stylesDoc.documentElement.insertBefore(nf, stylesDoc.documentElement.firstChild); }
+  const xfs = els(stylesDoc, "cellXfs")[0]; const fid = {}, memo = {};
+  const fmtId = u => { if (fid[u]) return fid[u]; const ids = els(stylesDoc, "numFmt").map(x => Number(x.getAttribute("numFmtId"))); const id = Math.max(200, ...ids) + 1;
+    const e = stylesDoc.createElementNS(XNS, "numFmt"); e.setAttribute("numFmtId", id); e.setAttribute("formatCode", `General" ${u}"`); nf.appendChild(e); nf.setAttribute("count", els(stylesDoc, "numFmt").length); return fid[u] = id; };
+  L.forEach((l, i) => { const a = col + (first + i); const c = els(doc, "c").find(x => x.getAttribute("r") === a); if (!c) return; const st = c.getAttribute("s") || "0"; const u = pkQtyUnit(l); const key = st + "|" + u;
+    if (memo[key] == null){ const nx = xfs.getElementsByTagNameNS(XNS, "xf")[Number(st)].cloneNode(true); nx.setAttribute("numFmtId", fmtId(u)); nx.setAttribute("applyNumberFormat", "1"); xfs.appendChild(nx); memo[key] = xfs.getElementsByTagNameNS(XNS, "xf").length - 1; xfs.setAttribute("count", memo[key] + 1); }
+    c.setAttribute("s", memo[key]); });
+}
 /** 縮成一頁：寬、高都縮到一張 A4（超過範本格數不多時用，跟手動調比例一樣） */
 function xlOnePage(doc){
   const W = doc.documentElement; let sp = els(doc, "sheetPr")[0];
@@ -6823,6 +6836,11 @@ function packingCells(d, extra){
     const v = l ? [String(l.plt||""), ` ${l.desc} /\n${l.code}`, l.ctn === "" ? null : Number(l.ctn), l.ctn === "" ? "" : pkUnit(l), Number(l.qty)||0, Number(l.nw)||0, Number(l.gw)||0, l.meas || ""] : [null,null,null,null,null,null,null,null];
     ["B","D","K","L","M","N","O","P"].forEach((c, j) => cells.push([c + r, v[j], c + (PK_FIRST + 1), true]));
   }
+  // 數量單位：全部一樣 → 表頭寫 QTY. (SET)；混合 → 表頭寫 QTY.，每一行數字後面帶單位，合計改成分單位列出
+  const us = [...new Set(L.map(pkQtyUnit))];
+  cells.push(["M23", us.length === 1 ? `QTY. (${us[0]})` : "QTY."]);
+  if (us.length > 1){ const by = {}; L.forEach(l => { const u = pkQtyUnit(l); by[u] = (by[u] || 0) + (Number(l.qty) || 0); });
+    cells.push(["M" + k(40), Object.keys(by).map(u => `${fmt(by[u],2)} ${u}`).join(" / ")]); }
   const n = new Set(L.map(l => l.plt).filter(Boolean)).size;
   cells.push(["B" + k(42), `SAY TOTAL ${n} PALLET${n > 1 ? "S" : ""}`]);
   const tt = pkTotal(L).replace(/^[\d,.]+ /, ""); cells.push(tt.includes("(") ? ["L" + k(42), tt, "B10", true] : ["L" + k(42), tt]);  // 混合單位時改用不換行的格式，文字往右延伸
@@ -6877,7 +6895,7 @@ async function exportForwarder(kind, inv, pk){
     cells.forEach(([addr, val, styleFrom, force]) => { const st = styleFrom ? xlStyleOf(doc, styleFrom) : null; const own = xlStyleOf(doc, addr); const c = xlSet(doc, addr, val, st);
       if (force && st != null) c.setAttribute("s", own != null && own !== st ? xlKeepBorders(styles, st, own, bm) : st); });
     if (money) xlPlainNumber(styles, doc, money);
-    if (file === "sheet3") xlMergeByPallet(styles, doc, pkSorted(pk), PK_FIRST, "P");
+    if (file === "sheet3"){ xlMergeByPallet(styles, doc, pkSorted(pk), PK_FIRST, "P"); xlQtyUnits(styles, doc, pkSorted(pk), PK_FIRST, "M", pkExtra); }
     xlBreakBorders(styles, doc);
     zip.file(`xl/worksheets/${file}.xml`, S.serializeToString(doc));
   }
@@ -6978,6 +6996,8 @@ const XL_FONT = n => { n = String(n||""); if (/微軟正黑|JhengHei/i.test(n)) 
   return "'" + n.replace(/['"<>]/g,"") + "','Microsoft JhengHei','Noto Sans TC',Arial,sans-serif"; };
 function xlFmtNum(v, code, id){
   if (typeof v !== "number") return String(v ?? "");
+  const suf = (String(code || "").split(";")[0].match(/"([^"$]*)"\s*$/) || [])[1];
+  if (suf) return xlFmtNum(v, String(code).split(";")[0].replace(/"[^"]*"\s*$/, ""), 0) + suf;
   const c = String(code || "").split(";")[0].replace(/"[^"]*"|\\./g, m => m[0] === '"' && m.includes("$") ? "$" : "");
   const isDate = (id >= 14 && id <= 22) || /[yd]/i.test(c) || (/m/i.test(c) && !/[#0]/.test(c));
   if (isDate){ const d = new Date(Date.UTC(1899, 11, 30) + Math.round(v * 86400000)); return `${d.getUTCFullYear()}/${d.getUTCMonth()+1}/${d.getUTCDate()}`; }
