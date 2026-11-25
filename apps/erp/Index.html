@@ -6741,6 +6741,37 @@ function xlQtyUnits(stylesDoc, doc, L, first, col, extra){
     if (memo[key] == null){ const nx = xfs.getElementsByTagNameNS(XNS, "xf")[Number(st)].cloneNode(true); nx.setAttribute("numFmtId", fmtId(u)); nx.setAttribute("applyNumberFormat", "1"); xfs.appendChild(nx); memo[key] = xfs.getElementsByTagNameNS(XNS, "xf").length - 1; xfs.setAttribute("count", memo[key] + 1); }
     c.setAttribute("s", memo[key]); });
 }
+/** 欄寬：設定某幾欄的寬度（字元數） */
+function xlSetColWidths(doc, map){
+  const cols = els(doc, "cols")[0]; if (!cols) return;
+  Object.keys(map).forEach(k => { const n = Number(k); let hit = false;
+    Array.from(cols.getElementsByTagNameNS(XNS, "col")).forEach(c => { const a = Number(c.getAttribute("min")), b = Number(c.getAttribute("max"));
+      if (a === n && b === n){ c.setAttribute("width", map[k]); c.setAttribute("customWidth", "1"); c.removeAttribute("bestFit"); hit = true; } });
+    if (!hit) console.warn("找不到欄", k); });
+}
+/** 縮成一頁時：高度決定縮放比例，左右會空出來 → 所有欄等比例加寬，把寬度補滿（字不會變更小） */
+function xlWidenToPage(doc, lastRow, lastCol){
+  const cols = els(doc, "cols")[0]; if (!cols) return;
+  const fmt0 = els(doc, "sheetFormatPr")[0], defH = Number(fmt0 && fmt0.getAttribute("defaultRowHeight")) || 15;
+  const cw = []; Array.from(cols.getElementsByTagNameNS(XNS, "col")).forEach(c => { for (let i = Number(c.getAttribute("min")); i <= Math.min(Number(c.getAttribute("max")), lastCol); i++) cw[i] = c.getAttribute("hidden") === "1" ? 0 : Number(c.getAttribute("width")); });
+  let W = 0; for (let i = 1; i <= lastCol; i++) W += (cw[i] ?? 9) * 7.27;
+  const rh = {}; els(doc, "row").forEach(r => rh[Number(r.getAttribute("r"))] = r.getAttribute("hidden") === "1" ? 0 : (r.getAttribute("ht") ? Number(r.getAttribute("ht")) : defH) * 96 / 72);
+  let H = 0; for (let r = 1; r <= lastRow; r++) H += rh[r] ?? defH * 96 / 72;
+  const pm = els(doc, "pageMargins")[0]; const mg = k => (pm ? Number(pm.getAttribute(k)) : 0.7) * 25.4; const mmPx = 25.4 / 96;
+  const pageW = 210 - mg("left") - mg("right"), pageH = 297 - mg("top") - mg("bottom");
+  const sc = Math.min(pageW / (W * mmPx), pageH / (H * mmPx));
+  const f = Math.min(1.35, (pageW / (sc * mmPx)) / W * 0.97); if (!(f > 1.02)) return;   // 只在左右空出 2% 以上時加寬，最多 35%
+  Array.from(cols.getElementsByTagNameNS(XNS, "col")).forEach(c => { if (Number(c.getAttribute("min")) <= lastCol) c.setAttribute("width", (Number(c.getAttribute("width")) * f).toFixed(4)); });
+}
+/** 合計那格放兩行：自動換行、列高加高 */
+function xlWrapTall(stylesDoc, doc, addr, ht){
+  const c = els(doc, "c").find(x => x.getAttribute("r") === addr); if (!c) return;
+  const xfs = els(stylesDoc, "cellXfs")[0]; const nx = xfs.getElementsByTagNameNS(XNS, "xf")[Number(c.getAttribute("s") || 0)].cloneNode(true);
+  let al = Array.from(nx.childNodes).find(x => x.localName === "alignment"); if (!al){ al = stylesDoc.createElementNS(XNS, "alignment"); nx.insertBefore(al, nx.firstChild); }
+  al.setAttribute("wrapText", "1"); al.setAttribute("vertical", "center"); nx.setAttribute("applyAlignment", "1"); xfs.appendChild(nx); xfs.setAttribute("count", xfs.getElementsByTagNameNS(XNS, "xf").length);
+  c.setAttribute("s", xfs.getElementsByTagNameNS(XNS, "xf").length - 1);
+  const r = c.parentNode; if (Number(r.getAttribute("ht") || 0) < ht){ r.setAttribute("ht", ht); r.setAttribute("customHeight", "1"); }
+}
 /** 縮成一頁：寬、高都縮到一張 A4（超過範本格數不多時用，跟手動調比例一樣） */
 function xlOnePage(doc){
   const W = doc.documentElement; let sp = els(doc, "sheetPr")[0];
@@ -6783,7 +6814,7 @@ function xlMergeByPallet(stylesDoc, doc, L, first, col){
       xlSet(doc, col + r1, meas); for (let r = r1 + 1; r <= r2; r++) xlSet(doc, col + r, null);
       const m = doc.createElementNS(XNS, "mergeCell"); m.setAttribute("ref", `${col}${r1}:${col}${r2}`); mc.appendChild(m);
       center(col + r1);
-    }
+    } else if (L[i].meas) center(col + (first + i));   // 單獨一板的也置中，整欄一致
     i = j + 1;
   }
   mc.setAttribute("count", mc.getElementsByTagNameNS(XNS, "mergeCell").length);
@@ -6840,7 +6871,7 @@ function packingCells(d, extra){
   const us = [...new Set(L.map(pkQtyUnit))];
   cells.push(["M23", us.length === 1 ? `QTY. (${us[0]})` : "QTY."]);
   if (us.length > 1){ const by = {}; L.forEach(l => { const u = pkQtyUnit(l); by[u] = (by[u] || 0) + (Number(l.qty) || 0); });
-    cells.push(["M" + k(40), Object.keys(by).map(u => `${fmt(by[u],2)} ${u}`).join(" / ")]); }
+    cells.push(["M" + k(40), Object.keys(by).map(u => `${fmt(by[u],2)} ${u}`).join("\n")]); }
   const n = new Set(L.map(l => l.plt).filter(Boolean)).size;
   cells.push(["B" + k(42), `SAY TOTAL ${n} PALLET${n > 1 ? "S" : ""}`]);
   const tt = pkTotal(L).replace(/^[\d,.]+ /, ""); cells.push(tt.includes("(") ? ["L" + k(42), tt, "B10", true] : ["L" + k(42), tt]);  // 混合單位時改用不換行的格式，文字往右延伸
@@ -6876,7 +6907,7 @@ async function exportForwarder(kind, inv, pk){
       const doc = await P(`xl/worksheets/${file}.xml`), dd = await P(`xl/drawings/${draw}.xml`);
       xlInsertRows(doc, dd, wb, name, INV_FIRST + INV_CAP - 1, invExtra, INV_FIRST + INV_CAP - 2);
       const im = pageMode(inv.layout, invExtra);
-      if (im === "one") xlOnePage(doc);
+      if (im === "one"){ xlOnePage(doc); xlWidenToPage(doc, 70 + invExtra, 16); }
       else if (im === "pages"){ xlTwoPages(doc, wb, name, pageBreaks(inv.lines.length, INV_FIRST, INV_CAP + 12, 42), INV_FIRST - 1); xlPageTexts(doc, "COMMERCIAL INVOICE", inv.no); }
       const { cells, money } = invoiceCells(inv, variant, invExtra);
       sheets.push([file, doc, cells]); zip.file(`xl/drawings/${draw}.xml`, S.serializeToString(dd));
@@ -6885,8 +6916,9 @@ async function exportForwarder(kind, inv, pk){
   }
   const pdoc = await P("xl/worksheets/sheet3.xml"), pdd = await P("xl/drawings/drawing3.xml");
   xlInsertRows(pdoc, pdd, wb, "Packing", PK_FIRST + PK_CAP - 1, pkExtra, PK_FIRST + PK_CAP - 2);
+  xlSetColWidths(pdoc, { 13: 12.27, 14: 11.45, 15: 10.45 });   // 數量欄加寬（要放單位），淨重／毛重各讓一點，總寬不變
   const pmode = pageMode(pk.layout, pkExtra);
-  if (pmode === "one") xlOnePage(pdoc);
+  if (pmode === "one"){ xlOnePage(pdoc); xlWidenToPage(pdoc, 47 + pkExtra, 16); }
   else if (pmode === "pages"){ const LS = pkSorted(pk); xlTwoPages(pdoc, wb, "Packing", pageBreaks(LS.length, PK_FIRST, PK_CAP + 6, 30, k => String(LS[k] && LS[k].plt || "").trim()), PK_FIRST - 1); xlPageTexts(pdoc, "PACKING LIST", pk.no || pk.sc); }
   zip.file("xl/drawings/drawing3.xml", S.serializeToString(pdd));
   sheets.push(["sheet3", pdoc, packingCells(pk, pkExtra)]);
@@ -6895,7 +6927,8 @@ async function exportForwarder(kind, inv, pk){
     cells.forEach(([addr, val, styleFrom, force]) => { const st = styleFrom ? xlStyleOf(doc, styleFrom) : null; const own = xlStyleOf(doc, addr); const c = xlSet(doc, addr, val, st);
       if (force && st != null) c.setAttribute("s", own != null && own !== st ? xlKeepBorders(styles, st, own, bm) : st); });
     if (money) xlPlainNumber(styles, doc, money);
-    if (file === "sheet3"){ xlMergeByPallet(styles, doc, pkSorted(pk), PK_FIRST, "P"); xlQtyUnits(styles, doc, pkSorted(pk), PK_FIRST, "M", pkExtra); }
+    if (file === "sheet3"){ xlMergeByPallet(styles, doc, pkSorted(pk), PK_FIRST, "P"); xlQtyUnits(styles, doc, pkSorted(pk), PK_FIRST, "M", pkExtra);
+      if (new Set(pkSorted(pk).map(pkQtyUnit)).size > 1) xlWrapTall(styles, doc, "M" + (PK_FIRST + PK_CAP + pkExtra), 15 * new Set(pkSorted(pk).map(pkQtyUnit)).size + 4); }
     xlBreakBorders(styles, doc);
     zip.file(`xl/worksheets/${file}.xml`, S.serializeToString(doc));
   }
