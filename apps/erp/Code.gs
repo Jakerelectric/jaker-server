@@ -88,7 +88,7 @@ const F = {
           ['terms','交易條件','s'],['note','備註','s'],['salesId','業務ID','s'],['salesName','業務','s'],['status','狀態','s'],
           ['shippedAt','出貨時間','s'],['shippedBy','出貨人','s'],['createdAt','建立時間','s'],['updatedAt','更新時間','s'],['imported','舊資料匯入','s'],['exportNo','出口報單號碼','s'],['editLog','修改紀錄','s']],
   salesLines:[['saleNo','銷貨單號','s'],['lid','明細ID','s'],['seq','序號','n'],['itemCode','品號','s'],['name','品名','s'],['nameEn','英文品名','s'],
-          ['spec','規格','s'],['unit','單位','s'],['qty','數量','n'],['price','單價','n'],['whId','出貨庫別','s'],['note','備註','s'],['shipQty','實出數量','n'],['orderNo','來源訂單','s'],['free','不計價','s']],  // 不計價：樣品 / 補料 / 其他
+          ['spec','規格','s'],['unit','單位','s'],['qty','數量','n'],['price','單價','n'],['whId','出貨庫別','s'],['note','備註','s'],['shipQty','實出數量','n'],['orderNo','來源訂單','s'],['free','不計價','s'],['noOrd','非訂單品項','s']],  // 不計價：樣品 / 補料 / 其他；非訂單品項：有來源訂單的銷貨單另外加的品項（不算到訂單）
   woOps: [['woNo','工單單號','s'],['lid','製程ID','s'],['seq','順序','n'],['name','製程','s'],['note','備註','s'],['vendor','委外廠商','s']],
   // ---- 製程委外：送出 / 收回紀錄（生管填寫）----
   woOut: [['id','紀錄ID','s'],['date','日期','d'],['woNo','工單單號','s'],['opLid','製程ID','s'],['opName','製程','s'],['vendor','委外廠商','s'],['kind','動作','s'],
@@ -1431,7 +1431,7 @@ function importedShipped_(onlyOrder) {
   const counted = new Set(); readAll_('txns').forEach(t => { if (t.typeLabel === '出庫' && t.orderNo && t.ref) { counted.add(String(t.ref).trim() + '__' + t.itemCode); } });
   const out = {}; const sales = readAll_('sales').filter(x => x.imported === '是' && x.status === '已出貨'); if (!sales.length) return out;
   const by = {}; sales.forEach(x => by[x.no] = x);
-  readAll_('salesLines').forEach(l => { const x = by[l.saleNo]; if (!x) return; const o = l.orderNo || x.orderNo; if (!o || (onlyOrder && o !== onlyOrder)) return;
+  readAll_('salesLines').forEach(l => { const x = by[l.saleNo]; if (!x) return; const o = l.noOrd === '是' ? '' : (l.orderNo || x.orderNo); if (!o || (onlyOrder && o !== onlyOrder)) return;
     if (counted.has(x.no + '__' + l.itemCode) || counted.has(String(x.no).split('-').pop() + '__' + l.itemCode)) return;
     const k = o + '__' + l.itemCode; out[k] = round_((out[k] || 0) + Number(l.shipQty !== '' && l.shipQty != null ? l.shipQty : l.qty || 0)); });
   return out;
@@ -2220,7 +2220,7 @@ function saveSale_(u, p) {
     const o = old.find(y => y.lid === l.lid) || {};
     return { lid: l.lid || Utilities.getUuid().slice(0, 8), seq: i + 1, itemCode: it.code, name: it.name, nameEn: it.nameEn || '', spec: it.spec || '', unit: it.unit, qty: q,
       price: pm.price ? (l.price === '' || l.price == null ? '' : Number(l.price)) : o.price, whId: String(l.whId || '').trim(), note: String(l.note || '').trim(), shipQty: '',
-      orderNo: String(l.orderNo || o.orderNo || h.orderNo || '').trim(), free: ['樣品', '補料', '其他'].indexOf(l.free) >= 0 ? l.free : '' };
+      orderNo: l.noOrd ? '' : String(l.orderNo || o.orderNo || h.orderNo || '').trim(), noOrd: l.noOrd ? '是' : '', free: ['樣品', '補料', '其他'].indexOf(l.free) >= 0 ? l.free : '' };
   });
   // 來源訂單（可多張）：客戶、幣別要一致，數量不能超過訂單未出數量（扣掉已出貨與其他待出貨銷貨單）
   const ordNos = Array.from(new Set(lines.map(l => l.orderNo).filter(Boolean)));
@@ -2230,7 +2230,7 @@ function saveSale_(u, p) {
       if (t.typeLabel === '出庫') shippedAll[k] = (shippedAll[k] || 0) + Number(t.qty || 0); else if (t.typeLabel === '入庫' && t.purpose === '客戶退回') shippedAll[k] = (shippedAll[k] || 0) - Number(t.qty || 0); });
     const imp = importedShipped_(); Object.keys(imp).forEach(k => shippedAll[k] = (shippedAll[k] || 0) + imp[k]);
     const others = {}; readAll_('sales').filter(y => y.status === '待出貨' && (!x || y.no !== x.no)).forEach(y => others[y.no] = y);
-    const pend = {}; readAll_('salesLines').forEach(l => { const y = others[l.saleNo]; if (!y) return; const on = l.orderNo || y.orderNo; if (!on) return; const k = on + '__' + l.itemCode; pend[k] = (pend[k] || 0) + Number(l.qty || 0); });
+    const pend = {}; readAll_('salesLines').forEach(l => { const y = others[l.saleNo]; if (!y) return; const on = l.noOrd === '是' ? '' : (l.orderNo || y.orderNo); if (!on) return; const k = on + '__' + l.itemCode; pend[k] = (pend[k] || 0) + Number(l.qty || 0); });
     let first = null;
     ordNos.forEach(no => {
       const o = orders.find(y => y.no === no); if (!o) throw new Error('找不到訂單 ' + no + '。');
@@ -2374,7 +2374,7 @@ function shipSale_(u, p) {
   const moves = (p.lines || []).filter(l => Number(l.qty) > 0).map(l => {
     const sl = lines.find(y => y.lid === l.lid); if (!sl) throw new Error('銷貨單明細有變動，請重新整理。');
     const wh = l.whId || sl.whId || x.whId; if (!wh) throw new Error(sl.itemCode + ' 請選擇出貨庫別。');
-    return { sl, m: { type: 'out', purpose: '銷貨出庫', itemId: sl.itemCode, whId: wh, qty: Number(l.qty), date, ref: x.no, party: x.customer, orderNo: sl.orderNo || x.orderNo || '',
+    return { sl, m: { type: 'out', purpose: '銷貨出庫', itemId: sl.itemCode, whId: wh, qty: Number(l.qty), date, ref: x.no, party: x.customer, orderNo: sl.noOrd === '是' ? '' : (sl.orderNo || x.orderNo || ''),
       packLines: l.packLines || '', pack: l.pack || '', palletWt: l.palletWt || '', note: String(p.note || '').trim(), filler: p.filler, dept: p.dept, fillerId: p.fillerId } };
   });
   if (!moves.length) throw new Error('請填入實出數量。');

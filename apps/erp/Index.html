@@ -7293,6 +7293,7 @@ function openDoc(kind, no){
   DOC.doc = no ? list.find(x => x.no === no) : null;
   const src = no ? (kind === "quote" ? qLinesOf(no) : kind === "sale" ? saLinesOf(no) : oLinesOf(no)) : [];
   DOC.lines = src.map(l => ({ ...l }));
+  if (kind === "sale" && DOC.doc?.orderNo) DOC.lines.forEach(l => { if (l.noOrd === "是") l.noOrd = true; else if (!l.orderNo) l.orderNo = DOC.doc.orderNo; });  // 舊資料只記在表頭的訂單
   if (!DOC.lines.length) DOC.lines = [{ lid:uid8(), qty:"" }];
   const d = DOC.doc || {};
   $("docTitle").textContent = ({ quote:"報價單", order:"訂單", sale:"銷貨單" })[kind] + (no ? " " + no : "（新增）");
@@ -7321,7 +7322,7 @@ function openDoc(kind, no){
   if (saleBillEdit()){ ["dExport","dTerms","dNote","dCur","dTax"].forEach(id => $(id).disabled = false); $("dExportHint").textContent = ""; } else $("dExportHint").textContent = "";
   $("dEditLog").hidden = !(kind === "sale" && d.editLog); $("dEditLog").innerHTML = kind === "sale" && d.editLog ? `<summary>修改紀錄（${String(d.editLog).split("\n").filter(Boolean).length} 筆）</summary><div style="white-space:pre-line;font-size:12px;margin-top:4px">${esc(d.editLog)}</div>` : "";
   if (!no) $("dNo").disabled = false;
-  $("dAddLine").hidden = !ed; $("docToOrder").hidden = true; $("docDelConfirm").hidden = true; msg("docMsg","");
+  $("dAddLine").hidden = !ed; $("dAddLine").textContent = "＋ 新增品項"; $("docToOrder").hidden = true; $("docDelConfirm").hidden = true; msg("docMsg","");
   renderDocLines(); renderDocBtns();
   $("docDlg").showModal();
   setTimeout(() => presCtx(no ? kind + ":" + no : ""), 0);
@@ -7364,7 +7365,7 @@ function renderDocLines(){
     const td = h => `<td class="${cls||""}">${h}</td>`;
     switch (k){
       case "seq": return td(`<span class="muted">${i+1}</span>`);
-      case "item": return td(lk(l) ? `<span class="mono">${esc(l.itemCode||"")}</span>${l.orderNo ? `<span class="sub mono">${esc(l.orderNo)}</span>` : ""}` : inp(i, "itemCode", l.itemCode, { list:"itemOptions", ph:"品號", st:"min-width:130px", dis:!ed }));
+      case "item": return td(lk(l) ? `<span class="mono">${esc(l.itemCode||"")}</span>${l.orderNo ? `<span class="sub mono">${esc(l.orderNo)}</span>` : ""}` : inp(i, "itemCode", l.itemCode, { list:"itemOptions", ph:"品號", st:"min-width:130px", dis:!ed }) + (DOC.kind === "sale" && DOC.orders.length ? `<span class="sub">非訂單品項</span>` : ""));
       case "name": return td(ed && !lk(l) ? inp(i, "name", l.name, { ph:"品名", st:"min-width:150px" }) + `<span class="sub">${esc(l.spec||"")}</span>` : `${esc(l.name||"")}<span class="sub">${esc(l.spec||"")}</span>`);
       case "qty": return td(inp(i, "qty", l.qty, { type:"number", st:"width:90px;text-align:right", dis:!ed }) + (lk(l) && ed && l._max != null ? `<span class="sub" data-qmax="${i}">未出 ${fmt(l._max,2)}</span>` : ""));
       case "unit": return td(lk(l) ? esc(l.unit||"") : inp(i, "unit", l.unit, { st:"width:60px", dis:!ed }));
@@ -7404,9 +7405,9 @@ function renderDocLines(){
     const l = DOC.lines[Number(cb.dataset.asap)]; l[cb.dataset.k] = cb.checked ? "ASAP" : ""; renderDocLines(); }));
   $("docLines").querySelectorAll("[data-dldel]").forEach(b => b.addEventListener("click", () => { DOC.lines.splice(Number(b.dataset.dldel), 1);
     if (DOC.kind === "sale"){ DOC.orders = DOC.orders.filter(no => DOC.lines.some(l => l.orderNo === no)); if (!DOC.lines.length) DOC.lines = [{ lid:uid8(), qty:"" }]; } renderDocLines(); }));
-  if (DOC.kind === "sale"){ saRenderOrders(); $("dAddLine").hidden = !ed || DOC.orders.length > 0;
+  if (DOC.kind === "sale"){ saRenderOrders(); $("dAddLine").hidden = !ed; $("dAddLine").textContent = DOC.orders.length ? "＋ 新增非訂單品項" : "＋ 新增品項";
     if (saleBillEdit()) $("docHint").textContent = "已出貨：數量和品項不能改（會影響庫存）；單價、計價／不計價、備註、交易條件、幣別稅別、出口報單號碼可以修改，按「儲存修改」，系統會留下修改紀錄，月結明細會跟著更新。";
-    else $("docHint").textContent = ed ? (DOC.orders.length ? "品項依來源訂單帶入並鎖定，只能改數量和單價（數量不能超過未出數量）；不出的品項可以刪除。存檔不扣庫存，倉庫確認出貨才扣。" : "銷貨單的品號要在品號資料裡。存檔不扣庫存，倉庫確認出貨才扣。也可以在上方加入來源訂單，直接帶入訂單品項。") : "";
+    else $("docHint").textContent = ed ? (DOC.orders.length ? "品項依來源訂單帶入並鎖定，只能改數量和單價（數量不能超過未出數量）；不出的品項可以刪除。訂單以外要一起出的品項，按「＋ 新增非訂單品項」，不會算到訂單的出貨量。存檔不扣庫存，倉庫確認出貨才扣。" : "銷貨單的品號要在品號資料裡。存檔不扣庫存，倉庫確認出貨才扣。也可以在上方加入來源訂單，直接帶入訂單品項。") : "";
     renderDocTotal(); return; }
   $("docHint").textContent = DOC.kind === "quote" ? (ed ? "品號可以從清單選；系統裡沒有的新產品可以只填品名。成本與確認交期由資材回覆。" : me ? "請填入每一項的成本與確認交期，填完按「回覆業務」。" : "")
     : (ed ? "預交日為承諾客戶的交貨日；出貨時在出庫登記選這張訂單，進度會自動更新。" : "");
@@ -7419,7 +7420,7 @@ function orderOpenLines(no, exceptSale){
   const o = SD().orders.find(x => x.no === no); if (!o) return [];
   const sh = shippedByLine(o); const L = oLinesOf(no);
   const pend = {}; (SD().sales || []).filter(x => x.status === "待出貨" && x.no !== exceptSale).forEach(x => saLinesOf(x.no).forEach(l => {
-    if ((l.orderNo || x.orderNo) !== no) return; pend[l.itemCode] = (pend[l.itemCode] || 0) + (Number(l.qty) || 0); }));
+    if ((l.noOrd === "是" ? "" : (l.orderNo || x.orderNo)) !== no) return; pend[l.itemCode] = (pend[l.itemCode] || 0) + (Number(l.qty) || 0); }));
   return L.map(l => { const left = Math.max(0, round((Number(l.qty) || 0) - (sh[l.lid] || 0))); const take = Math.min(left, pend[l.itemCode] || 0); pend[l.itemCode] = (pend[l.itemCode] || 0) - take;
     return { ...l, rem: round(left - take) }; });
 }
@@ -7492,7 +7493,7 @@ function docPayload(){
   return { isNew: !DOC.no, no: DOC.no || $("dNo").value.trim(), date:$("dDate").value, custCode: DOC.custCode || "", customer:$("dCustomer").value, contact:$("dContact").value, custPO:$("dPO").value,
     currency:$("dCur").value, taxType:$("dTax").value, validUntil:$("dValid").value, terms:$("dTerms").value, note:$("dNote").value,
     orderNo: DOC.kind === "sale" ? (DOC.orders[0] || "") : "", exportNo: DOC.kind === "sale" ? $("dExport").value.trim() : "", whId:$("dWh").value, shipDate:$("dShip").value, req:$("dReq").value,
-    lines: DOC.lines.map(l => ({ lid:l.lid, itemCode:l.itemCode||"", name:l.name||"", nameEn:l.nameEn||"", spec:l.spec||"", unit:l.unit||"", qty:l.qty, wantDate:l.wantDate||"", dueDate:l.dueDate||"", price:l.price ?? "", note:l.note||"", orderNo:l.orderNo||"", olid:l.olid||"", free:l.free||"" })) };
+    lines: DOC.lines.map(l => ({ lid:l.lid, itemCode:l.itemCode||"", name:l.name||"", nameEn:l.nameEn||"", spec:l.spec||"", unit:l.unit||"", qty:l.qty, wantDate:l.wantDate||"", dueDate:l.dueDate||"", price:l.price ?? "", note:l.note||"", orderNo:l.orderNo||"", olid:l.olid||"", free:l.free||"", noOrd: DOC.kind === "sale" && !l.orderNo && DOC.orders.length > 0 })) };
 }
 async function docSave(silent){
   const p = docPayload();
