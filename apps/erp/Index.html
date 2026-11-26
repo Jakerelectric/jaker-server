@@ -7440,16 +7440,23 @@ function saCheckQty(){
 function saRenderOrders(){
   const ed = docEditable();
   $("dOrders").innerHTML = DOC.orders.map(no => { const o = SD().orders.find(x => x.no === no);
-    return `<span class="chip wh" style="font-size:13px;padding:4px 10px"><span class="mono">${esc(no)}</span>${o?.custPO ? `<span class="muted">（PO ${esc(o.custPO)}）</span>` : ""}${ed ? ` <button type="button" data-ordrm="${esc(no)}" aria-label="移除 ${esc(no)}" style="appearance:none;border:0;background:none;cursor:pointer;color:var(--muted);font-size:14px">×</button>` : ""}</span>`; }).join("")
+    return `<span class="chip wh" style="font-size:13px;padding:4px 10px"><span class="mono">${esc(no)}</span>${o?.custPO ? `<span class="muted">（PO ${esc(o.custPO)}）</span>` : ""}${ed && saMoreLines(no).length ? ` <button type="button" class="btn sm" data-ordmore="${esc(no)}" title="把這張訂單還沒放進來的品項加進來">＋帶入品項（${saMoreLines(no).length}）</button>` : ""}${ed ? ` <button type="button" data-ordrm="${esc(no)}" aria-label="移除 ${esc(no)}" style="appearance:none;border:0;background:none;cursor:pointer;color:var(--muted);font-size:14px">×</button>` : ""}</span>`; }).join("")
     || `<span class="muted" style="font-size:13px">（沒有來源訂單：手動填品項）</span>`;
   $("dOrderAdd").hidden = !ed; $("dOrderAddBtn").hidden = !ed;
   const cc = DOC.custCode, cn = $("dCustomer").value.trim();
   $("saOrderOptions").innerHTML = SD().orders.filter(o => o.status === "進行中").filter(o => !DOC.orders.includes(o.no) && (!DOC.orders.length || (cc ? o.custCode === cc : o.customer === cn)))
     .filter(o => orderOpenLines(o.no, DOC.no).some(l => l.rem > 0)).map(o => `<option value="${esc(o.no)} ${esc(o.customer)}${o.custPO ? " PO " + esc(o.custPO) : ""}"></option>`).join("");
   $("dOrdersHint").textContent = DOC.orders.length > 1 ? `這張銷貨單包含 ${DOC.orders.length} 張訂單，出貨時會分別算到各自的訂單。` : "";
+  $("dOrders").querySelectorAll("[data-ordmore]").forEach(b => b.addEventListener("click", () => { const no = b.dataset.ordmore; const more = saMoreLines(no);
+    DOC.lines = DOC.lines.filter(l => l.orderNo || l.itemCode);
+    more.forEach(l => DOC.lines.push({ lid:uid8(), orderNo:no, olid:l.lid, itemCode:l.itemCode, name:l.name, nameEn:l.nameEn, spec:l.spec, unit:l.unit, qty:l.rem, price:l.price ?? "", note:l.dueDate ? `預交 ${l.dueDate}` : "" }));
+    msg("docMsg", `已從訂單 ${no} 帶入 ${more.length} 個品項，數量預設是未出的數量，可以再改。`, "ok"); renderDocLines(); }));
   $("dOrders").querySelectorAll("[data-ordrm]").forEach(b => b.addEventListener("click", () => { const no = b.dataset.ordrm;
     DOC.orders = DOC.orders.filter(x => x !== no); DOC.lines = DOC.lines.filter(l => l.orderNo !== no); if (!DOC.lines.length) DOC.lines = [{ lid:uid8(), qty:"" }]; renderDocLines(); }));
 }
+/** 已加入的訂單裡，還沒放進這張銷貨單、而且還有未出數量的品項 */
+function saMoreLines(no){ const inDoc = new Set(DOC.lines.filter(l => l.orderNo === no).map(l => String(l.itemCode || "").toUpperCase()));
+  return orderOpenLines(no, DOC.no).filter(l => l.itemCode && l.rem > 0 && !inDoc.has(String(l.itemCode).toUpperCase())); }
 function saAddOrder(){
   const no = orderNoOf($("dOrderAdd").value); if (!no) return;
   const o = SD().orders.find(x => x.no === no); if (!o) return msg("docMsg", `找不到訂單 ${no}。`, "err");
